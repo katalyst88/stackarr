@@ -1,99 +1,102 @@
 # Stackarr
 
-![status](https://img.shields.io/badge/status-pre--release%20·%20untested-orange)
-![version](https://img.shields.io/badge/version-0.1.0--pre-blue)
+![version](https://img.shields.io/badge/version-1.0.0-brightgreen)
+![docker](https://img.shields.io/badge/docker-ghcr.io%2Fkatalyst88%2Fstackarr-blue)
 
-> 🚧 **Pre-release (v0.1.0-pre).** Not yet tested for general use — running and
-> being shaken out by its author first. Versions stay `0.x.y-pre` until a real
-> `1.0.0`. Don't rely on it in production yet.
+### 🔎 [Try the live demo →](https://katalyst88.github.io/stackarr/)
 
-**The recommendation shelf for [Chaptarr](https://chaptarr.com).** Stackarr reads
-your [Audiobookshelf](https://www.audiobookshelf.org/) listening history and
-suggests your next audiobook — series-next, author backlists, "listeners also
-enjoyed," narrators you love — then hands the ones you approve to Chaptarr to
-download. Think Overseerr, but for what to *listen to next*, and with **no AI**.
+A no-backend sample of the UI (sample data, actions disabled), hosted on GitHub Pages.
 
-> ⚠️ **Built with AI / "vibecoded".** Stackarr was written largely by an AI
-> coding assistant as a companion add-on to Chaptarr. It works and it's tested,
-> but treat it accordingly: read the code before you trust it, and expect rough
-> edges. PRs and issues welcome.
+> **1.0** — used day-to-day by its author. Written largely with an AI assistant,
+> so read the code before relying on it. Issues and PRs welcome.
 
-> Stackarr does **not** download anything itself. It is a *recommendation and
-> approval* layer — Chaptarr (the Readarr-style book/audiobook manager) does the
-> searching, grabbing and importing. Stackarr just decides *what's worth getting*
-> and asks Chaptarr to fetch it.
+**The recommendation shelf for Chaptarr.** Stackarr reads your
+[Audiobookshelf](https://www.audiobookshelf.org/) listening history and suggests
+your next audiobook — then hands the ones you pick to **Chaptarr** to download.
+Think Seer, but for *what to listen to next*. **No AI in the recommendations** —
+every pick is a real catalogue entry reached by an explainable rule.
 
-## Why it exists
+Stackarr never touches a download client itself: Chaptarr (the Readarr-style
+book/audiobook manager) does the searching, grabbing and importing.
 
-Chaptarr manages your audiobook library brilliantly but has no taste engine —
-nothing that looks at what you've actually listened to and says "you'll want this
-next." Stackarr is that engine.
+---
 
 ## Features
 
-- 🎧 **Suggestions from your real listening history** — finished books and ones
-  you're part-way through, weighted by how recently you listened.
-- 🧠 **Deterministic, explainable, no AI** — every pick is a real catalog entry
-  reached by a rule (next-in-series, author backlist, Audible's own
-  "listeners also enjoyed," narrator-following) and shows you *why* it's there.
-- ✅ **Approval queue** — approve or pass; approvals go straight to Chaptarr.
-- 👍 **Learns from you** — passes, DNFs and books you delete become negative
-  signals; optional **1–5★ ratings** and a "**I've already read this**" entry
-  (no download) sharpen future picks.
-- 👥 **Multi-user** — everyone signs in with their **own Audiobookshelf account**
-  and gets suggestions from *their* history. Admins can auto-approve.
-- 🔭 **Discover** tab — genre-trending and new releases, plus search-to-add.
-- ✉️ **Notifications** — email digests with three themes (light / dark / fun) and
-  a live preview, a Discord webhook, and Apprise (100+ channels). All optional.
-- 📲 **Installable PWA**, light/dark UI, and embeds cleanly in an **nzb360**
-  webview or behind a reverse proxy.
+- **13 recommendation rows**, all deterministic & explainable: Series to finish ·
+  More from authors you love · Readers also enjoyed · New authors to discover ·
+  Narrators you love · More in your favourite genres · Hidden gems · Award winners ·
+  Short listens · Epic listens · New & upcoming · From your reading list · Popular.
+- **Browse cards** for genres and *suggested* authors → full grid, with **"add all
+  books by this author"**.
+- **Book detail pages** (cover, series, narrator, rating, full description, genres).
+- **Multi-user** — everyone signs in with their own Audiobookshelf account and gets
+  suggestions from *their* history; admins can auto-approve.
+- **Approve / Ignore / Already-read** with learning (passes, DNFs, deletions, and
+  optional 1–5★ ratings feed back in). "I've already read this" seeding too.
+- **Discover** gallery (endless scroll) + search-to-add typeahead.
+- **Insights** (Spotify-wrapped style): hours listened, top authors, fun facts.
+- **Notifications** — email digests (3 themes + live preview), Discord webhook, and
+  Apprise (100+ channels). All **off by default**.
+- In-app **Settings** for service connections (Audiobookshelf, Chaptarr), SMTP,
+  reading-list import (Goodreads/Hardcover), and a logs viewer — with Test buttons.
+- Installable **PWA**, light/dark themes, responsive, embeds in **nzb360**.
 
-## How suggestions work (and why there's no AI)
+## How recommendations work (no AI)
 
-1. Your Audiobookshelf history is the seed (finished + >25% progress).
-2. For each seed Stackarr checks: **series order** (you finished book 2 → book 3),
-   **author backlist**, **Audible `/sims`** ("listeners also enjoyed"), and
-   **narrators** you listen to often.
-3. Candidates are scored by a transparent weighted formula — signal type ×
-   recency, plus your ratings, an Audible rating floor, and **popularity
-   dampening** so it isn't only bestsellers — then de-duplicated by edition
-   (unabridged preferred over dramatized/GraphicAudio) and diversity-capped per
-   author.
-4. The top picks land in your approval queue, each with its reason.
-
-No model, no API key, no hallucinated titles.
+Your Audiobookshelf history (finished + in-progress) is the seed. For each seed
+Stackarr checks series order, author backlist, Audible's own "listeners also
+enjoyed" (`/sims`), narrators, and genres via the public **Audible** catalogue and
+**Audnexus** — no API key, no model. Candidates are scored by a transparent
+weighted formula (recency, your ratings, rating floor, popularity dampening),
+de-duplicated by edition, diversity-capped per author, and shown with their reason.
 
 ## Quick start
 
 ```bash
+# Option A — published image (recommended)
+mkdir stackarr && cd stackarr
+curl -O https://raw.githubusercontent.com/katalyst88/stackarr/main/.env.example
+mv .env.example .env          # fill in Audiobookshelf + Chaptarr details
+docker run -d --name stackarr -p 8484:8484 --env-file .env \
+  -v ./config:/config ghcr.io/katalyst88/stackarr:latest
+
+# Option B — build from source
 git clone https://github.com/katalyst88/stackarr && cd stackarr
-cp .env.example .env     # fill in Audiobookshelf + Chaptarr details
+cp .env.example .env
 docker compose up -d
 ```
 
 Open `http://your-host:8484` and sign in with your Audiobookshelf account.
+Images are published to **GitHub Container Registry** (`ghcr.io/katalyst88/stackarr`)
+automatically on every release.
 
 ### Requirements
 
-- **Audiobookshelf** with an admin API token (`ABS_ADMIN_TOKEN`).
+- **Audiobookshelf** with an admin API token.
 - **Chaptarr** with an API key, a root folder, and a download client configured
   *in Chaptarr*.
-- (Optional) SMTP / Discord / Apprise for digests; Goodreads or Hardcover for
-  "Want to Read" import.
+- (Optional) SMTP / Discord / Apprise; Goodreads or Hardcover for "Want to Read".
 
-### Key settings
+### Key configuration
 
 | Variable | Purpose |
 |---|---|
-| `ABS_URL`, `ABS_ADMIN_TOKEN` | Audiobookshelf connection |
+| `ABS_URL`, `ABS_ADMIN_TOKEN` | Audiobookshelf connection (also editable in Settings) |
 | `CHAPTARR_URL`, `CHAPTARR_API_KEY`, `CHAPTARR_ROOT_FOLDER` | where approved picks go |
 | `STACKARR_ADMINS` | ABS usernames who can auto-approve / see all queues |
-| `STACKARR_ACCENT` | UI accent colour |
-| `STACKARR_URL_BASE` | subpath when reverse-proxied / embedded |
-| `AUDIBLE_DOMAIN` | catalog region (`com`, `co.uk`, `com.au`, `de`, …) |
+| `STACKARR_HTTPS=true` | set when behind HTTPS → Secure cookies |
+| `STACKARR_FRAME_ANCESTORS` | who may embed Stackarr (default own-origin) |
+| `STACKARR_ACCENT`, `STACKARR_URL_BASE`, `AUDIBLE_DOMAIN` | theming / subpath / region |
 
 See [`.env.example`](.env.example) for the full annotated list.
 
+## Security
+
+Auth is delegated to Audiobookshelf; all routes require login; brute-force login
+throttling, CSRF same-origin protection, `HttpOnly`/`SameSite` cookies (`Secure`
+over HTTPS), and configurable frame-ancestors. See [SECURITY.md](SECURITY.md).
+
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

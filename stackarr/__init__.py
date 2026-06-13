@@ -89,5 +89,6 @@ def create_app() -> Flask:
                 "url_base": config.URL_BASE, "user": auth.current_user(),
                 "version": config.VERSION, "stage": config.RELEASE_STAGE}
 
-    scheduler.start()
+    if not config._bool("STACKARR_NO_SCHED", False):
+        scheduler.start()
     return app

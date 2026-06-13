@@ -20,7 +20,7 @@ const Stackarr = (() => {
     document.body.setAttribute("data-theme", light ? "light" : "dark");
   };
 
-  // Seerr-style tag system: none -> Requested -> Available
+  // Seer-style tag system: none -> Requested -> Available
   const TAG = {
     available: ["Available", "available", "In library"],
     handed:    ["Requested", "handed",   "Requested"],

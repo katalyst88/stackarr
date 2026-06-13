@@ -1,6 +1,23 @@
 # Changelog
 
-All notable changes to Stackarr. Versions stay `0.x.y-pre` until a tested `1.0.0`.
+All notable changes to Stackarr.
+
+## [1.0.0] - 2026-06-13
+First stable release.
+
+### Added
+- Static **demo site** on GitHub Pages (`tools/build_demo.py` → `docs/`), built
+  from the real templates with sample data and no backend.
+- `RELEASING.md`: docs + demo regeneration are now mandatory release steps.
+
+### Changed
+- "Approve" renamed to **"Add book"** throughout.
+- Home gains an **"Authors you might like"** card row (suggested authors only) →
+  author grid with "add all books by this author".
+- Docs accuracy pass; "Seerr" references corrected to "Seer".
+
+### Fixed
+- CI: `docker-publish` now sets up Buildx so the gha build cache works.
 
 ## [0.1.23-pre] - 2026-06-13
 First public-candidate build (pre-release, vibecoded).

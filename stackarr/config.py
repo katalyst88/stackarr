@@ -2,10 +2,8 @@
 deploys anywhere with no code edits. Single source of truth for settings."""
 import os
 
-# Pre-public-release. The -pre suffix signals "not yet tested for public use";
-# bump to 1.0.0 only after real-world testing.
-VERSION = "0.1.26-pre"
-RELEASE_STAGE = "pre-release · untested"
+VERSION = "1.0.0"
+RELEASE_STAGE = "stable"
 
 
 def _bool(name: str, default: bool = False) -> bool:
@@ -20,7 +18,7 @@ def _list(name: str) -> list[str]:
 PORT = int(os.environ.get("STACKARR_PORT", "8484"))
 DATA_DIR = os.environ.get("STACKARR_DATA", "/config")
 APP_NAME = os.environ.get("STACKARR_NAME", "Stackarr")
-ACCENT = os.environ.get("STACKARR_ACCENT", "#d98c3f")          # amber; Seerr uses purple
+ACCENT = os.environ.get("STACKARR_ACCENT", "#d98c3f")          # amber; Seer uses purple
 # Subpath when reverse-proxied / embedded (e.g. "/stackarr"). Blank = root.
 URL_BASE = "/" + os.environ.get("STACKARR_URL_BASE", "").strip("/") if os.environ.get("STACKARR_URL_BASE", "").strip("/") else ""
 

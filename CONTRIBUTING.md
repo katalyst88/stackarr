@@ -35,6 +35,12 @@ docker compose up -d --build
 - Bump `VERSION` in `config.py` and add a `CHANGELOG.md` entry with your change.
 - Test against a real Audiobookshelf + Chaptarr where you can.
 
+## Releasing
+
+Every release must follow [`RELEASING.md`](RELEASING.md). Updating the docs and
+**regenerating the GitHub Pages demo** (`python tools/build_demo.py`, commit
+`docs/`) are mandatory parts of cutting a release, not afterthoughts.
+
 ## Reporting issues
 
 Use the issue templates. Include your Stackarr version (shown in the sidebar /
