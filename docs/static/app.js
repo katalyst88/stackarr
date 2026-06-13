@@ -146,6 +146,19 @@ const Stackarr = (() => {
       const s = btn.parentElement.querySelector(".slider");
       if (s) s.scrollBy({ left: dir * s.clientWidth * 0.82, behavior: "smooth" });
     },
+    filterFormat(fmt, pill) {
+      document.querySelectorAll("#fmt-filter .fmt-pill").forEach(p => p.classList.toggle("active", p === pill));
+      document.querySelectorAll(".media-card[data-format]").forEach(c => {
+        c.style.display = (fmt === "all" || c.dataset.format === fmt) ? "" : "none";
+      });
+      // hide a whole lane row if every card in it is now filtered out
+      document.querySelectorAll(".section").forEach(sec => {
+        const cards = sec.querySelectorAll(".media-card[data-format]");
+        if (!cards.length) return;
+        const anyVisible = [...cards].some(c => c.style.display !== "none");
+        sec.style.display = anyVisible ? "" : "none";
+      });
+    },
     toggleTheme() {
       localStorage.setItem("stackarr-theme", localStorage.getItem("stackarr-theme") === "light" ? "dark" : "light");
       applyTheme();
@@ -206,6 +219,19 @@ const Stackarr = (() => {
       // Onboarding card: tick it off and bump the counter.
       const onb = el.closest(".onboard-item");
       if (onb) this._onboardRated(onb);
+    },
+    async submitReview(btn) {
+      const sec = document.getElementById("reviews");
+      const starsRow = document.getElementById("my-stars");
+      const stars = starsRow ? starsRow.querySelectorAll(".star.on").length : 0;
+      if (!stars) { toast("Pick a star rating first."); return; }
+      const review = (document.getElementById("my-review-text")?.value || "").trim();
+      if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+      await api("/api/rate", { method: "POST", body: JSON.stringify({
+        asin: sec.dataset.key, stars, review,
+        title: sec.dataset.title, author: sec.dataset.author, format: sec.dataset.format }) });
+      if (btn) { btn.disabled = false; btn.textContent = "Save review"; }
+      toast("Review saved — thanks for sharing.");
     },
     _onboardRated(onb) {
       if (onb.dataset.done === "1") return;
@@ -289,7 +315,7 @@ const Stackarr = (() => {
     async retry(id) { const r = await api(`/api/request/${id}/retry`, { method: "POST" }); if (r) location.reload(); },
     async removeRequest(id) { await api(`/api/request/${id}`, { method: "DELETE" }); document.querySelector(`.req-row[data-id="${id}"]`)?.remove(); },
 
-    async setSetting(obj) { await api("/api/settings", { method: "POST", body: JSON.stringify(obj) }); toast("Saved."); },
+    async setSetting(obj, reload) { await api("/api/settings", { method: "POST", body: JSON.stringify(obj) }); toast("Saved."); if (reload) setTimeout(() => location.reload(), 400); },
     _gather(catId) {
       const obj = {};
       document.querySelectorAll(`#cat-${catId} [data-setting]`).forEach(el => {

@@ -26,6 +26,12 @@ book/audiobook manager) does the searching, grabbing and importing.
 
 ## Features
 
+- **Audiobooks _and_ eBooks** *(new in 1.5)* — a format toggle (Settings → General):
+  **Audiobooks** (Audiobookshelf), **eBooks** (Kavita / Calibre-Web), or **Both**.
+  Single-format installs stay clean — the other format's UI never appears; in
+  *Both* mode every card gets a format badge and a per-format filter. Approved
+  ebook picks hand off to Chaptarr in the ebook media type. Default is audiobook,
+  so existing installs are unchanged until you flip it.
 - **13 recommendation rows**, all deterministic & explainable: Series to finish ·
   More from authors you love · Readers also enjoyed · New authors to discover ·
   Narrators you love · More in your favourite genres · Hidden gems · Award winners ·
@@ -52,11 +58,16 @@ book/audiobook manager) does the searching, grabbing and importing.
 - **Auto-add to Chaptarr** *(optional, off by default)* — tiered auto-approval
   (Conservative / Moderate / Aggressive) hands high-confidence picks to Chaptarr
   with no manual tap; capped per cycle, skips owned books.
-- **Notifications** — alerts when a requested book lands in your library, plus
-  suggestion digests. Email (3 themes + live preview), Discord, Apprise (100+
-  channels), or a custom webhook. All **off by default**.
-- In-app **Settings** for service connections (Audiobookshelf, Chaptarr), SMTP,
-  reading-list import (Goodreads/Hardcover), and a logs viewer — with Test buttons.
+- **Shared ratings & reviews** *(new in 1.5)* — ratings are community-wide: every
+  book page shows the average ★ and everyone's written reviews, and the home page
+  carries a **Recently rated by readers** row.
+- **Notifications** — alerts when a requested book lands in your library, a
+  **new-release radar** *(new in 1.5)* that pings you when an author you read
+  publishes, plus suggestion digests. Email (3 themes + live preview), Discord,
+  Apprise (100+ channels), or a custom webhook. All **off by default**.
+- In-app **Settings** for service connections (Audiobookshelf, **Kavita**,
+  **Calibre-Web**, Chaptarr), SMTP, reading-list import (Goodreads/Hardcover),
+  and a logs viewer — with Test buttons.
 - Installable **PWA** or **[Android APK](https://github.com/katalyst88/stackarr/releases/latest)**,
   light/dark themes, responsive, embeds in **nzb360**.
 
@@ -91,9 +102,12 @@ automatically on every release.
 
 ### Requirements
 
-- **Audiobookshelf** with an admin API token.
+- **Audiobookshelf** with an admin API token (also the login provider).
 - **Chaptarr** with an API key, a root folder, and a download client configured
   *in Chaptarr*.
+- (Optional, for eBooks) **Kavita** (API key — reliable reading progress) and/or
+  **Calibre-Web** (OPDS user/password). Ebook metadata comes from Google Books +
+  Open Library, no key required.
 - (Optional) SMTP / Discord / Apprise; Goodreads or Hardcover for "Want to Read".
 
 ### Key configuration
@@ -102,6 +116,9 @@ automatically on every release.
 |---|---|
 | `ABS_URL`, `ABS_ADMIN_TOKEN` | Audiobookshelf connection (also editable in Settings) |
 | `CHAPTARR_URL`, `CHAPTARR_API_KEY`, `CHAPTARR_ROOT_FOLDER` | where approved picks go |
+| `STACKARR_FORMATS` | `audiobook` (default) · `ebook` · `both` (also in Settings → General) |
+| `KAVITA_URL`, `KAVITA_API_KEY` | eBook library + reading progress (or set in Settings) |
+| `CALIBREWEB_URL`, `CALIBREWEB_USER`, `CALIBREWEB_PASS` | eBook library via OPDS (or in Settings) |
 | `STACKARR_ADMINS` | ABS usernames who can auto-approve / see all queues |
 | `STACKARR_HTTPS=true` | set when behind HTTPS → Secure cookies |
 | `STACKARR_FRAME_ANCESTORS` | who may embed Stackarr (default own-origin) |

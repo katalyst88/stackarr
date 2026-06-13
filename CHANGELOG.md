@@ -2,6 +2,37 @@
 
 All notable changes to Stackarr.
 
+## [1.5.0] - 2026-06-13
+
+### Added
+- **Multi-format support: eBooks alongside audiobooks.** A format toggle
+  (Settings → General → Library format): `audiobook` (default), `ebook`, or
+  `both`. Default keeps existing installs unchanged until flipped.
+- **Pluggable library backends.** New `backends/` package with a `Backend`
+  interface; Audiobookshelf stays the login + audiobook source, with **Kavita**
+  (API key — reliable per-user reading progress) and **Calibre-Web** (OPDS;
+  read/unread only — the UI says so) as connected eBook sources in Settings →
+  Connections.
+- **eBook recommendation engine** (`recommend_ebook.py`): seeds from connected
+  eBook sources' reading history + the Hardcover *read* shelf; candidates from
+  **Google Books + Open Library** (no API key); author-backlist, subject-similar,
+  reading-list and popular lanes (subject fallback filters out public-domain
+  classics so picks stay contemporary).
+- **Format-aware UI** in `both` mode: per-card format badges + an All/Audiobooks/
+  eBooks filter; single-format installs never render the other format's chrome.
+  eBook picks hand off to Chaptarr in the eBook media type/profiles.
+- **Shared ratings & reviews**: community average ★ and everyone's written
+  reviews on each book page, plus a **Recently rated by readers** home row.
+- **New-release radar**: optional alert when an author you rate 4–5★ publishes
+  (Settings → Notifications; off by default).
+
+### Fixed / hardened
+- Book detail pages fall back to cached title/author and **retry** the keyless
+  eBook catalogue fetches, so a flaky Google Books / Open Library call no longer
+  shows "Unknown".
+- Audited with 882 automated click-throughs across every page/function
+  (0 console / HTTP / server errors).
+
 ## [1.4.0] - 2026-06-13
 
 ### Added

@@ -44,6 +44,8 @@
   </div>
 </div>
 
+{% set rate_key = rate_key or b.asin %}
+{% set community = community or {'avg': 0, 'count': 0} %}
 <section class="reviews" id="reviews" data-key="{{ rate_key }}" data-title="{{ b.title }}" data-author="{{ b.author }}" data-format="{{ b.format or 'audiobook' }}">
   <div class="reviews-head">
     <h3>Ratings &amp; reviews</h3>
@@ -57,7 +59,7 @@
         onclick="Stackarr.rate('{{ rate_key }}',{{ n }},this)">★</span>{% endfor %}
     </div>
     <textarea id="my-review-text" class="review-input" rows="3" maxlength="1500"
-      placeholder="Write a short review to share with everyone (optional)…">{{ my_review }}</textarea>
+      placeholder="Write a short review to share with everyone (optional)…">{{ my_review or '' }}</textarea>
     <button class="btn small" onclick="Stackarr.submitReview(this)">Save review</button>
   </div>
   {% if reviews %}
