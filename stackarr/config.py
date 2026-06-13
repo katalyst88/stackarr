@@ -4,7 +4,7 @@ import os
 
 # Pre-public-release. The -pre suffix signals "not yet tested for public use";
 # bump to 1.0.0 only after real-world testing.
-VERSION = "0.1.12-pre"
+VERSION = "0.1.15-pre"
 RELEASE_STAGE = "pre-release · untested"
 
 
@@ -28,6 +28,10 @@ URL_BASE = "/" + os.environ.get("STACKARR_URL_BASE", "").strip("/") if os.enviro
 LOG_LEVEL = os.environ.get("STACKARR_LOG_LEVEL", "INFO").upper()
 LOG_FILE = os.path.join(DATA_DIR, "stackarr.log")
 
+# Dev/screenshot only: when set, auto-authenticates as this user id (no env = off).
+# Never set on a real deployment.
+DEV_UID = os.environ.get("STACKARR_DEV_UID", "")
+
 # --- Audiobookshelf (auth + library + listening history) --------------------
 # Users sign in with their own ABS credentials (multi-user). The admin token
 # is used for server-wide ops (library listing, scans) and admin fallback.
@@ -45,10 +49,6 @@ CHAPTARR_API_KEY = os.environ.get("CHAPTARR_API_KEY", "")
 CHAPTARR_ROOT_FOLDER = os.environ.get("CHAPTARR_ROOT_FOLDER", "")
 CHAPTARR_QUALITY_PROFILE_ID = int(os.environ.get("CHAPTARR_QUALITY_PROFILE_ID", "2"))
 CHAPTARR_METADATA_PROFILE_ID = int(os.environ.get("CHAPTARR_METADATA_PROFILE_ID", "1"))
-
-# --- Prowlarr (optional: connection test + release-availability checks) ------
-PROWLARR_URL = os.environ.get("PROWLARR_URL", "").rstrip("/")
-PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "")
 
 # --- metadata sources (no API key needed; deterministic, no AI) -------------
 AUDIBLE_DOMAIN = os.environ.get("AUDIBLE_DOMAIN", "com")           # com, co.uk, com.au, de…

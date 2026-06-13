@@ -113,8 +113,7 @@ def recent_added(limit: int = 14) -> list[dict]:
                 if not m["item_id"]:
                     continue
                 m["added"] = it.get("addedAt", 0)
-                m["cover"] = f"{abs_url()}/api/items/{m['item_id']}/cover?token={tok}"
-                out.append(m)
+                out.append(m)            # cover served via Stackarr's /cover/<item_id> proxy
         except Exception as e:
             log.warning("recent_added failed for %s: %s", lib.get("name"), e)
     out.sort(key=lambda x: x.get("added", 0), reverse=True)

@@ -12,6 +12,8 @@ from . import absclient, config, db
 
 def current_user() -> dict | None:
     uid = session.get("uid")
+    if not uid and config.DEV_UID:        # dev/screenshot bypass (env-gated, off by default)
+        uid = int(config.DEV_UID)
     return db.get_user(uid) if uid else None
 
 

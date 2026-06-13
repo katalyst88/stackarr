@@ -54,7 +54,7 @@
   {% call lane_row('added', recently_added, 'Recently added to your library') %}
     {% for r in recently_added %}
     <a class="media-card" href="{% if r.asin %}{{ url_for('main.book_page', asin=r.asin) }}{% else %}{{ abs_base }}/item/{{ r.item_id }}{% endif %}">
-      <div class="media-poster"><img src="{{ r.cover or url_for('static', filename='icon.svg') }}" loading="lazy" alt="" onerror="this.src='{{ url_for('static', filename='icon.svg') }}'">
+      <div class="media-poster"><img src="{{ url_for('main.cover', item_id=r.item_id) }}" loading="lazy" alt="" onerror="this.src='{{ url_for('static', filename='icon.svg') }}'">
         <span class="corner-badge available">In library</span></div>
       <div class="media-foot"><div class="media-title" title="{{ r.title }}">{{ r.title }}</div><div class="media-author">{{ r.author }}</div></div>
     </a>

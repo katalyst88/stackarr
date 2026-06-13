@@ -73,12 +73,6 @@
         <div class="conn-actions"><button class="btn small ghost" onclick="Stackarr.testConn('chaptarr', this)">Test</button>
           <span class="conn-result" id="test-chaptarr"></span></div>
       </div>
-      <div class="panel"><h3>Prowlarr <span class="subtle">(optional)</span></h3>
-        <label class="row"><span>URL</span><input data-setting="prowlarr_url" value="{{ conn.prowlarr_url }}"></label>
-        <label class="row"><span>API key</span><input type="password" data-setting="prowlarr_api_key" value="{{ conn.prowlarr_api_key }}"></label>
-        <div class="conn-actions"><button class="btn small ghost" onclick="Stackarr.testConn('prowlarr', this)">Test</button>
-          <span class="conn-result" id="test-prowlarr"></span></div>
-      </div>
       <button class="btn" onclick="Stackarr.saveCategory('connections', this)">Save connections</button>
     </div>
     {% endif %}

@@ -135,8 +135,9 @@ def insights_page():
             in_prog += 1
         m = lib.get(h["item_id"])
         if m and m["author"]:
-            a = m["author"].split(",")[0]
-            authors[a] = authors.get(a, 0) + 1
+            a = m["author"].split(",")[0].split(" - ")[0].strip()   # drop "- illustrator/translator" noise
+            if a:
+                authors[a] = authors.get(a, 0) + 1
     hours = round(stats["total_seconds"] / 3600)
     facts = []
     if hours:
@@ -229,9 +230,7 @@ def settings_page():
                                  "chaptarr_api_key": g("chaptarr_api_key", config.CHAPTARR_API_KEY),
                                  "chaptarr_root_folder": g("chaptarr_root_folder", config.CHAPTARR_ROOT_FOLDER),
                                  "chaptarr_quality_profile_id": g("chaptarr_quality_profile_id", str(config.CHAPTARR_QUALITY_PROFILE_ID)),
-                                 "chaptarr_metadata_profile_id": g("chaptarr_metadata_profile_id", str(config.CHAPTARR_METADATA_PROFILE_ID)),
-                                 "prowlarr_url": g("prowlarr_url", config.PROWLARR_URL),
-                                 "prowlarr_api_key": g("prowlarr_api_key", config.PROWLARR_API_KEY)},
+                                 "chaptarr_metadata_profile_id": g("chaptarr_metadata_profile_id", str(config.CHAPTARR_METADATA_PROFILE_ID))},
                            reading={"goodreads_rss": g("goodreads_rss", config.GOODREADS_RSS),
                                     "hardcover_token": g("hardcover_token", config.HARDCOVER_TOKEN)},
                            log_level=config.LOG_LEVEL,
@@ -454,7 +453,7 @@ SETTING_KEYS = {
     "abs_url", "abs_admin_token",
     "chaptarr_url", "chaptarr_api_key", "chaptarr_root_folder",
     "chaptarr_quality_profile_id", "chaptarr_metadata_profile_id",
-    "prowlarr_url", "prowlarr_api_key", "goodreads_rss", "hardcover_token", "discord_webhook",
+    "goodreads_rss", "hardcover_token", "discord_webhook",
 }
 BOOL_KEYS = {"email_enabled", "discord_enabled"}
 
@@ -488,9 +487,6 @@ def api_test(service):
             r = rq.get(f"{chaptarr.url()}/api/v1/system/status",
                        headers={"X-Api-Key": chaptarr.api_key()}, timeout=15)
             return jsonify({"ok": r.ok, "detail": "Connected" if r.ok else f"HTTP {r.status_code}"})
-        if service == "prowlarr":
-            from . import prowlarr
-            return jsonify(prowlarr.test())
     except Exception as e:
         return jsonify({"ok": False, "detail": str(e)})
     return jsonify({"ok": False, "detail": "unknown service"}), 404
@@ -565,6 +561,32 @@ def api_logs_download():
     body = "\n".join(_read_logs(level, 200000)) or "(no log entries)"
     return Response(body, mimetype="text/plain",
                     headers={"Content-Disposition": f"attachment; filename=stackarr-{level.lower()}.log"})
+
+
+@bp.route("/cover/<item_id>")
+@auth.login_required
+def cover(item_id):
+    """Proxy an Audiobookshelf cover through Stackarr so the browser (which
+    can't reach host.docker.internal) gets it same-origin, token hidden."""
+    from flask import Response
+    import requests as rq
+    try:
+        r = rq.get(f"{absclient.abs_url()}/api/items/{item_id}/cover",
+                   headers={"Authorization": f"Bearer {absclient.admin_token()}"}, timeout=20)
+        if r.ok and r.content:
+            return Response(r.content, mimetype=r.headers.get("Content-Type", "image/jpeg"),
+                            headers={"Cache-Control": "max-age=86400"})
+    except Exception:
+        pass
+    # ABS has no art for this item -> fall back to the Audible cover by title/author
+    try:
+        m = absclient.item_detail(item_id)
+        hits = audible.search(f"{m.get('title','')} {m.get('author','')}", num=1)
+        if hits and hits[0].get("cover"):
+            return redirect(hits[0]["cover"])
+    except Exception:
+        pass
+    return redirect(url_for("static", filename="icon.svg"))
 
 
 @bp.route("/api/health")
