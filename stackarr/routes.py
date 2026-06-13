@@ -46,6 +46,40 @@ def logout():
 
 
 # ----------------------------------------------------------------- pages ---
+ONBOARD_THRESHOLD = 5      # below this many ratings, nudge the quick-rate flow
+
+
+def _onboarding_books(u, limit=12):
+    """Finished-in-ABS books the user hasn't rated yet — the seed set for the
+    quick-rate onboarding card. Most have no ASIN, so we key on rating_key."""
+    try:
+        hist = absclient.listening_history(u["abs_token"])
+    except Exception:
+        return []
+    with db.conn() as c:
+        lib = {r["item_id"]: dict(r) for r in
+               c.execute("SELECT item_id,title,author,asin FROM library")}
+        rated = {r["asin"] for r in c.execute(
+            "SELECT asin FROM ratings WHERE user_id=? AND asin<>''", (u["id"],))}
+        hidden = {r["value"] for r in c.execute(
+            "SELECT value FROM signals WHERE user_id=? AND kind='hist_hidden'", (u["id"],))}
+    out, seen = [], set()
+    for h in hist:
+        if not h.get("finished"):
+            continue
+        m = lib.get(h["item_id"]) or {}
+        title, author, asin = m.get("title", ""), m.get("author", ""), (m.get("asin") or "").strip()
+        rk = db.rating_key(asin, title, author)
+        if not title or rk in rated or rk in hidden or rk in seen:
+            continue
+        seen.add(rk)
+        out.append({"rkey": rk, "title": title, "author": author,
+                    "cover": url_for("main.cover", item_id=h["item_id"])})
+        if len(out) >= limit:
+            break
+    return out
+
+
 @bp.route("/")
 @auth.login_required
 def index():
@@ -96,10 +130,16 @@ def suggestions_page():
         recent_requests = [dict(r) for r in c.execute(
             "SELECT title, author, cover, status, asin FROM requests WHERE user_id=? "
             "ORDER BY id DESC LIMIT 14", (u["id"],))]
+        rated_count = c.execute("SELECT COUNT(*) FROM ratings WHERE user_id=?", (u["id"],)).fetchone()[0]
+        onboard_off = bool(c.execute(
+            "SELECT 1 FROM signals WHERE user_id=? AND kind='onboard_dismissed'", (u["id"],)).fetchone())
+    # quick-rate onboarding: only when taste is thin and not dismissed
+    onboard_books = [] if (rated_count >= ONBOARD_THRESHOLD or onboard_off) else _onboarding_books(u)
     return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles,
                            genres=discover.DEFAULT_GENRES, rec_authors=rec_authors,
                            abs_base=absclient.abs_url(),
-                           recently_added=recently_added, recent_requests=recent_requests)
+                           recently_added=recently_added, recent_requests=recent_requests,
+                           onboard_books=onboard_books, onboard_target=ONBOARD_THRESHOLD)
 
 
 @bp.route("/lane/<lane>")
@@ -250,6 +290,36 @@ def history_page():
     return render_template("history.html", books=books, rated_n=rated_n, hide_rated=hide_rated)
 
 
+@bp.route("/taste")
+@auth.login_required
+def taste_page():
+    """See and undo everything that shapes your recommendations: ratings,
+    did-not-finish, passed/ignored, already-read seeds, and removed books."""
+    u = auth.current_user()
+    with db.conn() as c:
+        ratings = [dict(r) for r in c.execute(
+            "SELECT asin,title,author,stars FROM ratings WHERE user_id=? ORDER BY stars DESC, title",
+            (u["id"],))]
+        sigs = [dict(r) for r in c.execute(
+            "SELECT id,kind,value,weight,why FROM signals WHERE user_id=? ORDER BY id DESC", (u["id"],))]
+
+    def labelled(s):
+        why = s.get("why") or ""
+        s = dict(s)
+        s["label"] = why.split(":", 1)[1].strip() if ":" in why else (s.get("value") or "")
+        return s
+
+    def why_is(s, *prefixes):
+        return s["kind"] == "asin" and any((s["why"] or "").startswith(p) for p in prefixes)
+
+    passed = [labelled(s) for s in sigs if why_is(s, "passed:")]
+    dnf = [labelled(s) for s in sigs if (s["why"] or "").startswith("dnf:")]
+    readseed = [labelled(s) for s in sigs if why_is(s, "already read:", "marked read:")]
+    removed = [labelled(s) for s in sigs if s["kind"] == "hist_hidden"]
+    return render_template("taste.html", ratings=ratings, passed=passed, dnf=dnf,
+                           readseed=readseed, removed=removed)
+
+
 @bp.route("/book/<asin>")
 @auth.login_required
 def book_page(asin):
@@ -315,6 +385,8 @@ def settings_page():
                            discord_configured=bool(db.setting("discord_webhook", config.DISCORD_WEBHOOK)),
                            discord_webhook=db.setting("discord_webhook", config.DISCORD_WEBHOOK),
                            discord_enabled=db.get_meta("discord_enabled", "0") == "1",
+                           notify_avail_enabled=db.get_meta("notify_avail_enabled", "0") == "1",
+                           custom_webhook=db.setting("custom_webhook", ""),
                            themes=list(notify.THEMES),
                            interval_hours=db.get_meta("suggest_interval_hours", str(config.SUGGEST_INTERVAL_HOURS)),
                            language=db.get_meta("language", config.TARGET_LANGUAGE),
@@ -537,13 +609,69 @@ def api_history_remove():
     records a 'hist_hidden' marker keyed on the rating key, so the book stays
     gone even though it's still finished in Audiobookshelf."""
     u = auth.current_user()
+    body = request.get_json(force=True)
+    key = (body.get("key") or "").strip()
+    title = (body.get("title") or "").strip()
+    if not key:
+        return jsonify({"error": "key required"}), 400
+    why = f"removed: {title}" if title else "removed from history"
+    with db.conn() as c:
+        c.execute("DELETE FROM ratings WHERE user_id=? AND asin=?", (u["id"], key))
+        c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) "
+                  "VALUES (?,?,?,?,?)", (u["id"], "hist_hidden", key, 0, why))
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/signal/<int:sid>/delete", methods=["POST"])
+@auth.login_required
+def api_signal_delete(sid):
+    """Undo a taste signal (un-hide, un-pass, drop a read-seed or DNF)."""
+    u = auth.current_user()
+    with db.conn() as c:
+        c.execute("DELETE FROM signals WHERE id=? AND user_id=?", (sid, u["id"]))
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/rating/delete", methods=["POST"])
+@auth.login_required
+def api_rating_delete():
+    """Clear a rating (book returns to unrated)."""
+    u = auth.current_user()
     key = (request.get_json(force=True).get("key") or "").strip()
     if not key:
         return jsonify({"error": "key required"}), 400
     with db.conn() as c:
         c.execute("DELETE FROM ratings WHERE user_id=? AND asin=?", (u["id"], key))
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/dnf", methods=["POST"])
+@auth.login_required
+def api_dnf():
+    """Mark a book you didn't finish — a negative taste signal that stops it
+    (and exact-title re-suggestions) from coming back."""
+    u = auth.current_user()
+    body = request.get_json(force=True)
+    title, authr = (body.get("title") or "").strip(), (body.get("author") or "").strip()
+    if not title:
+        return jsonify({"error": "title required"}), 400
+    hit = audible.search(f"{title} {authr}", num=1)
+    b = hit[0] if hit else {"asin": "", "title": title, "author": authr}
+    key = b.get("asin") or db.rating_key("", b.get("title", title), b.get("author", authr))
+    with db.conn() as c:
+        c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
+                  (u["id"], "asin", key, -2, f"dnf: {b.get('title', title)}"))
+    return jsonify({"ok": True, "matched": b.get("title", title)})
+
+
+@bp.route("/api/onboard/dismiss", methods=["POST"])
+@auth.login_required
+def api_onboard_dismiss():
+    """Hide the quick-rate onboarding card for good."""
+    u = auth.current_user()
+    with db.conn() as c:
         c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) "
-                  "VALUES (?,?,?,?,?)", (u["id"], "hist_hidden", key, 0, "removed from history"))
+                  "VALUES (?,?,?,?,?)", (u["id"], "onboard_dismissed", "1", 0, "dismissed onboarding"))
     return jsonify({"ok": True})
 
 
@@ -575,9 +703,9 @@ SETTING_KEYS = {
     "abs_url", "abs_admin_token",
     "chaptarr_url", "chaptarr_api_key", "chaptarr_root_folder",
     "chaptarr_quality_profile_id", "chaptarr_metadata_profile_id",
-    "goodreads_rss", "hardcover_token", "discord_webhook",
+    "goodreads_rss", "hardcover_token", "discord_webhook", "custom_webhook",
 }
-BOOL_KEYS = {"email_enabled", "discord_enabled", "hide_rated_history"}
+BOOL_KEYS = {"email_enabled", "discord_enabled", "hide_rated_history", "notify_avail_enabled"}
 
 
 @bp.route("/api/settings", methods=["POST"])

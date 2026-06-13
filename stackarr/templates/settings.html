@@ -85,10 +85,17 @@
     {% endif %}
 
     <div class="settings-cat" id="cat-notify">
+      <div class="panel"><h3>Alerts</h3>
+        <label class="row"><span>Tell me when a requested book lands in my library</span>
+          <input type="checkbox" class="switch" id="notify-avail" {{ 'checked' if notify_avail_enabled }}
+                 onchange="Stackarr.setSetting({notify_avail_enabled: this.checked})"></label>
+        <p class="muted">Delivered through whichever channels you enable below (email, Discord, Apprise, custom webhook). Off by default.</p>
+      </div>
       <div class="sub-tabs">
         <button class="sub-tab active" onclick="Stackarr.subTab('notify','email', this)">Email</button>
         <button class="sub-tab" onclick="Stackarr.subTab('notify','discord', this)">Discord</button>
         <button class="sub-tab" onclick="Stackarr.subTab('notify','apprise', this)">Apprise</button>
+        <button class="sub-tab" onclick="Stackarr.subTab('notify','webhook', this)">Webhook</button>
       </div>
       <div class="sub-panel active" data-group="notify" data-panel="email">
         <div class="panel"><h3>SMTP server</h3>
@@ -127,7 +134,15 @@
       </div>
       <div class="sub-panel" data-group="notify" data-panel="apprise">
         <div class="panel"><h3>Apprise</h3>
-          <p class="muted">Set APPRISE_URLS in your environment (Telegram, ntfy, Pushover, and 100+ more) — digests fan out to all of them.</p>
+          <p class="muted">Set APPRISE_URLS in your environment (Telegram, ntfy, Pushover, Slack, and 100+ more) — notifications fan out to all of them.</p>
+        </div>
+      </div>
+      <div class="sub-panel" data-group="notify" data-panel="webhook">
+        <div class="panel"><h3>Custom webhook</h3>
+          <p class="muted">POST a small JSON payload to any URL on each notification:
+            <code>{event, title, author, url}</code>. Great for n8n, Home Assistant, or your own automations.</p>
+          <label class="row"><span>Webhook URL</span><input data-setting="custom_webhook" value="{{ custom_webhook }}" placeholder="https://…"></label>
+          <button class="btn small" onclick="Stackarr.saveCategory('notify', this)">Save</button>
         </div>
       </div>
     </div>

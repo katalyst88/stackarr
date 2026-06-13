@@ -21,7 +21,7 @@
       <div class="rate-title" title="{{ b.title }}">{{ b.title }}</div>
       <div class="rate-author">{{ b.author }}</div>
     </div>
-    <div class="rate-stars" data-asin="{{ b.rkey }}" title="Rate this book">
+    <div class="rate-stars" data-asin="{{ b.rkey }}" data-title="{{ b.title }}" data-author="{{ b.author }}" title="Rate this book">
       {% for n in [1,2,3,4,5] %}
       <span class="star {{ 'on' if n <= b.stars }}" onclick="Stackarr.rate('{{ b.rkey }}',{{ n }},this)">★</span>
       {% endfor %}

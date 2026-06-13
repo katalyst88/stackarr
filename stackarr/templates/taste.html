@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <h2 class="page-title">Taste <span class="subtle">everything that shapes your recommendations — see it, undo it</span></h2>
+</div>
+
+<div class="taste-wrap">
+
+  <div class="panel">
+    <h3>Did not finish</h3>
+    <p class="muted">Books you started but gave up on — they won't be suggested again.</p>
+    <div class="inline-form">
+      <input id="dnf-title" placeholder="Title">
+      <input id="dnf-author" placeholder="Author (optional)">
+      <button class="btn small" onclick="Stackarr.markDnf(this)">Add</button>
+    </div>
+    <div class="tune-list" id="tune-dnf">
+      {% for s in dnf %}
+      <div class="tune-row" data-sid="{{ s.id }}"><span class="tune-label">{{ s.label }}</span>
+        <button class="tune-undo" onclick="Stackarr.undoSignal({{ s.id }}, this)">Undo</button></div>
+      {% else %}<p class="muted tune-empty">Nothing here yet.</p>{% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Passed / not interested</h3>
+    <p class="muted">Suggestions you ignored. Undo to let them come back.</p>
+    <div class="tune-list" id="tune-passed">
+      {% for s in passed %}
+      <div class="tune-row" data-sid="{{ s.id }}"><span class="tune-label">{{ s.label }}</span>
+        <button class="tune-undo" onclick="Stackarr.undoSignal({{ s.id }}, this)">Undo</button></div>
+      {% else %}<p class="muted tune-empty">Nothing here yet.</p>{% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Already-read seeds</h3>
+    <p class="muted">Books you told Stackarr you'd already read — these shape your picks but are never re-suggested.</p>
+    <div class="tune-list" id="tune-read">
+      {% for s in readseed %}
+      <div class="tune-row" data-sid="{{ s.id }}"><span class="tune-label">{{ s.label }}</span>
+        <button class="tune-undo" onclick="Stackarr.undoSignal({{ s.id }}, this)">Undo</button></div>
+      {% else %}<p class="muted tune-empty">Nothing here yet.</p>{% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Removed from history</h3>
+    <p class="muted">Books you removed from History &amp; ratings. Restore to bring them back.</p>
+    <div class="tune-list" id="tune-removed">
+      {% for s in removed %}
+      <div class="tune-row" data-sid="{{ s.id }}"><span class="tune-label">{{ s.label }}</span>
+        <button class="tune-undo" onclick="Stackarr.undoSignal({{ s.id }}, this)">Restore</button></div>
+      {% else %}<p class="muted tune-empty">Nothing here yet.</p>{% endfor %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Your ratings <span class="muted">({{ ratings|length }})</span></h3>
+    <p class="muted">Edit ratings on <a href="{{ url_for('main.history_page') }}">History &amp; ratings</a>; clear one here to return it to unrated.</p>
+    <div class="tune-list" id="tune-ratings">
+      {% for r in ratings %}
+      <div class="tune-row" data-key="{{ r.asin }}">
+        <span class="tune-stars">{% for n in [1,2,3,4,5] %}<span class="star {{ 'on' if n <= r.stars }}">★</span>{% endfor %}</span>
+        <span class="tune-label">{{ r.title }}{% if r.author %} <span class="muted">· {{ r.author }}</span>{% endif %}</span>
+        <button class="tune-undo" onclick="Stackarr.clearRating('{{ r.asin }}', this)">Clear</button></div>
+      {% else %}<p class="muted tune-empty">No ratings yet.</p>{% endfor %}
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+{% block scripts %}<script>Stackarr.boot();</script>{% endblock %}

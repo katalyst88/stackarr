@@ -45,7 +45,8 @@ def refresh_library():
             log.info("library item gone -> negative: %s", row["title"])
 
         # requests -> available when their book shows up
-        for r in c.execute("SELECT id,title,author FROM requests WHERE status IN ('queued','handed')"):
+        newly_available = []
+        for r in c.execute("SELECT id,title,author,cover FROM requests WHERE status IN ('queued','handed')"):
             hit = c.execute("SELECT 1 FROM library WHERE gone_at IS NULL AND lower(title) LIKE ? "
                             "AND (?='' OR lower(author) LIKE ?)",
                             (f"%{r['title'].lower()[:40]}%",
@@ -53,6 +54,15 @@ def refresh_library():
                              f"%{(r['author'] or '').split(',')[0].lower()}%")).fetchone()
             if hit:
                 c.execute("UPDATE requests SET status='available',updated_at=datetime('now','localtime') WHERE id=?", (r["id"],))
+                newly_available.append(dict(r))
+
+    # notify outside the DB transaction (each channel self-gates on its config)
+    base = db.get_meta("public_url", "")
+    for r in newly_available:
+        try:
+            notify.available(r, base_url=base)
+        except Exception as e:
+            log.warning("availability notify failed for %s: %s", r.get("title"), e)
 
 
 def interval_hours() -> int:

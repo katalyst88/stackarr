@@ -18,6 +18,33 @@
   <div><button class="btn small" onclick="Stackarr.scan()">Update Suggestions</button></div>
 </div>
 
+{% if onboard_books %}
+<div class="onboard-card" id="onboard-card">
+  <div class="onboard-head">
+    <div>
+      <h3>Personalise your picks</h3>
+      <p class="muted">Rate a few books you've already listened to — it instantly sharpens your recommendations.</p>
+    </div>
+    <div class="onboard-progress"><span id="onboard-count">0</span> rated
+      <button class="btn ghost small" onclick="Stackarr.dismissOnboard(this)">Skip for now</button></div>
+  </div>
+  <div class="onboard-grid">
+    {% for b in onboard_books %}
+    <div class="onboard-item" data-rkey="{{ b.rkey }}">
+      <img class="onboard-cover" src="{{ (b.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy"
+           alt="" onerror="this.src='{{ url_for('static', filename='icon.svg') }}'">
+      <div class="onboard-title" title="{{ b.title }}">{{ b.title }}</div>
+      <div class="rate-stars" data-asin="{{ b.rkey }}" data-title="{{ b.title }}" data-author="{{ b.author }}">
+        {% for n in [1,2,3,4,5] %}
+        <span class="star" onclick="Stackarr.rate('{{ b.rkey }}',{{ n }},this)">★</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 <div id="shelf-loader" class="shelf-loader" hidden>
   <div class="shelf-scene">
     <div class="shelf-books"><span class="sb sb1"></span><span class="sb sb2"></span><span class="sb sb3"></span>

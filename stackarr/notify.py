@@ -152,6 +152,35 @@ def _discord(text: str):
         log.warning("discord webhook failed: %s", e)
 
 
+def _custom_webhook(payload: dict):
+    """POST a small JSON payload to a user-configured generic webhook —
+    the 'other webhook options' channel alongside Discord/Apprise/email."""
+    url = db.setting("custom_webhook", "")
+    if not url:
+        return
+    try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        log.warning("custom webhook failed: %s", e)
+
+
+def available(book: dict, base_url: str = ""):
+    """Fire when a requested book lands in Audiobookshelf. Master switch is
+    notify_avail_enabled; each channel still self-gates on its own config."""
+    if db.get_meta("notify_avail_enabled", "0") != "1":
+        return
+    title, author = book.get("title", "a book"), book.get("author", "")
+    base = base_url or db.get_meta("public_url", "")
+    subject = f"{config.APP_NAME}: “{title}” is ready to listen"
+    body = f"“{title}”{(' by ' + author) if author else ''} just landed in your Audiobookshelf library."
+    _discord(f"📚 **{title}**{(' — ' + author) if author else ''} is now in your library."
+             + (f" {base}" if base else ""))
+    _apprise(subject, body)
+    _custom_webhook({"event": "available", "title": title, "author": author, "url": base})
+    if email_enabled():
+        _send_email(subject, body, f"<p style='font-family:sans-serif;font-size:15px'>{body}</p>")
+
+
 def suggestion_digest(pending: list[dict], base_url: str = "") -> bool:
     n = len(pending)
     text = f"{n} audiobook suggestion(s) waiting for approval:\n" + \
@@ -165,4 +194,6 @@ def suggestion_digest(pending: list[dict], base_url: str = "") -> bool:
     _apprise(f"{config.APP_NAME}: {n} suggestion(s) to review", text)
     _discord(f"**{config.APP_NAME}** — {n} suggestion(s) waiting for approval"
              + (f": {base_url}/suggestions" if base_url else ""))
+    _custom_webhook({"event": "suggestions", "count": n,
+                     "url": f"{base_url}/suggestions" if base_url else ""})
     return sent
