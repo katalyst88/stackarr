@@ -42,12 +42,19 @@ def _ebook_seeds(user: dict) -> list[dict]:
         seen.add(title.lower())
         seeds.append({"title": title, "author": m.get("author", ""),
                       "finished": bool(h.get("finished"))})
-    # Hardcover "read" shelf — cross-device finished ebooks ABS/Kavita never saw
-    for it in ebookmeta.hardcover_read(ebookmeta.hardcover_token()):
+    # Hardcover shelves — cross-device ebooks ABS/Kavita never saw. Read =
+    # finished seed; Currently-reading = strong in-progress seed.
+    tok = ebookmeta.hardcover_token()
+    for it in ebookmeta.hardcover_read(tok):
         t = (it.get("title") or "")
         if t and t.lower() not in seen:
             seen.add(t.lower())
             seeds.append({"title": t, "author": it.get("author", ""), "finished": True})
+    for it in ebookmeta.hardcover_reading(tok):
+        t = (it.get("title") or "")
+        if t and t.lower() not in seen:
+            seen.add(t.lower())
+            seeds.append({"title": t, "author": it.get("author", ""), "finished": False})
     return seeds
 
 

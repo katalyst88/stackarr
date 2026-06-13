@@ -7,9 +7,12 @@ recommender pick them up automatically once connected — no call-site changes."
 from __future__ import annotations
 
 from .abs import ABSBackend
+from .abs_ebooks import ABSEbooksBackend
 from .base import Backend
 from .calibreweb import CalibreWebBackend
 from .kavita import KavitaBackend
+from .komga import KomgaBackend
+from .opds import OPDSBackend
 
 # The login backend (identity). Audiobookshelf only — users always sign in
 # with their ABS credentials; other sources are connected, not logged-into.
@@ -18,7 +21,8 @@ LOGIN: Backend = ABSBackend()
 # Every backend Stackarr knows about, login first, then ebook sources. They're
 # all registered; `sources()` filters to the ones actually connected (enabled)
 # and of an active format, so an unconfigured backend simply never appears.
-ALL: list[Backend] = [LOGIN, KavitaBackend(), CalibreWebBackend()]
+ALL: list[Backend] = [LOGIN, KavitaBackend(), CalibreWebBackend(),
+                      KomgaBackend(), OPDSBackend(), ABSEbooksBackend()]
 
 
 def register(backend: Backend) -> None:

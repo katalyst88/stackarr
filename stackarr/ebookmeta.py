@@ -262,14 +262,23 @@ def find_id(title: str, author: str) -> str:
 
 
 # ---------------------------------------------------------------- Hardcover read shelf
+def hardcover_reading(token: str) -> list[dict]:
+    """The user's Hardcover *currently reading* shelf (status_id 2) — a strong
+    'what I'm into right now' seed."""
+    return _hardcover_shelf(token, 2)
+
+
 def hardcover_read(token: str) -> list[dict]:
     """The user's Hardcover *read* shelf (status_id 3) — a cross-device read
-    signal for ebooks. Returns [{title, author, isbn}]. Mirror of the
-    want-to-read query in importlists.hardcover()."""
+    signal for ebooks. Returns [{title, author, isbn}]."""
+    return _hardcover_shelf(token, 3)
+
+
+def _hardcover_shelf(token: str, status_id: int) -> list[dict]:
     if not token:
         return []
-    q = {"query": "{ me { user_books(where: {status_id: {_eq: 3}}) "
-                  "{ book { title isbns contributions { author { name } } } } } }"}
+    q = {"query": "{ me { user_books(where: {status_id: {_eq: %d}}) "
+                  "{ book { title isbns contributions { author { name } } } } } }" % status_id}
     try:
         r = requests.post("https://api.hardcover.app/v1/graphql",
                           headers={"Authorization": token, "Content-Type": "application/json"},

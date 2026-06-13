@@ -741,7 +741,15 @@ def settings_page():
                                  "kavita_api_key": g("kavita_api_key", config.KAVITA_API_KEY),
                                  "calibreweb_url": g("calibreweb_url", config.CALIBREWEB_URL),
                                  "calibreweb_user": g("calibreweb_user", config.CALIBREWEB_USER),
-                                 "calibreweb_pass": g("calibreweb_pass", config.CALIBREWEB_PASS)},
+                                 "calibreweb_pass": g("calibreweb_pass", config.CALIBREWEB_PASS),
+                                 "komga_url": g("komga_url", config.KOMGA_URL),
+                                 "komga_user": g("komga_user", config.KOMGA_USER),
+                                 "komga_pass": g("komga_pass", config.KOMGA_PASS),
+                                 "opds_url": g("opds_url", config.OPDS_URL),
+                                 "opds_user": g("opds_user", config.OPDS_USER),
+                                 "opds_pass": g("opds_pass", config.OPDS_PASS)},
+                           abs_ebooks=db.get_meta("abs_ebooks", "1" if config.ABS_EBOOKS else "0") == "1",
+                           koreader_sync=db.get_meta("koreader_sync", "1" if config.KOREADER_SYNC else "0") == "1",
                            reading={"goodreads_rss": g("goodreads_rss", config.GOODREADS_RSS),
                                     "hardcover_token": g("hardcover_token", config.HARDCOVER_TOKEN)},
                            hide_rated_history=db.get_meta("hide_rated_history", "0") == "1",
@@ -1289,10 +1297,13 @@ SETTING_KEYS = {
     "auto_add_level", "formats",
     "kavita_url", "kavita_api_key",
     "calibreweb_url", "calibreweb_user", "calibreweb_pass",
+    "komga_url", "komga_user", "komga_pass",
+    "opds_url", "opds_user", "opds_pass",
     "chaptarr_webhook_token",
 }
 BOOL_KEYS = {"email_enabled", "discord_enabled", "hide_rated_history",
-             "notify_avail_enabled", "notify_newrelease_enabled", "cross_format_taste"}
+             "notify_avail_enabled", "notify_newrelease_enabled", "cross_format_taste",
+             "abs_ebooks", "koreader_sync"}
 
 
 @bp.route("/api/settings", methods=["POST"])
@@ -1432,6 +1443,67 @@ def cover(item_id):
     except Exception:
         pass
     return redirect(url_for("static", filename="icon.svg"))
+
+
+# ---- KOReader progress sync (kosync protocol) ----------------------------
+# Experimental: lets KOReader e-readers sync reading progress to Stackarr.
+# kosync only carries a document *hash* (no title), so it can't feed
+# recommendations — it's a sync relay. Enable with KOREADER_SYNC.
+def _kosync_on() -> bool:
+    return db.get_meta("koreader_sync", "1" if config.KOREADER_SYNC else "0") == "1"
+
+
+@bp.route("/users/create", methods=["POST"])
+def kosync_create():
+    if not _kosync_on():
+        return jsonify({"message": "disabled"}), 403
+    b = request.get_json(silent=True) or {}
+    user = (b.get("username") or "").strip()
+    if not user:
+        return jsonify({"message": "Invalid request"}), 400
+    db.set_meta(f"kosync_user_{user}", b.get("password", ""))
+    return jsonify({"username": user}), 201
+
+
+@bp.route("/users/auth")
+def kosync_auth():
+    if not _kosync_on():
+        return jsonify({"message": "disabled"}), 403
+    user = request.headers.get("x-auth-user", "")
+    if db.get_meta(f"kosync_user_{user}", None) is None and not db.get_meta(f"kosync_user_{user}"):
+        db.set_meta(f"kosync_user_{user}", request.headers.get("x-auth-key", ""))
+    return jsonify({"authorized": "OK"})
+
+
+@bp.route("/syncs/progress", methods=["PUT"])
+def kosync_put():
+    if not _kosync_on():
+        return jsonify({"message": "disabled"}), 403
+    b = request.get_json(silent=True) or {}
+    user = request.headers.get("x-auth-user", "anon")
+    doc = b.get("document", "")
+    if not doc:
+        return jsonify({"message": "Invalid request"}), 400
+    import json as _json
+    db.set_meta(f"kosync_{user}_{doc}", _json.dumps({
+        "progress": b.get("progress", ""), "percentage": b.get("percentage", 0),
+        "device": b.get("device", ""), "device_id": b.get("device_id", "")}))
+    return jsonify({"document": doc, "timestamp": 0})
+
+
+@bp.route("/syncs/progress/<doc>")
+def kosync_get(doc):
+    if not _kosync_on():
+        return jsonify({"message": "disabled"}), 403
+    import json as _json
+    user = request.headers.get("x-auth-user", "anon")
+    raw = db.get_meta(f"kosync_{user}_{doc}", "")
+    if not raw:
+        return jsonify({})
+    d = _json.loads(raw)
+    return jsonify({"document": doc, "progress": d.get("progress", ""),
+                    "percentage": d.get("percentage", 0), "device": d.get("device", ""),
+                    "device_id": d.get("device_id", ""), "timestamp": 0})
 
 
 @bp.route("/api/health")

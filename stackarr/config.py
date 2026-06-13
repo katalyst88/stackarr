@@ -56,6 +56,18 @@ KAVITA_API_KEY = os.environ.get("KAVITA_API_KEY", "")
 CALIBREWEB_URL = os.environ.get("CALIBREWEB_URL", "").rstrip("/")
 CALIBREWEB_USER = os.environ.get("CALIBREWEB_USER", "")
 CALIBREWEB_PASS = os.environ.get("CALIBREWEB_PASS", "")
+# Komga (REST + basic auth) — another self-hosted ebook server.
+KOMGA_URL = os.environ.get("KOMGA_URL", "").rstrip("/")
+KOMGA_USER = os.environ.get("KOMGA_USER", "")
+KOMGA_PASS = os.environ.get("KOMGA_PASS", "")
+# Generic OPDS feed (Ubooquity, Kavita-OPDS, any OPDS 1.x server).
+OPDS_URL = os.environ.get("OPDS_URL", "").rstrip("/")
+OPDS_USER = os.environ.get("OPDS_USER", "")
+OPDS_PASS = os.environ.get("OPDS_PASS", "")
+# Treat ebooks in your Audiobookshelf libraries as an ebook source (no extra creds).
+ABS_EBOOKS = _bool("ABS_EBOOKS", False)
+# KOReader progress-sync (kosync) — Stackarr exposes a /kosync endpoint.
+KOREADER_SYNC = _bool("KOREADER_SYNC", False)
 
 # --- Chaptarr (downstream: approved picks are handed here to grab) -----------
 CHAPTARR_URL = os.environ.get("CHAPTARR_URL", "").rstrip("/")
