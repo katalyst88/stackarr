@@ -78,21 +78,6 @@
   {% endcall %}
   {% endif %}
 
-  {% if recently_rated %}
-  {% call lane_row('rated', recently_rated, 'Recently rated by readers') %}
-    {% for r in recently_rated %}
-    <a class="media-card" href="{% if r.asin and not r.asin.startswith('t-') %}{{ url_for('main.book_page', asin=r.asin) }}{% else %}{{ url_for('main.history_page') }}{% endif %}">
-      <div class="media-poster genre-poster"><span class="genre-card-label">{{ r.title }}</span>
-        {% if multi_format %}<span class="fmt-badge {{ r.format or 'audiobook' }}">{{ 'eBook' if r.format == 'ebook' else 'Audio' }}</span>{% endif %}</div>
-      <div class="media-foot">
-        <div class="media-title" title="{{ r.title }}">{{ r.title }}</div>
-        <div class="media-author">{% for n in [1,2,3,4,5] %}<span class="ministar {{ 'on' if n <= r.stars }}">★</span>{% endfor %} <span class="subtle">{{ r.username }}</span></div>
-      </div>
-    </a>
-    {% endfor %}
-  {% endcall %}
-  {% endif %}
-
   {% if recently_added %}
   {% call lane_row('added', recently_added, 'Recently added to your library') %}
     {% for r in recently_added %}

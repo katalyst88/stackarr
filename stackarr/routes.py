@@ -135,12 +135,10 @@ def suggestions_page():
             "SELECT 1 FROM signals WHERE user_id=? AND kind='onboard_dismissed'", (u["id"],)).fetchone())
     # quick-rate onboarding: only when taste is thin and not dismissed
     onboard_books = [] if (rated_count >= ONBOARD_THRESHOLD or onboard_off) else _onboarding_books(u)
-    recently_rated = db.recent_ratings(14)
     return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles,
                            genres=discover.DEFAULT_GENRES, rec_authors=rec_authors,
                            abs_base=absclient.abs_url(),
                            recently_added=recently_added, recent_requests=recent_requests,
-                           recently_rated=recently_rated,
                            onboard_books=onboard_books, onboard_target=ONBOARD_THRESHOLD)
 
 
