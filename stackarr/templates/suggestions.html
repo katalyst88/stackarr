@@ -70,7 +70,7 @@
           <div class="ov-actions">
             {% if s.available %}<button class="btn" disabled>In library</button>
             {% elif lane == 'upcoming' %}<button class="btn" disabled>Coming soon</button>
-            {% else %}<button class="btn" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'approve',this)">Approve</button>{% endif %}
+            {% else %}<button class="btn" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'approve',this)">Add book</button>{% endif %}
             <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'read',this)">Read it</button>
             <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'reject',this)">Ignore</button>
           </div>
@@ -85,6 +85,15 @@
     {% for g in genres %}
     <a class="media-card genre-card" href="{{ url_for('main.browse_page', genre=g) }}">
       <div class="media-poster genre-poster"><span class="genre-card-label">{{ g }}</span></div>
+    </a>
+    {% endfor %}
+  {% endcall %}
+  {% endif %}
+  {% if loop.first and rec_authors %}
+  {% call lane_row('authorbrowse', rec_authors, 'Authors you might like') %}
+    {% for a in rec_authors %}
+    <a class="media-card genre-card" href="{{ url_for('main.browse_page', author=a) }}">
+      <div class="media-poster genre-poster"><span class="genre-card-label">{{ a }}</span></div>
     </a>
     {% endfor %}
   {% endcall %}

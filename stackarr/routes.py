@@ -6,7 +6,7 @@ from flask import (Blueprint, jsonify, redirect, render_template, request,
                    session, url_for)
 
 from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
-               discover, notify, recommend)
+               discover, notify)
 
 log = logging.getLogger("stackarr.routes")
 bp = Blueprint("main", __name__)
@@ -74,6 +74,17 @@ def suggestions_page():
     lane_order = ["series", "author", "enjoyed", "discover_author", "narrator", "genre",
                   "hidden", "awards", "short", "epic", "upcoming", "importlist", "foryou", "discover"]
     lanes = {k: lanes[k] for k in lane_order if k in lanes}
+    # authors to feature as browse cards — only SUGGESTED authors (new discoveries /
+    # readers-also-enjoyed), NOT the "authors you love" backlist lane.
+    seen_a, rec_authors = set(), []
+    for r in sorted(rows, key=lambda x: x["score"], reverse=True):
+        if r["lane"] == "author":
+            continue
+        a = (r["author"] or "").split(",")[0].strip()
+        if a and a.lower() not in seen_a:
+            seen_a.add(a.lower())
+            rec_authors.append(a)
+    rec_authors = rec_authors[:14]
     from . import discover
     # dashboard rows (only render if content exists)
     try:
@@ -85,7 +96,8 @@ def suggestions_page():
             "SELECT title, author, cover, status, asin FROM requests WHERE user_id=? "
             "ORDER BY id DESC LIMIT 14", (u["id"],))]
     return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles,
-                           genres=discover.DEFAULT_GENRES, abs_base=absclient.abs_url(),
+                           genres=discover.DEFAULT_GENRES, rec_authors=rec_authors,
+                           abs_base=absclient.abs_url(),
                            recently_added=recently_added, recent_requests=recent_requests)
 
 
@@ -174,7 +186,6 @@ def insights_page():
 @bp.route("/book/<asin>")
 @auth.login_required
 def book_page(asin):
-    from . import audnexus
     b = audible.by_asin(asin) or {"asin": asin, "title": "Unknown", "author": ""}
     ax = audnexus.book(asin) or {}
     if ax.get("genres"):

@@ -16,7 +16,7 @@
         <div class="ov-actions">
           {% if s.available %}<button class="btn" disabled>In library</button>
           {% elif lane == 'upcoming' %}<button class="btn" disabled>Coming soon</button>
-          {% else %}<button class="btn" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'approve',this)">Approve</button>{% endif %}
+          {% else %}<button class="btn" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'approve',this)">Add book</button>{% endif %}
           <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'read',this)">Read it</button>
           <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'reject',this)">Ignore</button>
         </div>
