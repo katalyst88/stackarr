@@ -53,7 +53,7 @@ def add_and_search(title: str, author: str, asin: str = "") -> dict:
     search. Returns {ok, ref, detail}. Fails gracefully if Chaptarr's
     metadata backend is unavailable."""
     if not configured():
-        return {"ok": False, "detail": "Chaptarr not configured"}
+        return {"ok": False, "detail": "Stackarr isn't connected to Chaptarr yet — add it in Settings → Connections."}
     qp = _profile("chaptarr_quality_profile_id", config.CHAPTARR_QUALITY_PROFILE_ID)
     mp = _profile("chaptarr_metadata_profile_id", config.CHAPTARR_METADATA_PROFILE_ID)
     rf = root_folder()
@@ -61,10 +61,10 @@ def add_and_search(title: str, author: str, asin: str = "") -> dict:
         look = requests.get(f"{url()}/api/v1/author/lookup",
                             headers=_h(), params={"term": author or title}, timeout=60)
         if look.status_code >= 500:
-            return {"ok": False, "detail": "Chaptarr metadata backend unavailable (try later)"}
+            return {"ok": False, "detail": "Chaptarr's book database is offline right now — we've kept this; try again shortly."}
         results = look.json() if look.ok else []
         if not results:
-            return {"ok": False, "detail": f"Chaptarr found no author for '{author or title}'"}
+            return {"ok": False, "detail": f"Chaptarr couldn't find “{author or title}” in its catalogue."}
         a = results[0]
         folder = a.get("folder") or a["authorName"]
         a.update(
@@ -78,7 +78,7 @@ def add_and_search(title: str, author: str, asin: str = "") -> dict:
         r = requests.post(f"{url()}/api/v1/author", headers=_h(), json=a, timeout=90)
         if r.ok:
             return {"ok": True, "ref": str(r.json().get("id", "")),
-                    "detail": f"Added {a['authorName']} to Chaptarr; searching"}
-        return {"ok": False, "detail": f"Chaptarr add failed: {r.status_code} {r.text[:120]}"}
-    except Exception as e:
-        return {"ok": False, "detail": f"Chaptarr error: {e}"}
+                    "detail": f"Sent “{a['authorName']}” to Chaptarr — it's searching now."}
+        return {"ok": False, "detail": "Chaptarr couldn't add this one right now — please try again in a bit."}
+    except Exception:
+        return {"ok": False, "detail": "Couldn't reach Chaptarr — check it's running and connected in Settings."}

@@ -29,8 +29,7 @@
     {% if b.summary %}<p class="book-summary">{{ b.summary }}</p>{% endif %}
     {% if b.state == 'failed' %}
     <div class="error-banner">
-      <strong>Couldn't grab this one.</strong> {{ b.req_detail or 'The download backend rejected or could not find a release.' }}
-      {% if 'metadata backend' in b.req_detail %}<br><span class="subtle">Chaptarr's metadata service is down right now — try again once it's back.</span>{% endif %}
+      <strong>Couldn't grab this one yet.</strong> {{ b.req_detail or "Chaptarr couldn't find or fetch a copy. You can retry below." }}
     </div>
     {% endif %}
     <div class="book-actions">
