@@ -33,9 +33,13 @@
     appear — or add what you've already read on the <a href="{{ url_for('main.settings_page') }}">Settings</a> page.</p></div>
 
   {% if genres %}
-  <div class="genre-chips"><span class="subtle">Browse by genre:</span>
-    {% for g in genres %}<a class="genre-chip" href="{{ url_for('main.browse_page', genre=g) }}">{{ g }}</a>{% endfor %}
-  </div>
+  {% call lane_row('genrebrowse', genres, 'Browse by genre') %}
+    {% for g in genres %}
+    <a class="media-card genre-card" href="{{ url_for('main.browse_page', genre=g) }}">
+      <div class="media-poster genre-poster"><span class="genre-card-label">{{ g }}</span></div>
+    </a>
+    {% endfor %}
+  {% endcall %}
   {% endif %}
 
   {% if recent_requests %}
@@ -87,6 +91,12 @@
     {% endfor %}
   {% endcall %}
   {% endfor %}
+
+  <section class="section" id="home-discover-section">
+    <div class="section-head"><h3>Discover more <span class="subtle">popular &amp; new in your genres</span></h3></div>
+    <div id="home-discover" class="grid"></div>
+    <div id="home-sentinel" class="subtle" style="text-align:center;padding:28px">Loading more…</div>
+  </section>
 </div>
 {% endblock %}
-{% block scripts %}<script>Stackarr.initSuggestions({{ 'true' if not lanes else 'false' }});</script>{% endblock %}
+{% block scripts %}<script>Stackarr.initSuggestions({{ 'true' if not lanes else 'false' }}); Stackarr.initDiscoverGallery();</script>{% endblock %}

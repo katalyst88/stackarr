@@ -227,6 +227,23 @@ const Stackarr = (() => {
       const f = document.getElementById("email-preview"); if (f) f.src = B() + "/api/email/preview/" + theme;
     },
 
+    initDiscoverGallery() {
+      const disc = document.getElementById("home-discover"), sentinel = document.getElementById("home-sentinel");
+      if (!disc) return;
+      let page = 0, loading = false, done = false;
+      const more = async () => {
+        if (loading || done) return;
+        loading = true;
+        const b = await api("/api/discover?page=" + page);
+        loading = false;
+        if (!b || !b.length) { done = true; if (sentinel) sentinel.textContent = ""; return; }
+        disc.insertAdjacentHTML("beforeend", b.map(mediaCard).join(""));
+        page++;
+      };
+      if (sentinel && "IntersectionObserver" in window)
+        new IntersectionObserver(es => { if (es[0].isIntersecting) more(); }, { rootMargin: "700px" }).observe(sentinel);
+      more();
+    },
     initDiscover() {
       applyTheme();
       const params = new URLSearchParams(location.search);

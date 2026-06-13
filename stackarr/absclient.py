@@ -117,7 +117,15 @@ def recent_added(limit: int = 14) -> list[dict]:
         except Exception as e:
             log.warning("recent_added failed for %s: %s", lib.get("name"), e)
     out.sort(key=lambda x: x.get("added", 0), reverse=True)
-    return out[:limit]
+    # one entry per book (dedupe by title+author, keep the most recent)
+    seen, uniq = set(), []
+    for m in out:
+        key = (m["title"].strip().lower(), (m["author"] or "").split(",")[0].strip().lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(m)
+    return uniq[:limit]
 
 
 def item_meta(it: dict) -> dict:
