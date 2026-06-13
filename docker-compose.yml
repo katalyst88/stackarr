@@ -1,7 +1,7 @@
 services:
   stackarr:
     build: .
-    # image: ghcr.io/katalyst/stackarr:latest
+    # image: ghcr.io/katalyst88/stackarr:latest
     container_name: stackarr
     restart: unless-stopped
     ports:

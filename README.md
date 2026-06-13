@@ -66,7 +66,7 @@ No model, no API key, no hallucinated titles.
 ## Quick start
 
 ```bash
-git clone https://github.com/katalyst/stackarr && cd stackarr
+git clone https://github.com/katalyst88/stackarr && cd stackarr
 cp .env.example .env     # fill in Audiobookshelf + Chaptarr details
 docker compose up -d
 ```
