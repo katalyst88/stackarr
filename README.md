@@ -1,11 +1,14 @@
 # Stackarr
 
+## 🔎 [**▶ Try the live demo →**](https://katalyst88.github.io/stackarr/)
+
+**No install — runs in your browser.** A sample of the full UI (sample data,
+actions disabled), hosted on GitHub Pages.
+
+---
+
 ![version](https://img.shields.io/badge/version-1.0.0-brightgreen)
 ![docker](https://img.shields.io/badge/docker-ghcr.io%2Fkatalyst88%2Fstackarr-blue)
-
-### 🔎 [Try the live demo →](https://katalyst88.github.io/stackarr/)
-
-A no-backend sample of the UI (sample data, actions disabled), hosted on GitHub Pages.
 
 > **1.0** — used day-to-day by its author. Written largely with an AI assistant,
 > so read the code before relying on it. Issues and PRs welcome.
