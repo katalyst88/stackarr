@@ -18,7 +18,8 @@ import math
 import re
 import time
 
-from . import absclient, audible, audnexus, config, db, discover, importlists
+from . import (absclient, audible, audnexus, config, db, discover, importlists,
+               tagging, taste)
 
 log = logging.getLogger("stackarr.recommend")
 
@@ -86,7 +87,13 @@ def run(user_id: int, max_new: int | None = None) -> int:
         for r in c.execute(f"SELECT asin,stars,author FROM ratings WHERE user_id=?{rate_where}", (user_id,)):
             if r["author"]:
                 k = ("author", r["author"].split(",")[0].lower())
-                pos[k] = pos.get(k, 0) + (r["stars"] - 3) * 1.5   # +3 for 5★, -3 for 1★
+                pos[k] = pos.get(k, 0) + (r["stars"] - 3) * 1.5
+        # light household collaborative signal: authors other users in this
+        # household rate highly get a gentle nudge (no-op on single-user installs)
+        for r in c.execute("SELECT author, COUNT(*) n FROM ratings WHERE user_id<>? AND stars>=4 "
+                           "AND author<>'' GROUP BY lower(substr(author,1,40))", (user_id,)):
+            k = ("author", r["author"].split(",")[0].lower())
+            pos[k] = pos.get(k, 0) + min(r["n"], 3) * 0.5   # +3 for 5★, -3 for 1★
         seed_lib = {row["item_id"]: dict(row) for row in
                     c.execute("SELECT item_id,title,author,asin FROM library")}
         # books the user removed from History & ratings must not seed suggestions
@@ -120,6 +127,12 @@ def run(user_id: int, max_new: int | None = None) -> int:
     cands: dict[str, dict] = {}
     narrators_seen: dict[str, float] = {}
     genres_seen: dict[str, float] = {}
+    # --- deterministic taste profile (no AI): explicit mood prefs (vibe picker /
+    # feedback) + moods derived from the genres of the books you've read. Drives
+    # mood matching + the serendipity bonus + the adventurousness dial.
+    mood_profile = taste.mood_signals(user_id)
+    adv = taste.adventurousness(user_id)
+    familiar_mult, discover_mult = taste.adv_multipliers(user_id)
 
     def consider(b: dict, base: float, lane: str, reason: str, extra: str = "", floor: bool = True):
         asin = b.get("asin")
@@ -143,6 +156,10 @@ def run(user_id: int, max_new: int | None = None) -> int:
             score += pos.get(("narrator", nm.strip().lower()), 0) * 0.5
         if b.get("rating"):
             score += (b["rating"] - config.SUGGEST_RATING_FLOOR) * config.W_RATING
+        # mood/pace match with the user's taste profile (can be negative for
+        # disliked moods) + serendipity bonus for well-rated lesser-known books
+        score += config.W_MOOD * taste.mood_overlap(b.get("categories"), mood_profile) * 0.15
+        score += config.W_SERENDIPITY * taste.serendipity(b, adv)
         score *= _popularity_factor(b.get("num_ratings", 0))
         cur = cands.get(asin)
         if cur:
@@ -162,9 +179,13 @@ def run(user_id: int, max_new: int | None = None) -> int:
         for nm in ((ax or {}).get("narrator") or "").split(","):
             if nm.strip():
                 narrators_seen[nm.strip()] = narrators_seen.get(nm.strip(), 0) + rw
-        for g in (ax or {}).get("genres") or []:
+        seed_genres = (ax or {}).get("genres") or []
+        for g in seed_genres:
             if g:
                 genres_seen[g] = genres_seen.get(g, 0) + rw
+        # accrue the moods of what you actually read into the taste profile
+        for m in taste.candidate_moods(seed_genres):
+            mood_profile[m.lower()] = mood_profile.get(m.lower(), 0.0) + rw
 
         # series-next  -> "Series to finish"
         srs = (ax or {}).get("series")
@@ -172,12 +193,12 @@ def run(user_id: int, max_new: int | None = None) -> int:
         if srs and seq is not None:
             for b in audible.search(srs, num=20):
                 if _norm(b.get("series")) == _norm(srs) and b.get("sequence") == seq + 1:
-                    consider(b, config.W_SERIES_NEXT * rw, "series",
+                    consider(b, config.W_SERIES_NEXT * rw * familiar_mult, "series",
                              f"Next in {srs} after “{title}”")
         # author backlist -> "More from authors you love"
         if author:
             for b in audible.by_author(author.split(",")[0], num=15):
-                consider(b, config.W_AUTHOR_BACKLIST * rw, "author",
+                consider(b, config.W_AUTHOR_BACKLIST * rw * familiar_mult, "author",
                          f"More from {author.split(',')[0]}, an author you love")
         # sims -> "Readers also enjoyed" (known author) or "New authors to discover"
         if seed["finished"] and asin:
@@ -187,7 +208,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
                     consider(b, (config.W_SIMS_FREQ - i * 0.5) * rw, "enjoyed",
                              f"Readers who finished “{title}” also enjoyed this")
                 else:
-                    consider(b, (config.W_SIMS_FREQ - i * 0.5) * rw * 0.9, "discover_author",
+                    consider(b, (config.W_SIMS_FREQ - i * 0.5) * rw * 0.9 * discover_mult, "discover_author",
                              f"A new author for you — fans of “{title}” rate this highly")
 
     # narrator-following -> "Narrators you love"
@@ -199,16 +220,31 @@ def run(user_id: int, max_new: int | None = None) -> int:
     top_genres = [g for g, _ in sorted(genres_seen.items(), key=lambda x: x[1], reverse=True)[:2]]
     today = str(datetime.date.today())
 
+    # mood lane -> books that match your strongest reading moods (StoryGraph-style)
+    MOOD_TERMS = {"funny": "humorous fantasy", "dark": "grimdark fantasy", "romantic": "romantasy",
+                  "tense": "psychological thriller", "adventurous": "adventure fantasy",
+                  "reflective": "literary science fiction", "epic": "epic fantasy", "cozy": "cozy fantasy",
+                  "emotional": "emotional fiction", "whimsical": "whimsical fantasy", "mysterious": "mystery",
+                  "fast-paced": "fast-paced thriller", "slow-paced": "literary fiction"}
+    top_moods = [m for m, w in sorted(mood_profile.items(), key=lambda x: x[1], reverse=True)[:2] if w > 0]
+    for mood in top_moods:
+        term = MOOD_TERMS.get(mood)
+        if term:
+            for b in audible.search(term, num=10):
+                consider(b, config.W_MOOD, "mood", f"A {mood} read — a mood you gravitate to")
+
     # genre lane -> "More in your favourite genres"
     for g in top_genres:
         for b in discover.genre_new([g], num_per=8)[:10]:
             consider(b, config.W_RATING * 1.2, "genre", f"Popular in {g}, a genre you enjoy")
 
-    # hidden gems -> well-rated but not mega-popular
+    # hidden gems / off the beaten path -> well-rated but not mega-popular. The
+    # serendipity bonus (in consider) + adventurousness amplify these.
     for g in top_genres:
         for b in audible.search(g, num=25):
-            if (b.get("rating") or 0) >= 4.4 and 20 <= b.get("num_ratings", 0) <= 4000:
-                consider(b, config.W_RATING, "hidden", f"A hidden gem in {g} — highly rated, lesser known")
+            if (b.get("rating") or 0) >= 4.3 and 15 <= b.get("num_ratings", 0) <= 5000:
+                consider(b, config.W_RATING * discover_mult, "hidden",
+                         f"Off the beaten path — a highly-rated, lesser-known {g.lower()}")
 
     # award winners in your genres
     for g in top_genres:

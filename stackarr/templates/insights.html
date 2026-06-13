@@ -1,6 +1,7 @@
 {% extends "base.html" %}
+{% from "_fmt.html" import fmt_icon with context %}
 {% block content %}
-<div class="page-head"><h2 class="page-title">Insights <span class="subtle">your listening, wrapped</span></h2></div>
+<div class="page-head"><h2 class="page-title">Insights <span class="subtle">your reading, wrapped</span></h2></div>
 
 <div class="insights-hero">
   <div class="hero-num">{{ '{:,}'.format(hours) }}</div>
@@ -13,6 +14,52 @@
   <div class="tile t3"><div class="tile-num">{{ top_authors|length }}</div><div class="tile-label">authors explored</div></div>
   <div class="tile t4"><div class="tile-num">{{ req_avail }}</div><div class="tile-label">added via Stackarr</div></div>
 </div>
+
+{% if multi_format and (by_format.audiobook or by_format.ebook) %}
+<section class="section"><div class="section-head"><h3>By format</h3></div>
+<div class="fmt-split">
+  {% set tot = (by_format.audiobook + by_format.ebook) or 1 %}
+  <div class="fmt-split-bar">
+    <span class="seg-audio" style="width: {{ (by_format.audiobook/tot*100)|round }}%"></span>
+    <span class="seg-ebook" style="width: {{ (by_format.ebook/tot*100)|round }}%"></span>
+  </div>
+  <div class="fmt-split-legend">
+    <span>{{ fmt_icon('audiobook') }} {{ by_format.audiobook }} audiobooks</span>
+    <span>{{ fmt_icon('ebook') }} {{ by_format.ebook }} ebooks</span>
+  </div>
+</div></section>
+{% endif %}
+
+{% if heat and heat.total %}
+<section class="section"><div class="section-head"><h3>Reading activity <span class="subtle">{{ heat.total }} finishes · last year</span></h3></div>
+<div class="heatmap-wrap"><div class="heatmap">
+  {% for week in heat.weeks %}<div class="hm-week">
+    {% for d in week %}<span class="hm-cell{% if d.future %} hm-future{% endif %}"
+      data-lvl="{{ 0 if not d.count else (1 if d.count == 1 else (2 if d.count == 2 else (3 if d.count <= 4 else 4))) }}"
+      title="{{ d.date }}: {{ d.count }} finished"></span>{% endfor %}
+  </div>{% endfor %}
+</div></div>
+<div class="hm-key"><span class="muted">Less</span><span class="hm-cell" data-lvl="0"></span><span class="hm-cell" data-lvl="1"></span><span class="hm-cell" data-lvl="2"></span><span class="hm-cell" data-lvl="3"></span><span class="hm-cell" data-lvl="4"></span><span class="muted">More</span></div>
+</section>
+{% endif %}
+
+{% if goal or top_moods %}
+<div class="insights-twocol">
+  {% if goal %}
+  <div class="goal-card mini">
+    <div class="goal-ring" style="--pct: {{ ((read_year/goal*100) if goal else 0)|round(0,'floor')|int }}">
+      <div class="goal-num">{{ read_year }}<span class="goal-of">/{{ goal }}</span></div><div class="goal-lbl">{{ year }} goal</div>
+    </div>
+    <div><h3>Reading goal</h3><p class="muted">{{ (goal - read_year) if goal > read_year else 0 }} to go. Set it on <a href="{{ url_for('main.shelves_page') }}">My shelves</a>.</p></div>
+  </div>
+  {% endif %}
+  {% if top_moods %}
+  <div class="mood-card"><h3>Your moods</h3>
+    <div class="mood-tags">{% for m, n in top_moods %}<a class="chip mood-chip" href="{{ url_for('main.browse_page', mood=m) }}">{{ m }} <span class="subtle">{{ n }}</span></a>{% endfor %}</div>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
 
 {% if top_authors %}
 <section class="section"><div class="section-head"><h3>Your top authors</h3></div>

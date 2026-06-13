@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% from "_fmt.html" import fmt_filter, fmt_icon with context %}
 {% block content %}
 <div class="page-head">
   <h2 class="page-title">History &amp; ratings
     <span class="subtle">{{ books|length }} book{{ 's' if books|length != 1 }}{% if rated_n %} · {{ rated_n }} rated{% endif %}</span></h2>
+  <div class="page-head-actions">{{ fmt_filter() }}</div>
 </div>
 
 {% if not books %}
@@ -10,9 +12,9 @@
   "Already read" from any book page — it'll show up here for you to rate.</p></div>
 {% endif %}
 
-<div class="rate-list" id="rate-list"{% if hide_rated %} data-hide-rated="1"{% endif %}>
+<div class="rate-list fmt-group" id="rate-list"{% if hide_rated %} data-hide-rated="1"{% endif %}>
   {% for b in books %}
-  <div class="rate-item{{ ' rated' if b.stars }}" data-asin="{{ b.asin }}" data-rated="{{ 1 if b.stars else 0 }}">
+  <div class="rate-item{{ ' rated' if b.stars }}" data-asin="{{ b.asin }}" data-format="{{ b.format or 'audiobook' }}" data-rated="{{ 1 if b.stars else 0 }}">
     <a class="rate-cover" {% if b.asin %}href="{{ url_for('main.book_page', asin=b.asin) }}"{% endif %}>
       <img src="{{ (b.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt=""
            onerror="this.src='{{ url_for('static', filename='icon.svg') }}'">

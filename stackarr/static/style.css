@@ -562,3 +562,77 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
 .star.on, .review-stars .star.on, .ministar.on { color: var(--accent); }
 .review-stars .star, .ministar { color: var(--line); font-size: 13px; }
 .ministar { font-size: 11px; }
+
+/* ============ v1.6 features: tags, shelves, goal, heatmap, vibes ============ */
+/* mood + content-warning chips */
+.mood-chip { background: color-mix(in srgb, var(--ebook) 14%, var(--bg3)); border-color: color-mix(in srgb, var(--ebook) 35%, var(--line)); text-transform: capitalize; }
+.mood-chip:hover { border-color: var(--ebook); color: var(--text); }
+.cw { margin: 6px 0; }
+.cw summary { cursor: pointer; color: #e6a13a; font-size: 13px; }
+.cw-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.cw-chip { background: color-mix(in srgb, #e0a83a 14%, var(--bg2)); border-color: color-mix(in srgb, #e0a83a 40%, var(--line)); color: #e6a13a; }
+
+/* shelf bar on the book page */
+.shelf-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.shelf-btn.on { background: var(--accent); color: #1a0f02; border-color: var(--accent); }
+.feedback-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.feedback-row .btn.on { background: var(--bg4); color: var(--text); }
+
+/* review votes + spoilers */
+.vote-btn { margin-left: auto; background: none; border: 1px solid var(--line); border-radius: 999px; color: var(--subtle);
+  font-size: 12px; padding: 2px 9px; cursor: pointer; }
+.vote-btn.voted { color: var(--accent); border-color: var(--accent); }
+.review-text.spoiler .spoiler-body { filter: blur(5px); user-select: none; }
+.review-text.spoiler { cursor: pointer; position: relative; }
+.spoiler-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: var(--subtle); z-index: 2; }
+.review-text:not(.spoiler) .spoiler-label { display: none; }
+.spoiler-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--subtle); margin: 2px 0 10px; }
+
+/* reading-goal ring (conic gradient) */
+.goal-card { display: flex; gap: 20px; align-items: center; background: var(--bg2); border: 1px solid var(--line);
+  border-radius: 14px; padding: 18px 20px; margin: 4px 0 18px; flex-wrap: wrap; }
+.goal-card.mini { margin: 0; flex: 1 1 260px; }
+.goal-ring { --pct: 0; width: 104px; height: 104px; border-radius: 50%; flex: none; display: grid; place-items: center; text-align: center;
+  background: radial-gradient(closest-side, var(--bg2) 79%, transparent 80% 100%),
+    conic-gradient(var(--accent) calc(var(--pct) * 1%), var(--bg4) 0); }
+.goal-num { font-size: 26px; font-weight: 800; line-height: 1; } .goal-of { font-size: 15px; color: var(--subtle); }
+.goal-lbl { font-size: 11px; color: var(--subtle); text-transform: uppercase; letter-spacing: .04em; }
+.goal-set h3, .mood-card h3 { margin: 0 0 4px; }
+
+/* format split bar (insights) */
+.fmt-split-bar { display: flex; height: 14px; border-radius: 999px; overflow: hidden; background: var(--bg3); margin: 8px 0; }
+.seg-audio { background: var(--audio); } .seg-ebook { background: var(--ebook); }
+.fmt-split-legend { display: flex; gap: 20px; font-size: 14px; color: var(--subtle); }
+.fmt-split-legend .fmt-ic { vertical-align: -0.13em; }
+
+/* activity heatmap */
+.heatmap-wrap { overflow-x: auto; padding-bottom: 6px; }
+.heatmap { display: flex; gap: 3px; min-width: max-content; }
+.hm-week { display: flex; flex-direction: column; gap: 3px; }
+.hm-cell { width: 12px; height: 12px; border-radius: 3px; background: var(--bg3); }
+.hm-cell[data-lvl="1"] { background: color-mix(in srgb, var(--accent) 35%, var(--bg3)); }
+.hm-cell[data-lvl="2"] { background: color-mix(in srgb, var(--accent) 60%, var(--bg3)); }
+.hm-cell[data-lvl="3"] { background: color-mix(in srgb, var(--accent) 80%, var(--bg3)); }
+.hm-cell[data-lvl="4"] { background: var(--accent); }
+.hm-future { visibility: hidden; }
+.hm-key { display: flex; align-items: center; gap: 4px; margin-top: 8px; font-size: 12px; }
+.hm-key .hm-cell { width: 11px; height: 11px; }
+.insights-twocol { display: flex; gap: 16px; flex-wrap: wrap; margin: 4px 0 18px; }
+.mood-card { flex: 1 1 260px; background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+.mood-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* vibe picker */
+.vibe-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.vibe-chip { background: var(--bg3); border: 1px solid var(--line); color: var(--text); border-radius: 999px;
+  padding: 7px 15px; font-size: 14px; cursor: pointer; text-transform: capitalize; transition: all .15s; }
+.vibe-chip.on { background: var(--accent); color: #1a0f02; border-color: var(--accent); }
+.series-getall { margin-top: 10px; }
+.follow-btn.on { background: var(--accent); color: #1a0f02; border-color: var(--accent); }
+
+/* series completion progress bar (Up Next) */
+.series-progress { height: 6px; border-radius: 999px; background: var(--bg3); overflow: hidden; margin: 7px 0; max-width: 320px; }
+.series-progress > span { display: block; height: 100%; background: var(--accent); }
+
+/* range input */
+input[type=range] { accent-color: var(--accent); }

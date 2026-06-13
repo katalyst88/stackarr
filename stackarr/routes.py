@@ -102,11 +102,11 @@ def suggestions_page():
     lane_titles = {"series": "Series to finish", "author": "More from authors you love",
                    "enjoyed": "Readers also enjoyed", "discover_author": "New authors to discover",
                    "narrator": "Narrators you love", "genre": "More in your favourite genres",
-                   "hidden": "Hidden gems", "awards": "Award winners",
+                   "mood": "Matches your mood", "hidden": "Off the beaten path", "awards": "Award winners",
                    "short": "Short listens", "epic": "Epic listens",
                    "upcoming": "New & upcoming", "importlist": "From your reading list",
                    "discover": "Popular picks", "foryou": "For you"}
-    lane_order = ["series", "enjoyed", "discover_author", "author", "narrator", "genre",
+    lane_order = ["series", "enjoyed", "mood", "discover_author", "author", "narrator", "genre",
                   "hidden", "awards", "short", "epic", "upcoming", "importlist", "foryou", "discover"]
     lanes = {k: lanes[k] for k in lane_order if k in lanes}
     # authors to feature as browse cards — only SUGGESTED authors (new discoveries /
@@ -135,11 +135,15 @@ def suggestions_page():
             "SELECT 1 FROM signals WHERE user_id=? AND kind='onboard_dismissed'", (u["id"],)).fetchone())
     # quick-rate onboarding: only when taste is thin and not dismissed
     onboard_books = [] if (rated_count >= ONBOARD_THRESHOLD or onboard_off) else _onboarding_books(u)
+    with db.conn() as c:
+        vibes_done = bool(c.execute("SELECT 1 FROM signals WHERE user_id=? AND kind='vibes_done'", (u["id"],)).fetchone())
+    show_vibes = not vibes_done and rated_count < ONBOARD_THRESHOLD
     return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles,
                            genres=discover.DEFAULT_GENRES, rec_authors=rec_authors,
                            abs_base=absclient.abs_url(),
                            recently_added=recently_added, recent_requests=recent_requests,
-                           onboard_books=onboard_books, onboard_target=ONBOARD_THRESHOLD)
+                           onboard_books=onboard_books, onboard_target=ONBOARD_THRESHOLD,
+                           show_vibes=show_vibes, all_moods=tagging.ALL_MOODS)
 
 
 @bp.route("/lane/<lane>")
@@ -183,45 +187,104 @@ def requests_page():
     return render_template("requests.html", requests=rows, admin=admin, wanted=wanted)
 
 
+def _heatmap(dates: list[str]) -> dict:
+    """Build a GitHub-style heatmap: 53 weeks x 7 days ending today, each cell a
+    finish count. Returns {weeks: [[{date,count}]], total, max, months}."""
+    import datetime
+    from collections import Counter
+    counts = Counter(d for d in dates if d)
+    today = datetime.date.today()
+    start = today - datetime.timedelta(days=today.weekday() + 1 + 52 * 7)   # Sunday ~53wk ago
+    weeks, cur = [], start
+    mx = 0
+    while cur <= today:
+        week = []
+        for _ in range(7):
+            ds = cur.isoformat()
+            n = counts.get(ds, 0)
+            mx = max(mx, n)
+            week.append({"date": ds, "count": n, "future": cur > today})
+            cur += datetime.timedelta(days=1)
+        weeks.append(week)
+    return {"weeks": weeks, "total": sum(counts.values()), "max": mx}
+
+
 @bp.route("/insights")
 @auth.login_required
 def insights_page():
+    import datetime
     u = auth.current_user()
     hist = absclient.listening_history(u["abs_token"])
     stats = absclient.listening_stats(u["abs_token"])
+    # ebook reading history from connected ebook sources (joined to library)
+    from . import backends
+    ebook_hist = []
+    if formats.show("ebook"):
+        for be in backends.sources("ebook"):
+            try:
+                ebook_hist += be.reading_history(u)
+            except Exception:
+                pass
     with db.conn() as c:
-        lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author FROM library")}
-        ratings = [r["stars"] for r in c.execute("SELECT stars FROM ratings WHERE user_id=?", (u["id"],))]
-        req_total = c.execute("SELECT COUNT(*) n FROM requests WHERE user_id=?", (u["id"],)).fetchone()["n"]
+        lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,format FROM library")}
+        ratings = [dict(r) for r in c.execute("SELECT stars,asin,title,author,format FROM ratings WHERE user_id=?", (u["id"],))]
         req_avail = c.execute("SELECT COUNT(*) n FROM requests WHERE user_id=? AND status='available'", (u["id"],)).fetchone()["n"]
     authors, finished, in_prog = {}, 0, 0
+    by_format = {"audiobook": 0, "ebook": 0}
+    finish_dates = []
     for h in hist:
         if h["finished"]:
-            finished += 1
+            finished += 1; by_format["audiobook"] += 1
+            if h.get("last_update"):
+                finish_dates.append(datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat())
         elif h["progress"] > 0.02:
             in_prog += 1
         m = lib.get(h["item_id"])
         if m and m["author"]:
-            a = m["author"].split(",")[0].split(" - ")[0].strip()   # drop "- illustrator/translator" noise
+            a = m["author"].split(",")[0].split(" - ")[0].strip()
             if a:
                 authors[a] = authors.get(a, 0) + 1
+    for h in ebook_hist:
+        if h.get("finished"):
+            finished += 1; by_format["ebook"] += 1
+            if h.get("last_update"):
+                finish_dates.append(datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat())
+        elif (h.get("progress") or 0) > 0.02:
+            in_prog += 1
+    finish_dates += db.finished_dates(u["id"])      # read-shelf finishes
+    # mood profile from cached tags of rated books (bounded, no fetch)
+    from collections import Counter
+    moodc = Counter()
+    for r in ratings[:120]:
+        rk = db.rating_key(r["asin"], r["title"], r["author"])
+        for m in db.tags_for(rk).get("mood", []):
+            moodc[m] += 1
+    top_moods = moodc.most_common(6)
+    heat = _heatmap(finish_dates)
+    year = datetime.date.today().year
+    read_year = sum(1 for d in finish_dates if d.startswith(str(year)))
+    try:
+        goal = int(db.get_meta(f"goal_{u['id']}", "0") or 0)
+    except ValueError:
+        goal = 0
     hours = round(stats["total_seconds"] / 3600)
+    star_vals = [r["stars"] for r in ratings]
     facts = []
     if hours:
-        facts.append(("⏳", f"{hours:,} hours", "listened all-time" +
-                      (f" — about {round(hours/24):,} full days" if hours >= 48 else "")))
-    if stats["days_listened"]:
-        facts.append(("📅", f"{stats['days_listened']:,} days", "with listening activity"))
+        facts.append(("⏳", f"{hours:,} hours", "listened all-time" + (f" — about {round(hours/24):,} days" if hours >= 48 else "")))
     if top := (sorted(authors.items(), key=lambda x: x[1], reverse=True)[:1] or [None])[0]:
-        facts.append(("✍️", top[0], f"your most-listened author ({top[1]} books)"))
-    if ratings:
-        facts.append(("⭐", f"{round(sum(ratings)/len(ratings),1)} avg", f"across {len(ratings)} books you've rated"))
+        facts.append(("✍️", top[0], f"your most-read author ({top[1]} books)"))
+    if star_vals:
+        facts.append(("⭐", f"{round(sum(star_vals)/len(star_vals),1)} avg", f"across {len(star_vals)} rated books"))
+    if top_moods:
+        facts.append(("🎭", top_moods[0][0], "your most-read mood"))
     if req_avail:
-        facts.append(("📚", f"{req_avail}", "books added to your library via Stackarr"))
+        facts.append(("📚", f"{req_avail}", "books added via Stackarr"))
     top_authors = sorted(authors.items(), key=lambda x: x[1], reverse=True)[:10]
     return render_template("insights.html", total=len(hist), finished=finished, in_progress=in_prog,
-                           hours=hours, req_total=req_total, req_avail=req_avail,
-                           facts=facts, top_authors=top_authors)
+                           hours=hours, req_avail=req_avail, facts=facts, top_authors=top_authors,
+                           by_format=by_format, heat=heat, top_moods=top_moods,
+                           goal=goal, read_year=read_year, year=year)
 
 
 @bp.route("/history")
@@ -249,7 +312,7 @@ def history_page():
     def key(asin, title):
         return (asin or "").lower() or (title or "").strip().lower()
 
-    def add(asin, title, author, cover, when):
+    def add(asin, title, author, cover, when, fmt="audiobook"):
         k = key(asin, title)
         if not k or k in seen:
             return
@@ -258,7 +321,7 @@ def history_page():
         if rk in hidden:
             return
         books.append({"asin": asin or "", "rkey": rk, "title": title or "Untitled",
-                      "author": author or "", "cover": cover,
+                      "author": author or "", "cover": cover, "format": fmt,
                       "stars": (rated.get(rk) or {}).get("stars", 0), "when": when})
 
     # 1) finished in Audiobookshelf (the real listening history, with covers)
@@ -267,7 +330,23 @@ def history_page():
             continue
         m = lib.get(h["item_id"]) or {}
         add((m.get("asin") or "").strip(), m.get("title", ""), m.get("author", ""),
-            url_for("main.cover", item_id=h["item_id"]), h["last_update"])
+            url_for("main.cover", item_id=h["item_id"]), h["last_update"], "audiobook")
+    # 1b) finished ebooks from connected ebook sources (Kavita/Calibre-Web)
+    if formats.show("ebook"):
+        from . import backends
+        with db.conn() as c:
+            elib = {r["item_id"]: dict(r) for r in
+                    c.execute("SELECT item_id,title,author FROM library WHERE format='ebook'")}
+        for be in backends.sources("ebook"):
+            try:
+                for h in be.reading_history(u):
+                    if not h.get("finished"):
+                        continue
+                    m = elib.get(h["item_id"]) or {}
+                    if m.get("title"):
+                        add("", m["title"], m.get("author", ""), "", h.get("last_update", 0), "ebook")
+            except Exception:
+                pass
     # 2) books you've rated that aren't already listed (stored key is either a
     #    real ASIN or a "t-…" slug; only the former is a usable book ASIN)
     for stored, r in rated.items():
@@ -426,8 +505,26 @@ def browse_page():
     from . import discover
     genre = request.args.get("genre", "").strip()
     author = request.args.get("author", "").strip()
+    mood = request.args.get("mood", "").strip().lower()
+    # mood -> catalogue search terms (curated; deterministic, keyless)
+    MOOD_TERMS = {
+        "funny": "humorous comic novel", "dark": "grimdark dark fantasy",
+        "romantic": "romance novel", "tense": "psychological thriller",
+        "adventurous": "adventure novel", "reflective": "literary fiction",
+        "epic": "epic fantasy saga", "cozy": "cozy mystery", "emotional": "emotional literary fiction",
+        "whimsical": "whimsical fantasy", "mysterious": "mystery detective novel",
+        "bleak": "dystopian fiction", "intense": "war thriller",
+        "tender": "coming of age novel", "thought-provoking": "philosophical fiction",
+        "fast-paced": "fast-paced thriller", "slow-paced": "literary slow burn novel",
+    }
     if author:
         books, title, kind = audible.by_author(author, num=40), author, "author"
+    elif mood:
+        term = MOOD_TERMS.get(mood, mood)
+        src = ebookmeta.search(term, 40) if (formats.show("ebook") and not formats.show("audiobook")) else audible.search(term, num=40)
+        for b in src:
+            b.setdefault("asin", b.get("id", ""))
+        books, title, kind = src, mood, "mood"
     elif genre:
         books, title, kind = discover.genre_new([genre], num_per=40), genre, "genre"
     else:
@@ -477,6 +574,38 @@ def shelves_page():
     read_this_year = sum(1 for d in db.finished_dates(u["id"]) if d.startswith(str(year)))
     return render_template("shelves.html", shelves=shelves, counts=counts,
                            goal=goal, read_this_year=read_this_year, year=year)
+
+
+@bp.route("/api/adventurousness", methods=["POST"])
+@auth.login_required
+def api_adventurousness():
+    """Comfort (0) ↔ Discovery (100) dial — biases familiar vs new-author lanes."""
+    u = auth.current_user()
+    try:
+        n = max(0, min(100, int(request.get_json(force=True).get("value", 50))))
+    except (ValueError, TypeError):
+        n = 50
+    db.set_meta(f"adventurousness_{u['id']}", str(n))
+    return jsonify({"ok": True, "value": n})
+
+
+@bp.route("/api/vibes", methods=["POST"])
+@auth.login_required
+def api_vibes():
+    """Mood-aware cold start: the user picks a few vibes; we store them as
+    positive mood signals so even a brand-new account gets shaped picks."""
+    u = auth.current_user()
+    moods = request.get_json(force=True).get("moods") or []
+    with db.conn() as c:
+        for m in moods[:8]:
+            m = str(m).strip().lower()
+            if m:
+                c.execute("INSERT INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?) "
+                          "ON CONFLICT(user_id,kind,value) DO UPDATE SET weight=signals.weight+3",
+                          (u["id"], "mood", m, 3, "vibe pick"))
+        c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
+                  (u["id"], "vibes_done", "1", 0, "picked vibes"))
+    return jsonify({"ok": True})
 
 
 @bp.route("/api/goal", methods=["POST"])
@@ -616,6 +745,7 @@ def settings_page():
                            hide_rated_history=db.get_meta("hide_rated_history", "0") == "1",
                            format_mode=formats.mode(),
                            cross_format_taste=db.get_meta("cross_format_taste", "0") == "1",
+                           adventurousness=db.get_meta(f"adventurousness_{auth.current_user()['id']}", str(config.ADVENTUROUSNESS)),
                            log_level=config.LOG_LEVEL,
                            is_admin=auth.current_user()["role"] == "admin")
 
@@ -942,6 +1072,11 @@ def api_dnf():
     with db.conn() as c:
         c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why,format) VALUES (?,?,?,?,?,?)",
                   (u["id"], "asin", key, -2, f"dnf: {b.get('title', title)}", fmt))
+        # propagate to moods: a DNF nudges down the moods that book carries
+        for m in tagging.derive(b.get("categories") or []).get("mood", []):
+            c.execute("INSERT INTO signals (user_id,kind,value,weight,why,format) VALUES (?,?,?,?,?,?) "
+                      "ON CONFLICT(user_id,kind,value) DO UPDATE SET weight=signals.weight-0.5",
+                      (u["id"], "mood", m, -0.5, f"dnf mood: {b.get('title', title)}", fmt))
     return jsonify({"ok": True, "matched": b.get("title", title)})
 
 

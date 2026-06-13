@@ -13,7 +13,7 @@ your reading list, and a genre/popular fallback. Series-next is best-effort
 (ebook catalogues rarely expose structured series order)."""
 import logging
 
-from . import (backends, config, db, ebookmeta, importlists, recommend)
+from . import (backends, config, db, ebookmeta, importlists, recommend, taste)
 
 log = logging.getLogger("stackarr.recommend_ebook")
 
@@ -83,6 +83,8 @@ def run(user_id: int, max_new: int | None = None) -> int:
                 pos[k] = pos.get(k, 0) + (r["stars"] - 3) * 1.5
 
     target_lang = db.get_meta("language", config.TARGET_LANGUAGE)
+    mood_profile = taste.mood_signals(user_id)
+    adv = taste.adventurousness(user_id)
     cands: dict[str, dict] = {}
 
     def consider(b: dict, base: float, lane: str, reason: str):
@@ -103,6 +105,8 @@ def run(user_id: int, max_new: int | None = None) -> int:
         score = base + pos.get(("author", first_author), 0)
         if b.get("rating"):
             score += (b["rating"] - config.SUGGEST_RATING_FLOOR) * config.W_RATING
+        score += config.W_MOOD * taste.mood_overlap(b.get("categories"), mood_profile) * 0.15
+        score += config.W_SERENDIPITY * taste.serendipity(b, adv)
         b = {**b, "asin": bid, "narrator": ""}      # pipeline keys on asin
         cur = cands.get(bid)
         if cur:
@@ -117,6 +121,8 @@ def run(user_id: int, max_new: int | None = None) -> int:
         resolved = (ebookmeta.search(f"{title} {author}".strip(), num=1) or [None])[0]
         if resolved:
             author = author or resolved.get("author", "")
+            for m in taste.candidate_moods(resolved.get("categories")):
+                mood_profile[m.lower()] = mood_profile.get(m.lower(), 0.0) + 1.0
         if author:
             read_authors.add(author.split(",")[0].strip().lower())
 

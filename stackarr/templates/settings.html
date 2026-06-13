@@ -51,6 +51,12 @@
             {% for l in languages %}<option value="{{ l }}" {{ 'selected' if l == language }}>{{ l|capitalize }}</option>{% endfor %}
           </select></label>
         <p class="muted">Suggestions run on first login, then on this interval. Language filters which editions are suggested.</p>
+        <label class="row"><span>Adventurousness <span class="muted">— Comfort ↔ Discovery</span></span>
+          <input type="range" min="0" max="100" step="5" id="adv-slider" value="{{ adventurousness }}"
+                 oninput="document.getElementById('adv-val').textContent=this.value"
+                 onchange="Stackarr.setAdventurousness(this.value)"></label>
+        <p class="muted">At <b id="adv-val">{{ adventurousness }}</b>/100: lower leans into authors &amp; series you
+          already love; higher pushes new authors, hidden gems and off-the-beaten-path picks.</p>
         <button class="btn" onclick="Stackarr.saveCategory('suggest', this)">Save</button>
       </div>
       <div class="panel"><h3>Auto-add to Chaptarr</h3>

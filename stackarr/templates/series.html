@@ -20,6 +20,8 @@
       <div class="series-name">{{ s.name }}</div>
       <div class="series-meta">{{ s.owned }} book{{ 's' if s.owned != 1 }} in your library{% if s.highest is not none %}
         · you're up to #{{ seq(s.highest) }}{% endif %}</div>
+      {% if s.highest and s.highest > 1 %}{% set pct = ((s.owned / s.highest * 100) if s.highest else 0) %}
+      <div class="series-progress" title="{{ s.owned }} of the first {{ seq(s.highest) }}"><span style="width: {{ (pct if pct < 100 else 100)|round }}%"></span></div>{% endif %}
       <div class="series-books">
         {% for b in s.books %}<span class="series-chip" title="{{ b.title }}">{% if b.series_seq is not none %}#{{ seq(b.series_seq) }} {% endif %}{{ b.title }}</span>{% endfor %}
       </div>

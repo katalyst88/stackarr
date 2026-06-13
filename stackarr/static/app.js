@@ -289,6 +289,19 @@ const Stackarr = (() => {
       btn.textContent = r.following ? "✓ Following" : "＋ Follow";
       toast(r.following ? "Following — you're on the radar." : "Unfollowed.");
     },
+    async setAdventurousness(v) {
+      await api("/api/adventurousness", { method: "POST", body: JSON.stringify({ value: parseInt(v, 10) }) });
+      toast("Updated — your next refresh reflects it.");
+    },
+    async pickVibes(btn) {
+      const moods = [...document.querySelectorAll(".vibe-chip.on")].map(c => c.dataset.mood);
+      if (!moods.length) { toast("Pick a few vibes first."); return; }
+      await api("/api/vibes", { method: "POST", body: JSON.stringify({ moods }) });
+      document.getElementById("vibe-card")?.remove();
+      toast("Vibes saved — updating your picks…");
+      this.scan && this.scan();
+    },
+    toggleVibe(el) { el.classList.toggle("on"); },
     async saveGoal(btn) {
       const n = parseInt((document.getElementById("goal-input") || {}).value, 10) || 0;
       await api("/api/goal", { method: "POST", body: JSON.stringify({ goal: n }) });

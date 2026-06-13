@@ -95,7 +95,12 @@ W_AUTHOR_BACKLIST = float(os.environ.get("W_AUTHOR_BACKLIST", "6"))
 W_NARRATOR = float(os.environ.get("W_NARRATOR", "4"))
 W_RATING = float(os.environ.get("W_RATING", "3"))
 W_RECENCY = float(os.environ.get("W_RECENCY", "2"))
+W_MOOD = float(os.environ.get("W_MOOD", "5"))            # mood/pace overlap with your taste profile
+W_SERENDIPITY = float(os.environ.get("W_SERENDIPITY", "4"))  # well-rated but lesser-known bonus
 POPULARITY_DAMPEN = float(os.environ.get("POPULARITY_DAMPEN", "0.15"))   # 0=off, higher=more anti-bestseller
+# Comfort (0) <-> Discovery (100); 50 = balanced. Shifts weight between familiar
+# (author/series) and new-author/serendipity lanes. User-set in Settings.
+ADVENTUROUSNESS = int(os.environ.get("STACKARR_ADVENTUROUSNESS", "50"))
 
 # --- discover (genre-trending, deterministic) -------------------------------
 DISCOVER_ENABLED = _bool("STACKARR_DISCOVER", True)
