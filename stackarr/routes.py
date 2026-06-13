@@ -120,6 +120,20 @@ def insights_page():
                            top_authors=top_authors)
 
 
+@bp.route("/book/<asin>")
+@auth.login_required
+def book_page(asin):
+    from . import audnexus
+    b = audible.by_asin(asin) or {"asin": asin, "title": "Unknown", "author": ""}
+    ax = audnexus.book(asin) or {}
+    if ax.get("genres"):
+        b["genres"] = ax["genres"]
+    if ax.get("series") and not b.get("series"):
+        b["series"], b["sequence"] = ax["series"], ax.get("sequence")
+    b["state"] = _state_for(asin, b.get("title", ""), b.get("author", ""))
+    return render_template("book.html", b=b)
+
+
 @bp.route("/settings")
 @auth.login_required
 def settings_page():
@@ -183,6 +197,52 @@ def api_discover():
     for b in books:
         b["state"] = _state_for(b["asin"], b["title"], b["author"])
     return jsonify(books)
+
+
+@bp.route("/api/suggest")
+@auth.login_required
+def api_suggest():
+    """Typeahead for the top search box — titles/authors/series as you type."""
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify([])
+    return jsonify([{"asin": x["asin"], "title": x["title"], "author": x["author"],
+                     "series": x.get("series", ""), "cover": x["cover"]}
+                    for x in audible.search(q, num=7) if x.get("asin")])
+
+
+@bp.route("/api/ignore", methods=["POST"])
+@auth.login_required
+def api_ignore():
+    u = auth.current_user()
+    body = request.get_json(force=True)
+    asin = body.get("asin", "")
+    with db.conn() as c:
+        if asin:
+            c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
+                      (u["id"], "asin", asin, -3, f"ignored: {body.get('title','')}"))
+            c.execute("UPDATE suggestions SET status='rejected' WHERE user_id=? AND asin=? AND status='pending'",
+                      (u["id"], asin))
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/markread-book", methods=["POST"])
+@auth.login_required
+def api_markread_book():
+    """Mark-as-read by asin from the detail page: positive seed + drop from queue."""
+    u = auth.current_user()
+    body = request.get_json(force=True)
+    asin, title, author = body.get("asin", ""), body.get("title", ""), body.get("author", "")
+    with db.conn() as c:
+        if author:
+            c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
+                      (u["id"], "author", author.split(",")[0], 3, f"already read: {title}"))
+        if asin:
+            c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
+                      (u["id"], "asin", asin, -1, f"already read: {title}"))
+            c.execute("UPDATE suggestions SET status='rejected' WHERE user_id=? AND asin=? AND status='pending'",
+                      (u["id"], asin))
+    return jsonify({"ok": True, "matched": title})
 
 
 @bp.route("/api/search")

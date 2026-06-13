@@ -38,7 +38,8 @@
   <header class="topbar">
     <form class="search" action="{{ url_for('main.discover_page') }}" method="get" role="search">
       <svg viewBox="0 0 24 24"><path d="M15.5 14h-.8l-.3-.3a6.5 6.5 0 1 0-.7.7l.3.3v.8l5 5 1.5-1.5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
-      <input name="q" id="topsearch" type="search" placeholder="Search audiobooks to add…" value="{{ request.args.get('q','') }}">
+      <input name="q" id="topsearch" type="search" autocomplete="off" placeholder="Search audiobooks to add…" value="{{ request.args.get('q','') }}">
+      <div class="search-suggest" id="search-suggest"></div>
     </form>
     <div class="topbar-spacer"></div>
     <button class="icon-btn" onclick="Stackarr.toggleTheme()" title="Light / dark">◑</button>

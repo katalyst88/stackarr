@@ -2,58 +2,78 @@
 {% block content %}
 <div class="page-head">
   <h2 class="page-title">Suggestions <span class="subtle">curated based on your listening history</span></h2>
-  <div><button class="btn small" onclick="Stackarr.scan()">Scan history</button></div>
+  <div><button class="btn small" onclick="Stackarr.scan()">Update Suggestions</button></div>
 </div>
 
-<!-- bookshelf loader (first run + manual scan) -->
 <div id="shelf-loader" class="shelf-loader" hidden>
   <div class="shelf-scene">
     <div class="shelf-books">
       <span class="sb sb1"></span><span class="sb sb2"></span><span class="sb sb3"></span>
       <span class="sb sb4"></span><span class="sb sb5"></span><span class="sb sb6"></span><span class="sb sb7"></span>
     </div>
-    <div class="shelf-plank"></div>
-    <div class="shelf-hand">📖</div>
+    <div class="shelf-plank"></div><div class="shelf-hand">📖</div>
   </div>
   <p class="shelf-text">Pulling books off the shelf…</p>
   <p class="shelf-sub subtle">Reading your history and finding your next listen</p>
 </div>
 
-<div id="sugg-content" {% if not lanes %}hidden{% endif %}>
+<div id="sugg-content" {% if not lanes and not in_progress %}hidden{% endif %}>
   <div class="empty" id="empty-state" hidden><p>No new picks right now. As you finish more books, fresh suggestions
     appear — or add what you've already read on the <a href="{{ url_for('main.settings_page') }}">Settings</a> page.</p></div>
+
+  {% if in_progress %}
+  <section class="section">
+    <div class="section-head"><h3>Finish what you started</h3></div>
+    <div class="slider-wrap">
+      <button class="slider-arrow left" onclick="Stackarr.slide(this,-1)">‹</button>
+      <div class="slider">
+        {% for s in in_progress %}
+        <a class="media-card" href="{{ abs_base }}/item/{{ s.item_id }}" target="_blank" rel="noopener">
+          <div class="media-poster"><img src="{{ url_for('static', filename='icon.svg') }}" alt="">
+            <span class="corner-badge handed">{{ s.progress }}%</span>
+            <div class="media-overlay"><div class="ov-reason">Resume in Audiobookshelf</div></div>
+          </div>
+          <div class="media-foot"><div class="media-title">{{ s.title }}</div><div class="media-author">{{ s.author }}</div></div>
+        </a>
+        {% endfor %}
+      </div>
+      <button class="slider-arrow right" onclick="Stackarr.slide(this,1)">›</button>
+    </div>
+  </section>
+  {% endif %}
+
   {% for lane, items in lanes.items() %}
   <section class="section">
     <div class="section-head"><h3>{{ lane_titles.get(lane, lane) }}</h3></div>
     <div class="slider-wrap">
-    <button class="slider-arrow left" onclick="Stackarr.slide(this,-1)" aria-label="scroll left">‹</button>
-    <div class="slider">
-      {% for s in items %}
-      <div class="media-card" data-id="{{ s.id }}">
-        <div class="media-poster">
-          <img src="{{ s.cover or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
-          {% if s.available %}<span class="corner-badge available">Available</span>
-          {% elif lane in ('series','narrator') %}<span class="corner-badge {{ lane }}">{{ lane }}</span>{% endif %}
-          <div class="media-overlay">
-            <div class="ov-reason">{{ s.reason }}</div>
-            <div class="ov-actions">
-              {% if s.available %}<button class="btn" disabled>In library</button>
-              {% else %}<button class="btn" onclick="Stackarr.decide({{ s.id }}, 'approve', this)">Approve</button>{% endif %}
-              <button class="btn ghost" onclick="Stackarr.decide({{ s.id }}, 'reject', this)">Ignore</button>
+      <button class="slider-arrow left" onclick="Stackarr.slide(this,-1)">‹</button>
+      <div class="slider">
+        {% for s in items %}
+        <div class="media-card" data-id="{{ s.id }}">
+          <a class="media-poster" href="{{ url_for('main.book_page', asin=s.asin) }}">
+            <img src="{{ s.cover or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
+            {% if s.available %}<span class="corner-badge available">Available</span>
+            {% elif lane == 'upcoming' %}<span class="corner-badge handed">Coming {{ s.extra }}</span>
+            {% elif lane == 'series' %}<span class="corner-badge series">Series</span>{% endif %}
+            <div class="media-overlay">
+              <div class="ov-reason">{{ s.reason }}</div>
+              <div class="ov-actions">
+                {% if s.available %}<button class="btn" disabled>In library</button>
+                {% elif lane == 'upcoming' %}<button class="btn" disabled>Coming soon</button>
+                {% else %}<button class="btn" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'approve',this)">Approve</button>{% endif %}
+                <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'read',this)">Read it</button>
+                <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'reject',this)">Ignore</button>
+              </div>
             </div>
-          </div>
+          </a>
+          <div class="media-foot"><div class="media-title" title="{{ s.title }}">{{ s.title }}</div><div class="media-author">{{ s.author }}</div></div>
         </div>
-        <div class="media-foot">
-          <div class="media-title" title="{{ s.title }}">{{ s.title }}</div>
-          <div class="media-author">{{ s.author }}</div>
-        </div>
+        {% endfor %}
       </div>
-      {% endfor %}
-    </div>
-    <button class="slider-arrow right" onclick="Stackarr.slide(this,1)" aria-label="scroll right">›</button>
+      <button class="slider-arrow right" onclick="Stackarr.slide(this,1)">›</button>
     </div>
   </section>
   {% endfor %}
 </div>
 {% endblock %}
-{% block scripts %}<script>Stackarr.initSuggestions({{ 'true' if not lanes else 'false' }});</script>{% endblock %}
+{% block scripts %}<script>Stackarr.initSuggestions({{ 'true' if not lanes and not in_progress else 'false' }});</script>{% endblock %}

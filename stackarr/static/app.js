@@ -78,7 +78,29 @@ const Stackarr = (() => {
   };
 
   return {
-    boot() { applyTheme(); document.body.classList.add("loaded"); },
+    boot() { applyTheme(); document.body.classList.add("loaded"); this.initSearchSuggest(); },
+    initSearchSuggest() {
+      const inp = document.getElementById("topsearch"), box = document.getElementById("search-suggest");
+      if (!inp || !box) return;
+      let t;
+      inp.addEventListener("input", () => {
+        clearTimeout(t);
+        const q = inp.value.trim();
+        if (q.length < 2) { box.classList.remove("open"); return; }
+        t = setTimeout(async () => {
+          const rs = await api("/api/suggest?q=" + encodeURIComponent(q));
+          if (!rs) return;
+          box.innerHTML = rs.map(b => `<a class="ss-item" href="${B()}/book/${encodeURIComponent(b.asin)}">
+            <img src="${esc(b.cover)}" alt=""><div style="min-width:0"><div class="ss-title">${esc(b.title)}</div>
+            <div class="ss-sub">${esc(b.author)}${b.series ? " · " + esc(b.series) : ""}</div></div></a>`).join("");
+          box.classList.toggle("open", rs.length > 0);
+        }, 250);
+      });
+      document.addEventListener("click", e => { if (!box.contains(e.target) && e.target !== inp) box.classList.remove("open"); });
+    },
+    async bookRequest(b, btn) { btn.disabled = true; btn.textContent = "Requesting…"; const r = await api("/api/request", { method: "POST", body: JSON.stringify(b) }); if (r) { btn.textContent = r.ok ? "Requested" : "Failed"; toast(r.detail || "Done."); } },
+    async bookMarkRead(b, btn) { btn.disabled = true; await api("/api/markread-book", { method: "POST", body: JSON.stringify(b) }); toast("Marked as read — your picks will improve."); },
+    async bookIgnore(b, btn) { btn.disabled = true; await api("/api/ignore", { method: "POST", body: JSON.stringify(b) }); toast("Ignored — you won't see this again."); },
     slide(btn, dir) {
       const s = btn.parentElement.querySelector(".slider");
       if (s) s.scrollBy({ left: dir * s.clientWidth * 0.82, behavior: "smooth" });
@@ -110,6 +132,7 @@ const Stackarr = (() => {
       card.style.transition = "opacity .3s, transform .3s"; card.style.opacity = .25; card.style.transform = "scale(.9)";
       toast(verdict === "approve"
         ? (res.ok ? "Approved — sent to Chaptarr." : "Approved, but: " + (res.detail || "handoff failed"))
+        : verdict === "read" ? "Marked as read — your picks will improve."
         : "Ignored — you won't see this again.");
     },
 

@@ -80,9 +80,14 @@ def run(user_id: int, max_new: int | None = None) -> int:
                 pos[k] = pos.get(k, 0) + (r["stars"] - 3) * 1.5   # +3 for 5★, -3 for 1★
         seed_lib = {row["item_id"]: dict(row) for row in
                     c.execute("SELECT item_id,title,author,asin FROM library")}
-        # authors the user has already listened to (drives "love" vs "discover")
-        read_authors = {(row["author"].split(",")[0].strip().lower())
-                        for row in c.execute("SELECT DISTINCT author FROM library WHERE author<>''")}
+
+    # authors *this user* has actually listened to (NOT the whole server library —
+    # that would pull in other people's / kids' libraries). Seeds only.
+    read_authors = set()
+    for s in seeds:
+        m = seed_lib.get(s["item_id"])
+        if m and m.get("author"):
+            read_authors.add(m["author"].split(",")[0].strip().lower())
 
     # cold-start: thin/no history -> deterministic popular/curated fallback
     if len(seeds) < 2:
