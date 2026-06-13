@@ -289,7 +289,7 @@ const Stackarr = (() => {
     async retry(id) { const r = await api(`/api/request/${id}/retry`, { method: "POST" }); if (r) location.reload(); },
     async removeRequest(id) { await api(`/api/request/${id}`, { method: "DELETE" }); document.querySelector(`.req-row[data-id="${id}"]`)?.remove(); },
 
-    async setSetting(obj) { await api("/api/settings", { method: "POST", body: JSON.stringify(obj) }); toast("Saved."); },
+    async setSetting(obj, reload) { await api("/api/settings", { method: "POST", body: JSON.stringify(obj) }); toast("Saved."); if (reload) setTimeout(() => location.reload(), 400); },
     _gather(catId) {
       const obj = {};
       document.querySelectorAll(`#cat-${catId} [data-setting]`).forEach(el => {

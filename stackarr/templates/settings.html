@@ -19,6 +19,20 @@
           <input type="checkbox" class="switch" id="ui-theme" onchange="Stackarr.toggleTheme()"></label>
         <p class="muted">Theme is remembered on this device.</p>
       </div>
+      {% if is_admin %}
+      <div class="panel"><h3>Library format</h3>
+        <p class="muted">Which kind of books this {{ app_name }} surfaces. Audiobooks read from
+          Audiobookshelf; eBooks read from Kavita / Calibre-Web (set those up under Connections).
+          Pick <b>Both</b> only if you collect both — single-format keeps the UI clean.</p>
+        <label class="row"><span>Show</span>
+          <select onchange="Stackarr.setSetting({formats: this.value}, true)">
+            <option value="audiobook" {{ 'selected' if format_mode=='audiobook' }}>Audiobooks only</option>
+            <option value="ebook" {{ 'selected' if format_mode=='ebook' }}>eBooks only</option>
+            <option value="both" {{ 'selected' if format_mode=='both' }}>Both audiobooks &amp; eBooks</option>
+          </select></label>
+        <p class="muted">Changing this reloads the page so format-specific menus update.</p>
+      </div>
+      {% endif %}
     </div>
 
     <div class="settings-cat" id="cat-suggest">

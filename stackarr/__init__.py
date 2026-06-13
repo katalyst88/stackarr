@@ -83,11 +83,15 @@ def create_app() -> Flask:
     from .routes import bp
     app.register_blueprint(bp)
 
+    from . import formats
+
     @app.context_processor
     def _inject():
-        return {"accent": config.ACCENT, "app_name": config.APP_NAME,
-                "url_base": config.URL_BASE, "user": auth.current_user(),
-                "version": config.VERSION, "stage": config.RELEASE_STAGE}
+        ctx = {"accent": config.ACCENT, "app_name": config.APP_NAME,
+               "url_base": config.URL_BASE, "user": auth.current_user(),
+               "version": config.VERSION, "stage": config.RELEASE_STAGE}
+        ctx.update(formats.flags())     # multi_format / show_audio / show_ebook / …
+        return ctx
 
     if not config._bool("STACKARR_NO_SCHED", False):
         scheduler.start()

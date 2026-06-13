@@ -6,7 +6,7 @@ import logging
 import threading
 import time
 
-from . import absclient, backends, config, db, notify, recommend
+from . import absclient, backends, config, db, formats, notify, recommend
 
 log = logging.getLogger("stackarr.scheduler")
 
@@ -15,9 +15,10 @@ def refresh_library():
     seen = set()
     with db.conn() as c:
         # aggregate the library snapshot across every connected source backend
-        # (ABS today; Kavita/Calibre-Web once connected). One source = identical
-        # to the old ABS-only behaviour, just now stamped with format/source.
-        for backend in backends.sources():
+        # of an *active* format (ABS today; Kavita/Calibre-Web once connected and
+        # the format toggle allows them). One source = identical to the old
+        # ABS-only behaviour, just now stamped with format/source.
+        for backend in backends.sources(formats.mode()):
             try:
                 items = backend.library_items()
             except Exception as e:

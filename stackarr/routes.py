@@ -7,7 +7,7 @@ from flask import (Blueprint, jsonify, redirect, render_template, request,
                    session, url_for)
 
 from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
-               discover, notify)
+               discover, formats, notify)
 
 log = logging.getLogger("stackarr.routes")
 bp = Blueprint("main", __name__)
@@ -455,6 +455,7 @@ def settings_page():
                            reading={"goodreads_rss": g("goodreads_rss", config.GOODREADS_RSS),
                                     "hardcover_token": g("hardcover_token", config.HARDCOVER_TOKEN)},
                            hide_rated_history=db.get_meta("hide_rated_history", "0") == "1",
+                           format_mode=formats.mode(),
                            log_level=config.LOG_LEVEL,
                            is_admin=auth.current_user()["role"] == "admin")
 
@@ -757,7 +758,7 @@ SETTING_KEYS = {
     "chaptarr_url", "chaptarr_api_key", "chaptarr_root_folder",
     "chaptarr_quality_profile_id", "chaptarr_metadata_profile_id",
     "goodreads_rss", "hardcover_token", "discord_webhook", "custom_webhook",
-    "auto_add_level",
+    "auto_add_level", "formats",
 }
 BOOL_KEYS = {"email_enabled", "discord_enabled", "hide_rated_history", "notify_avail_enabled"}
 

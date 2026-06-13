@@ -16,6 +16,9 @@ def _list(name: str) -> list[str]:
 
 # --- core -------------------------------------------------------------------
 PORT = int(os.environ.get("STACKARR_PORT", "8484"))
+# Which media formats this install surfaces: audiobook | ebook | both.
+# Default audiobook so existing deployments are unchanged until flipped.
+FORMATS = os.environ.get("STACKARR_FORMATS", "audiobook").strip().lower()
 DATA_DIR = os.environ.get("STACKARR_DATA", "/config")
 APP_NAME = os.environ.get("STACKARR_NAME", "Stackarr")
 ACCENT = os.environ.get("STACKARR_ACCENT", "#d98c3f")          # amber; Seer uses purple
