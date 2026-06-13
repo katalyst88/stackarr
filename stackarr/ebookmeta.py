@@ -16,12 +16,30 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
 import requests
 
 from . import config, db
 
 log = logging.getLogger("stackarr.ebookmeta")
+
+
+def _get(url, params=None, tries=2):
+    """GET with a single retry — keyless Google Books / Open Library are flaky
+    (rate-limit, cold cache), and a second attempt usually succeeds. Returns the
+    parsed JSON or None."""
+    for i in range(tries):
+        try:
+            r = requests.get(url, params=params or {}, headers=UA, timeout=20)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            if i + 1 >= tries:
+                log.debug("ebook fetch failed (%s): %s", url, e)
+                return None
+            time.sleep(0.6)
+    return None
 
 GB_API = "https://www.googleapis.com/books/v1/volumes"
 OL_SEARCH = "https://openlibrary.org/search.json"
@@ -54,13 +72,8 @@ def _gb_get(params: dict) -> list[dict]:
     key = config.GOOGLE_BOOKS_KEY
     if key:
         params["key"] = key
-    try:
-        r = requests.get(GB_API, params=params, headers=UA, timeout=20)
-        r.raise_for_status()
-        return r.json().get("items", []) or []
-    except Exception as e:
-        log.debug("google books query failed: %s", e)
-        return []
+    data = _get(GB_API, params)
+    return (data or {}).get("items", []) or []
 
 
 def _gb_normalize(item: dict) -> dict:
@@ -138,13 +151,8 @@ def _ol_normalize(doc: dict) -> dict:
 def _ol_get(params: dict) -> list[dict]:
     params.setdefault("fields", OL_FIELDS)
     params.setdefault("limit", 20)
-    try:
-        r = requests.get(OL_SEARCH, params=params, headers=UA, timeout=20)
-        r.raise_for_status()
-        return r.json().get("docs", []) or []
-    except Exception as e:
-        log.debug("open library query failed: %s", e)
-        return []
+    data = _get(OL_SEARCH, params)
+    return (data or {}).get("docs", []) or []
 
 
 def ol_search(query: str, num: int = 12) -> list[dict]:
@@ -159,12 +167,12 @@ def ol_subject(subject: str, num: int = 12) -> list[dict]:
     slug = re.sub(r"[^a-z0-9]+", "_", (subject or "").lower()).strip("_")
     if not slug:
         return []
+    data = _get(f"https://openlibrary.org/subjects/{slug}.json", {"limit": min(num, 40)})
+    if data is None:
+        return []
     try:
-        r = requests.get(f"https://openlibrary.org/subjects/{slug}.json",
-                         params={"limit": min(num, 40)}, headers=UA, timeout=20)
-        r.raise_for_status()
         out = []
-        for w in r.json().get("works", []) or []:
+        for w in data.get("works", []) or []:
             out.append(_ol_normalize({
                 "key": w.get("key", ""), "title": w.get("title", ""),
                 "author_name": [a.get("name", "") for a in w.get("authors") or []],
@@ -221,14 +229,8 @@ def by_id(book_id: str) -> dict | None:
     if not book_id:
         return None
     if book_id.startswith("gb:"):
-        try:
-            r = requests.get(f"{GB_API}/{book_id[3:]}", headers=UA,
-                             params={"country": "US"}, timeout=20)
-            r.raise_for_status()
-            return _gb_normalize(r.json())
-        except Exception as e:
-            log.debug("gb by_id failed for %s: %s", book_id, e)
-            return None
+        data = _get(f"{GB_API}/{book_id[3:]}", {"country": "US"})
+        return _gb_normalize(data) if data else None
     if book_id.startswith("ol:"):
         docs = _ol_get({"q": "key:" + book_id[3:], "limit": 1})
         return _ol_normalize(docs[0]) if docs else None
