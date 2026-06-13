@@ -60,6 +60,9 @@ AUDIBLE_DOMAIN = os.environ.get("AUDIBLE_DOMAIN", "com")           # com, co.uk,
 AUDIBLE_API = f"https://api.audible.{AUDIBLE_DOMAIN}/1.0"
 AUDNEXUS_API = os.environ.get("AUDNEXUS_API", "https://api.audnex.us")
 AUDNEXUS_REGION = os.environ.get("AUDNEXUS_REGION", AUDIBLE_DOMAIN if AUDIBLE_DOMAIN != "com" else "us")
+# Ebook catalogue metadata (no key needed; a Google Books key only raises rate
+# limits). Google Books + Open Library are both keyless.
+GOOGLE_BOOKS_KEY = os.environ.get("GOOGLE_BOOKS_KEY", "")
 
 # --- suggestion engine ------------------------------------------------------
 SUGGEST_ENABLED = _bool("STACKARR_SUGGEST", True)
