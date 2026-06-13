@@ -1,37 +1,45 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="page-head"><h2 class="page-title">Insights <span class="subtle">your listening, by the numbers</span></h2></div>
+<div class="page-head"><h2 class="page-title">Insights <span class="subtle">your listening, wrapped</span></h2></div>
 
-<div class="stat-row">
-  <div class="stat"><div class="stat-num">{{ hours }}</div><div class="stat-label">hours listened</div></div>
-  <div class="stat"><div class="stat-num">{{ finished }}</div><div class="stat-label">finished</div></div>
-  <div class="stat"><div class="stat-num">{{ in_progress }}</div><div class="stat-label">in progress</div></div>
-  <div class="stat"><div class="stat-num">{{ top_authors|length }}</div><div class="stat-label">authors</div></div>
-  <div class="stat"><div class="stat-num">{{ req_avail }}</div><div class="stat-label">added via Stackarr</div></div>
+<div class="insights-hero">
+  <div class="hero-num">{{ '{:,}'.format(hours) }}</div>
+  <div class="hero-label">hours listened{% if hours >= 48 %} · about {{ (hours/24)|round|int }} days of audio{% endif %}</div>
 </div>
 
-{% if facts %}
-<section class="section">
-  <div class="section-head"><h3>Fun facts</h3></div>
-  <div class="facts">
-    {% for icon, big, sub in facts %}
-    <div class="fact"><div class="fact-icon">{{ icon }}</div>
-      <div><div class="fact-big">{{ big }}</div><div class="fact-sub">{{ sub }}</div></div></div>
-    {% endfor %}
-  </div>
-</section>
-{% endif %}
+<div class="tiles">
+  <div class="tile t1"><div class="tile-num">{{ finished }}</div><div class="tile-label">books finished</div></div>
+  <div class="tile t2"><div class="tile-num">{{ in_progress }}</div><div class="tile-label">in progress</div></div>
+  <div class="tile t3"><div class="tile-num">{{ top_authors|length }}</div><div class="tile-label">authors explored</div></div>
+  <div class="tile t4"><div class="tile-num">{{ req_avail }}</div><div class="tile-label">added via Stackarr</div></div>
+</div>
 
-<section class="section"><div class="section-head"><h3>Your most-listened authors</h3></div>
-{% if not top_authors %}<div class="empty"><p>Listen to a few books and your stats appear here.</p></div>{% endif %}
-<div class="bar-list">
+{% if top_authors %}
+<section class="section"><div class="section-head"><h3>Your top authors</h3></div>
+<div class="top-list">
   {% for name, count in top_authors %}
-  <div class="bar-row">
-    <span class="bar-name">{{ name }}</span>
-    <span class="bar-track"><span class="bar-fill" style="width: {{ (count / top_authors[0][1] * 100)|round }}%"></span></span>
-    <span class="bar-count">{{ count }}</span>
+  <div class="top-row {{ 'top-1' if loop.index == 1 }}">
+    <span class="top-rank">{{ loop.index }}</span>
+    <div class="top-main">
+      <div class="top-name">{{ name }}</div>
+      <div class="top-bar"><span style="width: {{ (count / top_authors[0][1] * 100)|round }}%"></span></div>
+    </div>
+    <span class="top-count">{{ count }} book{{ 's' if count != 1 }}</span>
   </div>
   {% endfor %}
 </div></section>
+{% else %}
+<div class="empty"><p>Listen to a few books and your wrapped-style stats appear here.</p></div>
+{% endif %}
+
+{% if facts %}
+<section class="section"><div class="section-head"><h3>Did you know</h3></div>
+<div class="facts">
+  {% for icon, big, sub in facts %}
+  <div class="fact"><div class="fact-icon">{{ icon }}</div>
+    <div><div class="fact-big">{{ big }}</div><div class="fact-sub">{{ sub }}</div></div></div>
+  {% endfor %}
+</div></section>
+{% endif %}
 {% endblock %}
 {% block scripts %}<script>Stackarr.boot();</script>{% endblock %}

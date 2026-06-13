@@ -4,7 +4,7 @@ import os
 
 # Pre-public-release. The -pre suffix signals "not yet tested for public use";
 # bump to 1.0.0 only after real-world testing.
-VERSION = "0.1.22-pre"
+VERSION = "0.1.24-pre"
 RELEASE_STAGE = "pre-release · untested"
 
 
@@ -28,9 +28,13 @@ URL_BASE = "/" + os.environ.get("STACKARR_URL_BASE", "").strip("/") if os.enviro
 LOG_LEVEL = os.environ.get("STACKARR_LOG_LEVEL", "INFO").upper()
 LOG_FILE = os.path.join(DATA_DIR, "stackarr.log")
 
-# Dev/screenshot only: when set, auto-authenticates as this user id (no env = off).
-# Never set on a real deployment.
-DEV_UID = os.environ.get("STACKARR_DEV_UID", "")
+# --- security ---------------------------------------------------------------
+# Set when served over HTTPS (behind a reverse proxy) -> Secure cookies.
+SECURE_COOKIES = _bool("STACKARR_HTTPS", False)
+# Who may embed Stackarr in a frame (clickjacking control). Default own-origin
+# only; set to a space-separated list (e.g. your nzb360/dashboard origin) to allow
+# embedding, or "*" to allow anywhere (not recommended).
+FRAME_ANCESTORS = os.environ.get("STACKARR_FRAME_ANCESTORS", "'self'")
 
 # --- Audiobookshelf (auth + library + listening history) --------------------
 # Users sign in with their own ABS credentials (multi-user). The admin token

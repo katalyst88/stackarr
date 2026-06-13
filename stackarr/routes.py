@@ -13,13 +13,27 @@ bp = Blueprint("main", __name__)
 
 
 # ------------------------------------------------------------------ auth ---
+_LOGIN_FAILS = {}          # ip -> (count, first_ts); brute-force throttle
+_LOCK_AFTER = 5
+_LOCK_WINDOW = 900         # 15 min
+
+
 @bp.route("/login", methods=["GET", "POST"])
 def login():
+    import time
     error = ""
+    ip = request.remote_addr or "?"
     if request.method == "POST":
+        cnt, first = _LOGIN_FAILS.get(ip, (0, 0.0))
+        if cnt >= _LOCK_AFTER and (time.time() - first) < _LOCK_WINDOW:
+            return render_template("login.html", error="Too many attempts — try again in a few minutes."), 429
+        if (time.time() - first) >= _LOCK_WINDOW:
+            cnt, first = 0, time.time()
         u = auth.do_login(request.form.get("username", ""), request.form.get("password", ""))
         if u:
+            _LOGIN_FAILS.pop(ip, None)
             return redirect(request.args.get("next") or url_for("main.index"))
+        _LOGIN_FAILS[ip] = (cnt + 1, first or time.time())
         error = "Wrong Audiobookshelf username or password"
     return render_template("login.html", error=error)
 
@@ -168,6 +182,10 @@ def book_page(asin):
     if ax.get("series") and not b.get("series"):
         b["series"], b["sequence"] = ax["series"], ax.get("sequence")
     b["state"] = _state_for(asin, b.get("title", ""), b.get("author", ""))
+    with db.conn() as c:
+        req = c.execute("SELECT status, detail FROM requests WHERE asin=? AND asin<>'' ORDER BY id DESC LIMIT 1",
+                        (asin,)).fetchone()
+    b["req_detail"] = (req["detail"] if req else "") or ""
     return render_template("book.html", b=b)
 
 

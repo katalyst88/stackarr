@@ -27,9 +27,16 @@
       {% for g in b.genres %}<a class="chip subtle-chip" href="{{ url_for('main.browse_page', genre=g) }}">{{ g }}</a>{% endfor %}
     </div>{% endif %}
     {% if b.summary %}<p class="book-summary">{{ b.summary }}</p>{% endif %}
+    {% if b.state == 'failed' %}
+    <div class="error-banner">
+      <strong>Couldn't grab this one.</strong> {{ b.req_detail or 'The download backend rejected or could not find a release.' }}
+      {% if 'metadata backend' in b.req_detail %}<br><span class="subtle">Chaptarr's metadata service is down right now — try again once it's back.</span>{% endif %}
+    </div>
+    {% endif %}
     <div class="book-actions">
       {% if b.state == 'available' %}<button class="btn" disabled>In library</button>
       {% elif b.state in ('handed','queued') %}<button class="btn" disabled>Requested</button>
+      {% elif b.state == 'failed' %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>Retry</button>
       {% else %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>Request</button>{% endif %}
       <button class="btn ghost" onclick='Stackarr.bookMarkRead({{ b|tojson }}, this)'>Already read</button>
       <button class="btn ghost" onclick='Stackarr.bookIgnore({{ b|tojson }}, this)'>Ignore</button>

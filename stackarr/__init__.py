@@ -48,19 +48,37 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.secret_key = db.secret_key()
     app.permanent_session_lifetime = timedelta(days=90)
+    # cookie hardening: HttpOnly (default), SameSite=Lax (CSRF mitigation),
+    # Secure when served over HTTPS.
+    app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
+                      SESSION_COOKIE_SECURE=config.SECURE_COOKIES)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     if config.URL_BASE:
         app.wsgi_app = _PrefixMiddleware(app.wsgi_app, config.URL_BASE)
 
     # Allow embedding in nzb360 / dashboards (override Flask's default deny).
     @app.after_request
-    def _frame_friendly(resp):
-        resp.headers.pop("X-Frame-Options", None)
-        resp.headers["Content-Security-Policy"] = "frame-ancestors *"
+    def _security_headers(resp):
+        resp.headers.pop("X-Frame-Options", None)   # CSP frame-ancestors supersedes it
+        resp.headers["Content-Security-Policy"] = f"frame-ancestors {config.FRAME_ANCESTORS}"
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        resp.headers["Referrer-Policy"] = "same-origin"
         return resp
 
     from . import audible
     app.jinja_env.filters["hires"] = lambda u: audible._hi_res(u or "")
+
+    from flask import request, abort
+    from urllib.parse import urlparse
+
+    @app.before_request
+    def _csrf_guard():
+        # CSRF: cookie-authed state changes must come from the same origin.
+        # API-key clients (X-Api-Key) and safe methods are exempt.
+        if request.method in ("POST", "PUT", "DELETE", "PATCH") and not request.headers.get("X-Api-Key"):
+            origin = request.headers.get("Origin") or request.headers.get("Referer") or ""
+            if origin and urlparse(origin).netloc and urlparse(origin).netloc != request.host:
+                abort(403)
 
     from .routes import bp
     app.register_blueprint(bp)

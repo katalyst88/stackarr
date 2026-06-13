@@ -1,0 +1,12 @@
+.git
+.gitignore
+.github
+audit/
+config/
+.env
+*.md
+!README.md
+__pycache__/
+*.pyc
+*.db
+*.db-*
