@@ -32,6 +32,17 @@
         <p class="muted">Suggestions run on first login, then on this interval. Language filters which editions are suggested.</p>
         <button class="btn" onclick="Stackarr.saveCategory('suggest', this)">Save</button>
       </div>
+      <div class="panel"><h3>Auto-add to Chaptarr</h3>
+        <p class="muted">Let Stackarr hand high-confidence picks to Chaptarr automatically, with no manual approval.
+          Off by default. It skips books you already own, caps how many it adds per cycle, and pauses if Chaptarr can't add right now.</p>
+        <label class="row"><span>Auto-approval level</span>
+          <select onchange="Stackarr.setSetting({auto_add_level: this.value})">
+            <option value="off" {{ 'selected' if auto_add_level=='off' }}>Off — I approve everything myself</option>
+            <option value="conservative" {{ 'selected' if auto_add_level=='conservative' }}>Conservative — next book in series I'm reading (max 3/cycle)</option>
+            <option value="moderate" {{ 'selected' if auto_add_level=='moderate' }}>Moderate — series, authors I love, and my reading list (max 5/cycle)</option>
+            <option value="aggressive" {{ 'selected' if auto_add_level=='aggressive' }}>Aggressive — any strong pick (max 10/cycle)</option>
+          </select></label>
+      </div>
     </div>
 
     <div class="settings-cat" id="cat-reading">

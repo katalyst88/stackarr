@@ -183,24 +183,64 @@ const Stackarr = (() => {
       if (!res) return; btn.textContent = res.ok ? "Requested" : "Failed"; toast(res.detail || "Done.");
     },
     async rate(asin, stars, el) {
-      [...el.parentElement.children].forEach((s, i) => { s.classList.toggle("on", i < stars); s.classList.remove("preview"); });
+      const row = el.parentElement;   // .rate-stars / .media-stars
+      [...row.children].forEach((s, i) => { s.classList.toggle("on", i < stars); s.classList.remove("preview", "pop"); });
+      requestAnimationFrame(() => [...row.children].forEach((s, i) => { if (i < stars) s.classList.add("pop"); }));
       const item = el.closest(".rate-item");
       // Library books usually have no real ASIN, so send title/author too — the
       // recommender boosts on author, and api_rate keeps them on the rating.
+      // Prefer data-* on the stars row; fall back to the History row's text.
       const payload = { asin, stars };
-      if (item) {
-        const t = item.querySelector(".rate-title"), a = item.querySelector(".rate-author");
-        if (t && t.textContent.trim()) payload.title = t.textContent.trim();
-        if (a && a.textContent.trim()) payload.author = a.textContent.trim();
-      }
+      const title = row.dataset.title || (item && item.querySelector(".rate-title")?.textContent.trim());
+      const author = row.dataset.author || (item && item.querySelector(".rate-author")?.textContent.trim());
+      if (title) payload.title = title;
+      if (author) payload.author = author;
       await api("/api/rate", { method: "POST", body: JSON.stringify(payload) });
       toast(`Rated ${stars}★ — your picks just got sharper.`);
-      // On the History list, rating a book either removes it (if "hide after
-      // rating" is on) or sinks it to the bottom "done" pile.
-      if (!item) return;
-      const list = item.parentElement;
-      if (list.dataset.hideRated === "1") this._removeRated(item);
-      else this._sinkRated(item);
+      // History list: rate → remove (if "hide after rating" on) or sink to bottom.
+      if (item) {
+        const list = item.parentElement;
+        if (list.dataset.hideRated === "1") this._removeRated(item);
+        else this._sinkRated(item);
+      }
+      // Onboarding card: tick it off and bump the counter.
+      const onb = el.closest(".onboard-item");
+      if (onb) this._onboardRated(onb);
+    },
+    _onboardRated(onb) {
+      if (onb.dataset.done === "1") return;
+      onb.dataset.done = "1";
+      onb.classList.add("done");
+      const cnt = document.getElementById("onboard-count");
+      if (cnt) cnt.textContent = String((parseInt(cnt.textContent, 10) || 0) + 1);
+    },
+    async undoSignal(sid, btn) {
+      const row = btn.closest(".tune-row");
+      if (row) { row.style.transition = "opacity .25s, transform .25s"; row.style.opacity = 0; row.style.transform = "translateX(-8px)"; }
+      await api(`/api/signal/${sid}/delete`, { method: "POST" });
+      toast("Done — your picks will update.");
+      setTimeout(() => row && row.remove(), 260);
+    },
+    async clearRating(key, btn) {
+      const row = btn.closest(".tune-row");
+      if (row) { row.style.transition = "opacity .25s, transform .25s"; row.style.opacity = 0; row.style.transform = "translateX(-8px)"; }
+      await api("/api/rating/delete", { method: "POST", body: JSON.stringify({ key }) });
+      toast("Rating cleared.");
+      setTimeout(() => row && row.remove(), 260);
+    },
+    async markDnf(btn) {
+      const t = document.getElementById("dnf-title"), a = document.getElementById("dnf-author");
+      const title = t.value.trim(); if (!title) return;
+      btn.disabled = true;
+      const r = await api("/api/dnf", { method: "POST", body: JSON.stringify({ title, author: a.value.trim() }) });
+      btn.disabled = false;
+      if (r && r.ok) { toast(`Noted “${r.matched}” as did-not-finish.`); t.value = ""; a.value = ""; }
+    },
+    async dismissOnboard(btn) {
+      const card = document.getElementById("onboard-card");
+      if (card) { card.style.transition = "opacity .3s"; card.style.opacity = 0; }
+      await api("/api/onboard/dismiss", { method: "POST" });
+      setTimeout(() => card && card.remove(), 320);
     },
     _retally(list) {
       const sub = document.querySelector(".page-title .subtle");

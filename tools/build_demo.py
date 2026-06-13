@@ -196,6 +196,8 @@ with app.test_request_context("/"):
     repl = {url_for("main.suggestions_page"): "index.html",
             url_for("main.insights_page"): "insights.html",
             url_for("main.history_page"): "history.html",
+            url_for("main.series_page"): "series.html",
+            url_for("main.taste_page"): "taste.html",
             url_for("main.requests_page"): "requests.html",
             url_for("main.settings_page"): "demo-info.html",
             url_for("main.discover_page"): "demo-info.html",
@@ -260,6 +262,37 @@ write("history.html", render("history.html", "/history", books=_read,
       rated_n=sum(1 for b in _read if b["stars"]))); pages += 1
 write("requests.html", render("browse.html", "/requests", kind="genre",
       title="Your requests", author=None, books=genre_books(all_genres[0]))); pages += 1
+
+# Up Next (series tracker) — group sample books by series
+_series_groups = {}
+for b in BOOKS:
+    if b.get("series"):
+        _series_groups.setdefault(b["series"], []).append(b)
+_series_cards = []
+for _i, (name, bks) in enumerate(sorted(_series_groups.items(), key=lambda kv: -len(kv[1]))):
+    if len(bks) < 2:
+        continue
+    books_c = [{"title": x["title"], "author": x["author"], "series": name,
+                "series_seq": j + 1, "asin": x["asin"]} for j, x in enumerate(bks)]
+    nxt = None
+    if _i % 2 == 0 and len(bks) >= 2:        # show a "next up" on some, caught-up on others
+        nb = bks[-1]
+        nxt = {"id": nb["_id"], "title": nb["title"], "author": nb["author"],
+               "asin": nb["asin"], "cover": nb["cover"], "reason": ""}
+    _series_cards.append({"name": name, "owned": len(bks), "highest": len(bks),
+                          "books": books_c, "next": nxt, "next_status": None})
+write("series.html", render("series.html", "/series", series=_series_cards,
+      have_next=sum(1 for c in _series_cards if c["next"]))); pages += 1
+
+# Taste — sample ratings + a few signals
+_taste_sig = lambda i, t: {"id": i, "label": t}
+write("taste.html", render("taste.html", "/taste",
+      ratings=[{"asin": b["asin"], "title": b["title"], "author": b["author"],
+                "stars": [5, 4, 5, 3, 4][k % 5]} for k, b in enumerate(BOOKS[:10])],
+      dnf=[_taste_sig(1, "A Slow Start"), _taste_sig(2, "Not For Me")],
+      passed=[_taste_sig(3, "Wrong Vibe")],
+      readseed=[_taste_sig(4, b["title"]) for b in BOOKS[10:13]],
+      removed=[_taste_sig(5, "An Old Favourite")])); pages += 1
 write("demo-info.html", render_info("/settings")); pages += 1
 for lane, cards in lanes.items():
     write(f"lane-{lane}.html", render("lane.html", f"/lane/{lane}",

@@ -184,7 +184,8 @@ const Stackarr = (() => {
     },
     async rate(asin, stars, el) {
       const row = el.parentElement;   // .rate-stars / .media-stars
-      [...row.children].forEach((s, i) => { s.classList.toggle("on", i < stars); s.classList.remove("preview"); });
+      [...row.children].forEach((s, i) => { s.classList.toggle("on", i < stars); s.classList.remove("preview", "pop"); });
+      requestAnimationFrame(() => [...row.children].forEach((s, i) => { if (i < stars) s.classList.add("pop"); }));
       const item = el.closest(".rate-item");
       // Library books usually have no real ASIN, so send title/author too — the
       // recommender boosts on author, and api_rate keeps them on the rating.

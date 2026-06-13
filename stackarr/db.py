@@ -80,6 +80,9 @@ CREATE TABLE IF NOT EXISTS library (
   title TEXT,
   author TEXT,
   asin TEXT,
+  series TEXT DEFAULT '',
+  series_seq REAL,
+  narrator TEXT DEFAULT '',
   first_seen TEXT DEFAULT (datetime('now','localtime')),
   last_seen TEXT,
   gone_at TEXT
@@ -118,7 +121,10 @@ def init():
     with conn() as c:
         c.executescript(SCHEMA)
         # lightweight migrations for existing DBs
-        for stmt in ("ALTER TABLE suggestions ADD COLUMN extra TEXT DEFAULT ''",):
+        for stmt in ("ALTER TABLE suggestions ADD COLUMN extra TEXT DEFAULT ''",
+                     "ALTER TABLE library ADD COLUMN series TEXT DEFAULT ''",
+                     "ALTER TABLE library ADD COLUMN series_seq REAL",
+                     "ALTER TABLE library ADD COLUMN narrator TEXT DEFAULT ''"):
             try:
                 c.execute(stmt)
             except sqlite3.OperationalError:

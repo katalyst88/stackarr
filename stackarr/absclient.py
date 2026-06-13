@@ -139,10 +139,35 @@ def recent_added(limit: int = 14) -> list[dict]:
     return uniq[:limit]
 
 
+def _parse_series(md: dict) -> tuple:
+    """Pull (series_name, sequence) from ABS metadata. ABS exposes either a
+    `series` list [{name, sequence}] or a `seriesName` string like
+    'The Stormlight Archive #3' (first series only — good enough for tracking)."""
+    srs = md.get("series")
+    if isinstance(srs, list) and srs:
+        s0 = srs[0] or {}
+        name, seq = (s0.get("name") or "").strip(), s0.get("sequence")
+        try:
+            seq = float(seq) if seq not in (None, "") else None
+        except (ValueError, TypeError):
+            seq = None
+        if name:
+            return name, seq
+    name = (md.get("seriesName") or "").split(",")[0].strip()   # "Name #3" or "Name #3, Other #1"
+    if not name:
+        return "", None
+    m = re.search(r"#\s*([\d.]+)\s*$", name)
+    seq = float(m.group(1)) if m else None
+    name = re.sub(r"\s*#\s*[\d.]+\s*$", "", name).strip()
+    return name, seq
+
+
 def item_meta(it: dict) -> dict:
     md = ((it.get("media") or {}).get("metadata") or {})
+    series, seq = _parse_series(md)
     return {"item_id": it.get("id", ""), "title": md.get("title") or "",
-            "author": md.get("authorName") or "", "asin": md.get("asin") or ""}
+            "author": md.get("authorName") or "", "asin": md.get("asin") or "",
+            "series": series, "series_seq": seq, "narrator": md.get("narratorName") or ""}
 
 
 def item_detail(item_id: str) -> dict:

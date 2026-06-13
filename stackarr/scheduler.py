@@ -22,12 +22,14 @@ def refresh_library():
                         continue
                     seen.add(m["item_id"])
                     c.execute(
-                        "INSERT INTO library (item_id,library_id,title,author,asin,last_seen) "
-                        "VALUES (?,?,?,?,?,datetime('now','localtime')) "
+                        "INSERT INTO library (item_id,library_id,title,author,asin,series,series_seq,narrator,last_seen) "
+                        "VALUES (?,?,?,?,?,?,?,?,datetime('now','localtime')) "
                         "ON CONFLICT(item_id) DO UPDATE SET title=excluded.title,"
-                        "author=excluded.author,asin=excluded.asin,"
+                        "author=excluded.author,asin=excluded.asin,series=excluded.series,"
+                        "series_seq=excluded.series_seq,narrator=excluded.narrator,"
                         "last_seen=excluded.last_seen,gone_at=NULL",
-                        (m["item_id"], lib["id"], m["title"], m["author"], m["asin"]))
+                        (m["item_id"], lib["id"], m["title"], m["author"], m["asin"],
+                         m.get("series", ""), m.get("series_seq"), m.get("narrator", "")))
             except Exception as e:
                 log.warning("library refresh failed for %s: %s", lib.get("name"), e)
 
@@ -105,11 +107,69 @@ def run_for_user(user_id: int, force: bool = False) -> int:
     return added
 
 
+# Auto-add tiers: lane allow-set (None = all lanes) and a per-cycle cap.
+AUTO_TIERS = {
+    "conservative": ({"series"}, 3),
+    "moderate": ({"series", "author", "importlist"}, 5),
+    "aggressive": (None, 10),
+}
+
+
+def auto_approve(user_id: int) -> int:
+    """Optionally hand high-confidence pending picks to Chaptarr automatically.
+    Off by default; tier decides which lanes qualify and the per-cycle cap.
+    Records a request + marks approved only on a successful handoff — on
+    failure (e.g. Chaptarr's metadata backend down) it leaves the suggestion
+    pending and stops, so nothing piles up during an outage."""
+    from . import chaptarr
+    tier = AUTO_TIERS.get(db.get_meta("auto_add_level", "off"))
+    if not tier or not chaptarr.configured():
+        return 0
+    lanes, cap = tier
+    from .routes import _owned          # deferred: avoid import cycle at load
+    with db.conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT * FROM suggestions WHERE user_id=? AND status='pending' ORDER BY score DESC",
+            (user_id,))]
+    added = 0
+    for r in rows:
+        if added >= cap:
+            break
+        if r["lane"] == "upcoming":               # never auto-add unreleased titles
+            continue
+        if lanes is not None and r["lane"] not in lanes:
+            continue
+        with db.conn() as c:
+            if _owned(c, r["asin"], r["title"], r["author"]):
+                c.execute("UPDATE suggestions SET status='approved' WHERE id=?", (r["id"],))
+                continue
+        res = chaptarr.add_and_search(r["title"], r.get("author", ""), r.get("asin", ""))
+        if not res.get("ok"):
+            log.info("auto-add paused: Chaptarr not adding right now (%s)", res.get("detail", ""))
+            break
+        with db.conn() as c:
+            c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source) "
+                      "VALUES (?,?,?,?,?,?,?,?,?)",
+                      (user_id, r.get("asin", ""), r["title"], r.get("author", ""),
+                       r.get("cover", ""), "handed", res.get("detail", ""), res.get("ref", ""), "auto"))
+            c.execute("UPDATE suggestions SET status='approved',decided_at=datetime('now','localtime') WHERE id=?",
+                      (r["id"],))
+        added += 1
+        log.info("auto-added [%s]: %s — %s", db.get_meta("auto_add_level", "off"), r["title"], r.get("author", ""))
+    if added:
+        log.info("auto-approve added %d pick(s) for user %s", added, user_id)
+    return added
+
+
 def suggestion_cycle():
     with db.conn() as c:
         users = [r["id"] for r in c.execute("SELECT id FROM users")]
     for uid in users:
         run_for_user(uid)
+        try:
+            auto_approve(uid)
+        except Exception as e:
+            log.warning("auto-approve failed for user %s: %s", uid, e)
 
 
 def _loop():

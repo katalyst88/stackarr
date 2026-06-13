@@ -37,14 +37,24 @@ book/audiobook manager) does the searching, grabbing and importing.
   suggestions from *their* history; admins can auto-approve.
 - **Approve / Ignore / Already-read** with learning (passes, DNFs, deletions, and
   optional 1–5★ ratings feed back in). "I've already read this" seeding too.
+- **Up Next** — a series tracker: every series you're collecting, how far you are,
+  and the next book with its state (in library / requested / ready to add).
+- **Taste** — see and undo everything that shapes your picks (ratings, did-not-finish,
+  passed, already-read seeds, removed books) in one place.
+- **Quick-rate onboarding** — when your ratings are thin, a home-page card lets you
+  rate books you've already heard to sharpen picks fast.
 - **Discover** gallery (endless scroll) + search-to-add typeahead.
 - **Insights** (Spotify-wrapped style): hours listened, top authors, fun facts.
 - **History & ratings** — a scannable list of every book you've finished, rated, or
   marked read (cover · title/author · a prominent 1–5★ control that sharpens future
   picks). Unrated float to the top; rated sink to the bottom. Remove any book from
   history (it stops seeding suggestions too), or hide rated books automatically.
-- **Notifications** — email digests (3 themes + live preview), Discord webhook, and
-  Apprise (100+ channels). All **off by default**.
+- **Auto-add to Chaptarr** *(optional, off by default)* — tiered auto-approval
+  (Conservative / Moderate / Aggressive) hands high-confidence picks to Chaptarr
+  with no manual tap; capped per cycle, skips owned books.
+- **Notifications** — alerts when a requested book lands in your library, plus
+  suggestion digests. Email (3 themes + live preview), Discord, Apprise (100+
+  channels), or a custom webhook. All **off by default**.
 - In-app **Settings** for service connections (Audiobookshelf, Chaptarr), SMTP,
   reading-list import (Goodreads/Hardcover), and a logs viewer — with Test buttons.
 - Installable **PWA** or **[Android APK](https://github.com/katalyst88/stackarr/releases/latest)**,

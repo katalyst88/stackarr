@@ -2,6 +2,32 @@
 
 All notable changes to Stackarr.
 
+## [1.4.0] - 2026-06-13
+
+### Added
+- **Up Next** (new nav item): a series tracker — every series you're collecting,
+  how far you are, and the next book with its state (in library / requested /
+  ready to add). Built from your library's series metadata (read straight from
+  Audiobookshelf) plus the engine's series picks.
+- **Taste** (new nav item): see and undo everything that shapes your picks —
+  ratings, **did-not-finish**, passed/ignored, already-read seeds, and removed
+  books — in one place. DNF is a new negative signal.
+- **Quick-rate onboarding**: when your ratings are sparse, the home page shows a
+  card to rate books you've already listened to, instantly sharpening picks.
+- **Availability notifications**: get told when a requested book lands in your
+  Audiobookshelf library. Off by default; fans out across email / Discord /
+  Apprise / a new **custom webhook** channel.
+- **Auto-add to Chaptarr** (Settings → Suggestions): optional tiered
+  auto-approval — Off (default) / Conservative (next-in-series) / Moderate
+  (series + loved authors + reading list) / Aggressive (any strong pick), each
+  capped per cycle. Skips owned books and pauses if Chaptarr can't add.
+- Library now stores **series, sequence, and narrator** (from Audiobookshelf).
+
+### Changed
+- A round of **animation polish**: staggered list/card entrances, hover lift on
+  series cards, a star "pop" on rating, nav micro-interactions — all suppressed
+  under `prefers-reduced-motion`.
+
 ## [1.3.0] - 2026-06-13
 
 ### Changed

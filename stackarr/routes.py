@@ -290,6 +290,58 @@ def history_page():
     return render_template("history.html", books=books, rated_n=rated_n, hide_rated=hide_rated)
 
 
+@bp.route("/series")
+@auth.login_required
+def series_page():
+    """Up Next: series you're collecting, how far you are, and the next book
+    (with its state) — built from your library + the engine's series picks."""
+    u = auth.current_user()
+    with db.conn() as c:
+        libr = [dict(r) for r in c.execute(
+            "SELECT title,author,series,series_seq,asin FROM library "
+            "WHERE gone_at IS NULL AND series<>'' ORDER BY series, series_seq")]
+        sugg = [dict(r) for r in c.execute(
+            "SELECT id,title,author,series,asin,cover,reason FROM suggestions "
+            "WHERE user_id=? AND lane='series' AND status='pending' ORDER BY score DESC", (u["id"],))]
+        reqs = [dict(r) for r in c.execute(
+            "SELECT title,status FROM requests WHERE user_id=?", (u["id"],))]
+
+    def norm(s):
+        return (s or "").strip().lower()
+
+    next_by_series = {}
+    for s in sugg:
+        next_by_series.setdefault(norm(s["series"]), s)   # highest-scored next book per series
+
+    def req_status(title):
+        nt = norm(title)
+        for rq in reqs:
+            rt = norm(rq["title"])
+            if rt and nt and (rt[:30] in nt or nt[:30] in rt):
+                return rq["status"]
+        return None
+
+    groups = {}
+    for b in libr:
+        groups.setdefault(b["series"], []).append(b)
+
+    cards = []
+    for name, books in groups.items():
+        books.sort(key=lambda b: b["series_seq"] if b["series_seq"] is not None else 0)
+        seqs = [b["series_seq"] for b in books if b["series_seq"] is not None]
+        nxt = next_by_series.get(norm(name))
+        cards.append({"name": name, "owned": len(books),
+                      "highest": max(seqs) if seqs else None, "books": books,
+                      "next": nxt, "next_status": req_status(nxt["title"]) if nxt else None})
+    # "Up Next" is for series you're actually collecting — 2+ books, or one with
+    # a next pick queued. Drops single-book noise and mislabelled one-offs.
+    cards = [x for x in cards if x["owned"] >= 2 or x["next"]]
+    # most-invested series first; then alphabetical
+    cards.sort(key=lambda x: (-x["owned"], x["name"].lower()))
+    have_next = sum(1 for c in cards if c["next"])
+    return render_template("series.html", series=cards, have_next=have_next)
+
+
 @bp.route("/taste")
 @auth.login_required
 def taste_page():
@@ -388,6 +440,7 @@ def settings_page():
                            notify_avail_enabled=db.get_meta("notify_avail_enabled", "0") == "1",
                            custom_webhook=db.setting("custom_webhook", ""),
                            themes=list(notify.THEMES),
+                           auto_add_level=db.get_meta("auto_add_level", "off"),
                            interval_hours=db.get_meta("suggest_interval_hours", str(config.SUGGEST_INTERVAL_HOURS)),
                            language=db.get_meta("language", config.TARGET_LANGUAGE),
                            languages=["english","german","spanish","french","italian","dutch","portuguese","japanese","any"],
@@ -704,6 +757,7 @@ SETTING_KEYS = {
     "chaptarr_url", "chaptarr_api_key", "chaptarr_root_folder",
     "chaptarr_quality_profile_id", "chaptarr_metadata_profile_id",
     "goodreads_rss", "hardcover_token", "discord_webhook", "custom_webhook",
+    "auto_add_level",
 }
 BOOL_KEYS = {"email_enabled", "discord_enabled", "hide_rated_history", "notify_avail_enabled"}
 

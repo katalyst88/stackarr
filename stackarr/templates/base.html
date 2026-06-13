@@ -19,6 +19,8 @@
     <button class="nav-collapse" onclick="Stackarr.toggleNav()" title="Collapse menu" aria-label="Collapse menu">«</button></div>
   <a href="{{ url_for('main.suggestions_page') }}" class="navlink {{ 'active' if request.path.endswith('/suggestions') }}">
     <svg viewBox="0 0 24 24"><path d="M12 2 3 7v10l9 5 9-5V7zm0 2.2 6.5 3.6L12 11.4 5.5 7.8zM5 9.3l6 3.3v6.8l-6-3.3zm14 0v6.8l-6 3.3v-6.8z"/></svg><span>Suggestions</span></a>
+  <a href="{{ url_for('main.series_page') }}" class="navlink {{ 'active' if request.path.endswith('/series') }}">
+    <svg viewBox="0 0 24 24"><path d="M4 4h4v16H4zm6 0h4v16h-4zm7 0 3.8 1 .2 15-4-1z"/></svg><span>Up Next</span></a>
   <a href="{{ url_for('main.requests_page') }}" class="navlink {{ 'active' if request.path.endswith('/requests') }}">
     <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm-1 13-3-2-3 2V4h6z"/></svg><span>Requests</span></a>
   <a href="{{ url_for('main.history_page') }}" class="navlink {{ 'active' if request.path.endswith('/history') }}">
