@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 *.db
 *.db-*
+
+# screenshot/dev audit artifacts
+audit/
