@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_fmt.html" import fmt_icon, fmt_label with context %}
 {% block content %}
 <button class="btn small ghost back-btn" onclick="history.back()">‹ Back</button>
 <div class="book-detail">
@@ -11,8 +12,8 @@
     <h1 class="book-title">{{ b.title }}</h1>
     {% if b.subtitle %}<p class="book-subtitle">{{ b.subtitle }}</p>{% endif %}
     <p class="book-author">
-      {% for a in (b.author or '').split(',') if a.strip() %}<a class="author-link" href="{{ url_for('main.browse_page', author=a.strip()) }}">{{ a.strip() }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
-      {% if b.narrator %}<span class="subtle"> · narrated by {{ b.narrator }}</span>{% endif %}
+      {% for a in (b.author or '').split(',') if a.strip() %}<a class="author-link" href="{{ url_for('main.author_page', name=a.strip()) }}">{{ a.strip() }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+      {% if b.narrator %}<span class="subtle"> · narrated by </span>{% for nm in b.narrator.split(',') if nm.strip() %}<a class="author-link" href="{{ url_for('main.narrator_page', name=nm.strip()) }}">{{ nm.strip() }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
     </p>
     <div class="book-meta">
       {% if b.series %}<span class="chip">{{ b.series }}{% if b.sequence %} #{{ b.sequence }}{% endif %}</span>{% endif %}
@@ -27,7 +28,22 @@
     {% if b.genres %}<div class="book-meta">
       {% for g in b.genres %}<a class="chip subtle-chip" href="{{ url_for('main.browse_page', genre=g) }}">{{ g }}</a>{% endfor %}
     </div>{% endif %}
+    {% if tags and (tags.mood or tags.pace) %}<div class="book-meta">
+      {% for m in tags.pace %}<a class="chip mood-chip" href="{{ url_for('main.browse_page', mood=m) }}">{{ m }}</a>{% endfor %}
+      {% for m in tags.mood %}<a class="chip mood-chip" href="{{ url_for('main.browse_page', mood=m) }}">{{ m }}</a>{% endfor %}
+    </div>{% endif %}
+    {% if tags and tags.warning %}<details class="cw"><summary>⚠️ Content warnings ({{ tags.warning|length }})</summary>
+      <div class="cw-list">{% for w in tags.warning %}<span class="chip cw-chip">{{ w }}</span>{% endfor %}</div>
+      <p class="muted" style="font-size:12px">Auto-detected from catalogue subjects — may be incomplete.</p></details>{% endif %}
     {% if b.summary %}<p class="book-summary">{{ b.summary }}</p>{% endif %}
+
+    {# personal shelf — want / reading / read #}
+    <div class="shelf-bar" data-key="{{ rate_key }}" data-title="{{ b.title }}" data-author="{{ b.author }}" data-cover="{{ b.cover }}" data-format="{{ b.format or 'audiobook' }}">
+      <span class="muted">Shelf:</span>
+      {% for st, lbl in [('want','Want to read'),('reading','Reading'),('read','Read')] %}
+      <button class="btn small ghost shelf-btn {{ 'on' if shelf == st }}" data-state="{{ st }}" onclick="Stackarr.setShelf('{{ st }}', this)">{{ lbl }}</button>
+      {% endfor %}
+    </div>
     {% if b.state == 'failed' %}
     <div class="error-banner">
       <strong>Couldn't grab this one yet.</strong> {{ b.req_detail or "Chaptarr couldn't find or fetch a copy. You can retry below." }}
@@ -40,6 +56,13 @@
       {% else %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>Request</button>{% endif %}
       <button class="btn ghost" onclick='Stackarr.bookMarkRead({{ b|tojson }}, this)'>Already read</button>
       <button class="btn ghost" onclick='Stackarr.bookIgnore({{ b|tojson }}, this)'>Ignore</button>
+      {% if multi_format %}<button class="btn ghost" onclick='Stackarr.getOtherFormat({{ b|tojson }}, this)'
+        title="Also get this as {{ 'an eBook' if (b.format or 'audiobook')=='audiobook' else 'an audiobook' }}">
+        {{ fmt_icon('ebook' if (b.format or 'audiobook')=='audiobook' else 'audiobook') }} Get other format</button>{% endif %}
+    </div>
+    <div class="feedback-row">
+      <button class="btn small ghost" onclick='Stackarr.feedback({{ b|tojson }}, "more", this)'>👍 More like this</button>
+      <button class="btn small ghost" onclick='Stackarr.feedback({{ b|tojson }}, "less", this)'>👎 Less like this</button>
     </div>
   </div>
 </div>
@@ -60,6 +83,7 @@
     </div>
     <textarea id="my-review-text" class="review-input" rows="3" maxlength="1500"
       placeholder="Write a short review to share with everyone (optional)…">{{ my_review or '' }}</textarea>
+    <label class="spoiler-toggle"><input type="checkbox" id="my-review-spoiler"> Contains spoilers</label>
     <button class="btn small" onclick="Stackarr.submitReview(this)">Save review</button>
   </div>
   {% if reviews %}
@@ -68,8 +92,10 @@
     <div class="review-item">
       <div class="review-meta"><strong>{{ r.username }}</strong>
         <span class="review-stars">{% for n in [1,2,3,4,5] %}<span class="star {{ 'on' if n <= r.stars }}">★</span>{% endfor %}</span>
-        <span class="subtle">{{ (r.created_at or '')[:10] }}</span></div>
-      <p class="review-text">{{ r.review }}</p>
+        <span class="subtle">{{ (r.created_at or '')[:10] }}</span>
+        <button class="vote-btn" onclick="Stackarr.voteReview({{ r.id }}, this)" title="Helpful">👍 <span class="vcount">{{ r.votes }}</span></button></div>
+      {% if r.spoiler %}<p class="review-text spoiler" onclick="this.classList.remove('spoiler')"><span class="spoiler-label">Spoiler — tap to reveal</span><span class="spoiler-body">{{ r.review }}</span></p>
+      {% else %}<p class="review-text">{{ r.review }}</p>{% endif %}
     </div>
     {% endfor %}
   </div>

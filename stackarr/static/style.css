@@ -455,6 +455,17 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
 @media (max-width: 640px) {
   .series-card { flex-direction: column; align-items: stretch; gap: 12px; }
   .series-next { width: auto; max-width: none; }
+  /* page header: title on its own line, actions wrap below cleanly */
+  .page-head { align-items: flex-start; gap: 10px; }
+  .page-head-actions { width: 100%; justify-content: space-between; }
+  .page-title { font-size: 21px; }
+  .page-title .subtle { display: block; margin-left: 0; margin-top: 2px; }
+  /* requests: cover + info on top, badge + actions on a second wrapped row */
+  .req-row { flex-wrap: wrap; row-gap: 10px; padding: 11px 13px; }
+  .req-cover { width: 46px; height: 46px; }
+  .req-info { flex: 1 1 60%; }
+  .req-row .badge { order: 3; }
+  .req-actions { order: 4; margin-left: auto; }
 }
 
 @media (max-width: 560px) {
@@ -512,19 +523,28 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
 .warn-note { font-size: 13px; color: var(--subtle); background: color-mix(in srgb, #e0a83a 12%, var(--bg2));
   border: 1px solid color-mix(in srgb, #e0a83a 35%, var(--line)); border-radius: 9px; padding: 9px 12px; margin: 8px 0; }
 
-/* a small format badge that sits on a media card cover in 'both' mode */
-.fmt-badge { position: absolute; top: 8px; left: 8px; z-index: 3; font-size: 10.5px; font-weight: 800;
-  letter-spacing: .03em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px;
-  backdrop-filter: blur(6px); background: color-mix(in srgb, var(--bg) 55%, transparent); }
-.fmt-badge.audiobook { color: #fff; box-shadow: inset 0 0 0 1.5px var(--audio); }
-.fmt-badge.ebook { color: #fff; box-shadow: inset 0 0 0 1.5px var(--ebook); }
+/* format icon (headphones / book / stacked) used in pills, badges, tags */
+.fmt-ic { width: 1em; height: 1em; fill: currentColor; vertical-align: -0.13em; display: inline-block; }
 
-/* format filter pills (suggestions/discover headers, 'both' mode only) */
-.fmt-filter { display: inline-flex; gap: 6px; margin-left: 14px; vertical-align: middle; }
-.fmt-pill { font-size: 13px; font-weight: 600; padding: 5px 13px; border-radius: 999px; cursor: pointer;
-  border: 1px solid var(--line); background: var(--bg3); color: var(--subtle); transition: all .15s; }
-.fmt-pill.active { background: var(--accent); color: #1a0f02; border-color: var(--accent); }
-.fmt-pill:hover:not(.active) { color: var(--text); }
+/* a small format badge (icon only) on a media card cover in 'both' mode */
+.fmt-badge { position: absolute; top: 8px; left: 8px; z-index: 3; display: inline-flex;
+  align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 7px; font-size: 14px;
+  backdrop-filter: blur(6px); background: color-mix(in srgb, var(--bg) 60%, transparent); }
+.fmt-badge.audiobook { color: var(--audio); box-shadow: inset 0 0 0 1.5px var(--audio); }
+.fmt-badge.ebook { color: var(--ebook); box-shadow: inset 0 0 0 1.5px var(--ebook); }
+
+/* format filter pills — icon buttons (All / Audiobooks / eBooks), both mode */
+.page-head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fmt-filter { display: inline-flex; gap: 4px; background: var(--bg3); border: 1px solid var(--line);
+  border-radius: 999px; padding: 3px; }
+.fmt-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; height: 32px;
+  font-size: 17px; border: none; border-radius: 999px; cursor: pointer; background: transparent;
+  color: var(--subtle); transition: all .15s; }
+.fmt-pill.active { background: var(--accent); color: #1a0f02; }
+.fmt-pill:hover:not(.active) { color: var(--text); background: var(--bg4); }
+.seg { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.seg .btn.on, .btn.small.ghost.on { background: var(--accent); color: #1a0f02; border-color: var(--accent); }
+.req-fmt { color: var(--subtle); } .req-fmt .fmt-ic { width: .95em; height: .95em; }
 
 /* ---- shared ratings & reviews (Phase 6) ---- */
 .reviews { max-width: 820px; margin: 30px auto 10px; padding: 0 clamp(14px,3vw,24px); }

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_fmt.html" import fmt_badge with context %}
+{% macro shelfcard(b) %}
+{% set linkable = b.rkey and (b.rkey.startswith('B') or b.rkey.startswith('gb:') or b.rkey.startswith('ol:')) %}
+<a class="media-card" data-format="{{ b.format or 'audiobook' }}" href="{{ url_for('main.book_page', asin=b.rkey) if linkable else '#' }}">
+  <div class="media-poster"><img src="{{ (b.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}'">
+    {{ fmt_badge(b.format) }}</div>
+  <div class="media-foot"><div class="media-title" title="{{ b.title }}">{{ b.title }}</div><div class="media-author">{{ b.author }}</div></div>
+</a>
+{% endmacro %}
+{% block content %}
+<div class="page-head"><h2 class="page-title">My shelves
+  <span class="subtle">{{ counts.get('want',0) }} to read · {{ counts.get('reading',0) }} reading · {{ counts.get('read',0) }} read</span></h2>
+</div>
+
+<div class="goal-card">
+  <div class="goal-ring" style="--pct: {{ ((read_this_year / goal * 100) if goal else 0)|round(0,'floor')|int }}">
+    <div class="goal-num">{{ read_this_year }}{% if goal %}<span class="goal-of">/{{ goal }}</span>{% endif %}</div>
+    <div class="goal-lbl">read in {{ year }}</div>
+  </div>
+  <div class="goal-set">
+    <h3>{{ year }} reading goal</h3>
+    <p class="muted">Books you mark <b>Read</b> count toward your goal.</p>
+    <div class="inline-form">
+      <input id="goal-input" type="number" min="0" value="{{ goal or '' }}" placeholder="e.g. 24">
+      <button class="btn small" onclick="Stackarr.saveGoal(this)">Set goal</button>
+    </div>
+  </div>
+</div>
+
+{% for state, title, empty in [('reading','Currently reading','Mark a book Reading from its page.'),
+                                ('want','Want to read','Add books from their detail page or search.'),
+                                ('read','Read','Books you finish or mark Read land here.')] %}
+<section class="section">
+  <div class="section-head"><h3>{{ title }} <span class="subtle">{{ shelves[state]|length }}</span></h3></div>
+  {% if shelves[state] %}<div class="grid fmt-group">{% for b in shelves[state] %}{{ shelfcard(b) }}{% endfor %}</div>
+  {% else %}<p class="muted">{{ empty }}</p>{% endif %}
+</section>
+{% endfor %}
+{% endblock %}
+{% block scripts %}<script>Stackarr.initFormatFilter&&Stackarr.initFormatFilter();</script>{% endblock %}

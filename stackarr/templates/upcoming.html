@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% from "_fmt.html" import fmt_badge with context %}
+{% block content %}
+<div class="page-head"><h2 class="page-title">Upcoming &amp; new
+  <span class="subtle">fresh and not-yet-released books from authors you read</span></h2></div>
+{% if not rows %}
+<div class="empty"><p>Nothing on the radar yet. As you finish more books by authors who have new
+  releases coming, they'll appear here. Turn on the new-release radar in Settings → Notifications to get pinged too.</p></div>
+{% endif %}
+<div class="grid fmt-group">
+  {% for s in rows %}
+  <div class="media-card" data-id="{{ s.id }}" data-format="{{ s.format or 'audiobook' }}">
+    <a class="media-poster" href="{{ url_for('main.book_page', asin=s.asin) }}">
+      <img src="{{ (s.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}'">
+      {{ fmt_badge(s.format) }}
+      {% if s.extra and s.extra > today %}<span class="corner-badge handed">{{ s.extra }}</span>
+      {% else %}<span class="corner-badge available">Out now</span>{% endif %}
+      <div class="media-overlay"><div class="ov-reason">{{ s.reason }}</div>
+        <div class="ov-actions">
+          {% if s.extra and s.extra > today %}<button class="btn" disabled>Coming {{ s.extra }}</button>
+          {% else %}<button class="btn" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'approve',this)">Add book</button>{% endif %}
+          <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'reject',this)">Ignore</button>
+        </div></div>
+    </a>
+    <div class="media-foot"><div class="media-title" title="{{ s.title }}">{{ s.title }}</div><div class="media-author">{{ s.author }}</div></div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}<script>Stackarr.initFormatFilter&&Stackarr.initFormatFilter();</script>{% endblock %}

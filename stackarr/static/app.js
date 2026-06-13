@@ -242,11 +242,65 @@ const Stackarr = (() => {
       if (!stars) { toast("Pick a star rating first."); return; }
       const review = (document.getElementById("my-review-text")?.value || "").trim();
       if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+      const spoiler = !!(document.getElementById("my-review-spoiler") || {}).checked;
       await api("/api/rate", { method: "POST", body: JSON.stringify({
-        asin: sec.dataset.key, stars, review,
+        asin: sec.dataset.key, stars, review, spoiler,
         title: sec.dataset.title, author: sec.dataset.author, format: sec.dataset.format }) });
       if (btn) { btn.disabled = false; btn.textContent = "Save review"; }
       toast("Review saved — thanks for sharing.");
+    },
+    async setShelf(state, btn) {
+      const bar = btn.closest(".shelf-bar");
+      const on = btn.classList.contains("on");
+      const next = on ? "" : state;
+      bar.querySelectorAll(".shelf-btn").forEach(b => b.classList.toggle("on", b === btn && !on));
+      await api("/api/shelf", { method: "POST", body: JSON.stringify({
+        key: bar.dataset.key, state: next, title: bar.dataset.title,
+        author: bar.dataset.author, cover: bar.dataset.cover, format: bar.dataset.format }) });
+      toast(next ? `On your "${state}" shelf.` : "Removed from shelves.");
+    },
+    async getOtherFormat(book, btn) {
+      if (btn) { btn.disabled = true; }
+      const r = await api("/api/get-other-format", { method: "POST", body: JSON.stringify(book) });
+      toast(r.detail || (r.ok ? "Requested." : "Couldn't add."));
+      if (btn) { btn.disabled = false; }
+    },
+    async feedback(book, direction, btn) {
+      await api("/api/feedback", { method: "POST", body: JSON.stringify({
+        author: book.author, title: book.title, direction, format: book.format }) });
+      toast(direction === "more" ? "More like this — noted." : "Less like this — noted.");
+      if (btn) { btn.classList.add("on"); }
+    },
+    async voteReview(id, btn) {
+      const r = await api("/api/review/vote", { method: "POST", body: JSON.stringify({ rating_id: id }) });
+      const c = btn.querySelector(".vcount"); if (c) c.textContent = r.votes;
+      btn.classList.toggle("voted");
+    },
+    async checkLibraries(btn) {
+      if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
+      const r = await api("/api/requests/check", { method: "POST", body: "{}" });
+      toast(r.detail || "Checked.");
+      if (r.flipped) setTimeout(() => location.reload(), 600);
+      else if (btn) { btn.disabled = false; btn.textContent = "↻ Check libraries"; }
+    },
+    async follow(btn) {
+      const r = await api("/api/follow", { method: "POST", body: JSON.stringify({ author: btn.dataset.author }) });
+      btn.classList.toggle("on", r.following);
+      btn.textContent = r.following ? "✓ Following" : "＋ Follow";
+      toast(r.following ? "Following — you're on the radar." : "Unfollowed.");
+    },
+    async saveGoal(btn) {
+      const n = parseInt((document.getElementById("goal-input") || {}).value, 10) || 0;
+      await api("/api/goal", { method: "POST", body: JSON.stringify({ goal: n }) });
+      toast("Goal saved."); setTimeout(() => location.reload(), 400);
+    },
+    async surprise(fmt) {
+      const n = Math.floor(Date.now() / 60000);   // varies each minute
+      const q = new URLSearchParams({ n: String(n) });
+      if (fmt) q.set("format", fmt);
+      const r = await api("/api/surprise?" + q.toString());
+      if (r.ok && r.book && r.book.asin) location.href = (window.URL_BASE || "") + "/book/" + r.book.asin;
+      else toast("No pick right now — try Update Suggestions.");
     },
     _onboardRated(onb) {
       if (onb.dataset.done === "1") return;

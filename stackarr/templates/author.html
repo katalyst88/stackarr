@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<button class="btn small ghost back-btn" onclick="history.back()">‹ Back</button>
+<div class="page-head author-head">
+  <h2 class="page-title">{{ author }} <span class="subtle">{{ books|length }} books</span></h2>
+  <div class="page-head-actions">
+    <button class="btn small follow-btn {{ 'on' if following }}" data-author="{{ author }}"
+      onclick="Stackarr.follow(this)">{{ '✓ Following' if following else '＋ Follow' }}</button>
+    <button class="btn small ghost" onclick='Stackarr.bookRequest({"title": {{ author|tojson }}, "author": {{ author|tojson }}}, this)'>Get all books</button>
+  </div>
+</div>
+<p class="muted" style="margin-top:-8px">Following an author adds them to your new-release radar and nudges their books up your suggestions.</p>
+{% if not books %}<div class="empty"><p>No catalogue found for this author.</p></div>{% endif %}
+<div class="grid">
+  {% for b in books %}
+  <a class="media-card" href="{{ url_for('main.book_page', asin=b.asin) }}">
+    <div class="media-poster"><img src="{{ (b.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}'">
+      {% if b.state == 'available' %}<span class="corner-badge available">In library</span>
+      {% elif b.state in ('handed','queued') %}<span class="corner-badge handed">Requested</span>{% endif %}</div>
+    <div class="media-foot"><div class="media-title" title="{{ b.title }}">{{ b.title }}</div>
+      <div class="media-author">{% if b.series %}{{ b.series }}{% if b.sequence %} #{{ b.sequence|int if b.sequence == b.sequence|int else b.sequence }}{% endif %}{% elif b.release_date %}{{ b.release_date[:4] }}{% endif %}</div></div>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}<script>Stackarr.boot();</script>{% endblock %}

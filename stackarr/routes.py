@@ -7,7 +7,7 @@ from flask import (Blueprint, jsonify, redirect, render_template, request,
                    session, url_for)
 
 from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
-               discover, formats, notify)
+               discover, ebookmeta, formats, notify, tagging)
 
 log = logging.getLogger("stackarr.routes")
 bp = Blueprint("main", __name__)
@@ -410,9 +410,14 @@ def book_page(asin):
         my = c.execute("SELECT stars, review FROM ratings WHERE user_id=? AND asin=?",
                        (u["id"], key)).fetchone()
     b["req_detail"] = (req["detail"] if req else "") or ""
+    try:
+        tags = tagging.fetch_for(key, b.get("title", ""), b.get("author", ""), b.get("categories"))
+    except Exception:
+        tags = {}
     return render_template("book.html", b=b, rate_key=key,
                            community=db.community_rating(key), reviews=db.reviews_for(key),
-                           my_stars=(my["stars"] if my else 0), my_review=(my["review"] if my else ""))
+                           my_stars=(my["stars"] if my else 0), my_review=(my["review"] if my else ""),
+                           tags=tags, shelf=db.shelf_state(u["id"], key))
 
 
 @bp.route("/browse")
@@ -453,6 +458,109 @@ def api_series_add():
                   (u["id"], f"Full series: {name}", author,
                    "handed" if res["ok"] else "failed", res.get("detail", ""), "series"))
     return jsonify(res)
+
+
+@bp.route("/shelves")
+@auth.login_required
+def shelves_page():
+    """Your reading shelves: Want to read · Reading · Read."""
+    u = auth.current_user()
+    shelves = {s: db.shelf_list(u["id"], s) for s in ("reading", "want", "read")}
+    counts = db.shelf_counts(u["id"])
+    goal = 0
+    try:
+        goal = int(db.get_meta(f"goal_{u['id']}", "0") or 0)
+    except ValueError:
+        goal = 0
+    import datetime
+    year = datetime.date.today().year
+    read_this_year = sum(1 for d in db.finished_dates(u["id"]) if d.startswith(str(year)))
+    return render_template("shelves.html", shelves=shelves, counts=counts,
+                           goal=goal, read_this_year=read_this_year, year=year)
+
+
+@bp.route("/api/goal", methods=["POST"])
+@auth.login_required
+def api_goal():
+    u = auth.current_user()
+    try:
+        n = max(0, int(request.get_json(force=True).get("goal", 0)))
+    except (ValueError, TypeError):
+        n = 0
+    db.set_meta(f"goal_{u['id']}", str(n))
+    return jsonify({"ok": True, "goal": n})
+
+
+@bp.route("/upcoming")
+@auth.login_required
+def upcoming_page():
+    """New & upcoming books from authors you read — a browsable radar."""
+    u = auth.current_user()
+    with db.conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT * FROM suggestions WHERE user_id=? AND lane='upcoming' ORDER BY extra", (u["id"],))]
+        for r in rows:
+            r["available"] = _owned(c, r["asin"], r["title"], r["author"])
+    import datetime
+    today = str(datetime.date.today())
+    return render_template("upcoming.html", rows=rows, today=today)
+
+
+@bp.route("/author/<path:name>")
+@auth.login_required
+def author_page(name):
+    """An author hub: their catalogue, what you own, and a Follow toggle that
+    drives the new-release radar."""
+    name = name.strip()
+    books = audible.by_author(name, num=40)
+    if formats.show("ebook") and not formats.show("audiobook"):
+        books = ebookmeta.by_author(name, num=40)
+        for b in books:
+            b["asin"] = b.get("id", "")
+    seen, uniq = set(), []
+    for b in books:
+        k = (b.get("title") or "").lower()
+        if b.get("asin") and k not in seen:
+            seen.add(k)
+            b["state"] = _state_for(b["asin"], b["title"], b["author"])
+            uniq.append(b)
+    uniq.sort(key=lambda b: b.get("release_date") or "", reverse=True)
+    u = auth.current_user()
+    following = bool(db.get_meta(f"follow_{u['id']}_{name.lower()}"))
+    return render_template("author.html", author=name, books=uniq, following=following)
+
+
+@bp.route("/api/follow", methods=["POST"])
+@auth.login_required
+def api_follow():
+    u = auth.current_user()
+    b = request.get_json(force=True)
+    name = (b.get("author") or "").strip()
+    if not name:
+        return jsonify({"error": "author required"}), 400
+    key = f"follow_{u['id']}_{name.lower()}"
+    now = bool(db.get_meta(key))
+    db.set_meta(key, "" if now else "1")
+    # a follow is a positive author signal too (and seeds the radar)
+    if not now:
+        with db.conn() as c:
+            c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
+                      (u["id"], "author", name, 4, f"followed: {name}"))
+    return jsonify({"ok": True, "following": not now})
+
+
+@bp.route("/narrator/<path:name>")
+@auth.login_required
+def narrator_page(name):
+    """A narrator hub: audiobooks they narrate + what you own."""
+    name = name.strip()
+    seen, uniq = set(), []
+    for b in audible.search(name, num=40):
+        if name.lower() in (b.get("narrator") or "").lower() and b.get("asin") and b["asin"] not in seen:
+            seen.add(b["asin"])
+            b["state"] = _state_for(b["asin"], b["title"], b["author"])
+            uniq.append(b)
+    return render_template("narrator.html", narrator=name, books=uniq)
 
 
 @bp.route("/api/author/add", methods=["POST"])
@@ -526,6 +634,15 @@ def _owned(c, asin, title, author) -> bool:
     return bool(c.execute(
         "SELECT 1 FROM library WHERE gone_at IS NULL AND lower(title)=? AND lower(author) LIKE ?",
         ((title or "").strip().lower(), f"%{a}%")).fetchone())
+
+
+def _req_format(body) -> str:
+    """The media format an action applies to: the explicit choice when both
+    formats are active, else the single active format (assumed)."""
+    f = (body or {}).get("format")
+    if formats.multi() and f in ("audiobook", "ebook"):
+        return f
+    return formats.primary()
 
 
 def _cached_book(asin) -> dict:
@@ -641,6 +758,16 @@ def api_search():
 
 def _hand_to_chaptarr(user_id, book, source):
     fmt = book.get("format") or "audiobook"
+    # Bypass Chaptarr if the book is already in a connected library (the user may
+    # have added it straight to Audiobookshelf / Kavita / Calibre-Web). Record it
+    # as available rather than redundantly asking Chaptarr to grab it.
+    with db.conn() as c:
+        if _owned(c, book.get("asin", ""), book.get("title", ""), book.get("author", "")):
+            c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,source,format) "
+                      "VALUES (?,?,?,?,?,?,?,?,?)",
+                      (user_id, book.get("asin", ""), book["title"], book.get("author", ""),
+                       book.get("cover", ""), "available", "Already in your library", source, fmt))
+            return {"ok": True, "detail": "Already in your library — marked available."}
     res = chaptarr.add_and_search(book["title"], book.get("author", ""), book.get("asin", ""), fmt=fmt)
     status = "handed" if res["ok"] else "failed"
     with db.conn() as c:
@@ -704,18 +831,22 @@ def api_mark_read():
     title, authr = body.get("title", "").strip(), body.get("author", "").strip()
     if not title:
         return jsonify({"error": "title required"}), 400
-    hit = audible.search(f"{title} {authr}", num=1)
-    b = hit[0] if hit else {"asin": "", "title": title, "author": authr}
+    fmt = _req_format(body)
+    hit = ebookmeta.search(f"{title} {authr}", num=1) if fmt == "ebook" else audible.search(f"{title} {authr}", num=1)
+    b = (hit[0] if hit else {"asin": "", "title": title, "author": authr})
+    bid = b.get("asin") or b.get("id") or ""
     with db.conn() as c:
         if b.get("author"):
-            c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
-                      (u["id"], "author", b["author"].split(",")[0], 3, f"marked read: {b['title']}"))
+            c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why,format) VALUES (?,?,?,?,?,?)",
+                      (u["id"], "author", b["author"].split(",")[0], 3, f"marked read: {b['title']}", fmt))
         if b.get("series"):
-            c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
-                      (u["id"], "series", b["series"], 2, f"marked read: {b['title']}"))
-        # also a never-resuggest of the exact title
-        c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
-                  (u["id"], "asin", b.get("asin", title), -1, f"already read: {b['title']}"))
+            c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why,format) VALUES (?,?,?,?,?,?)",
+                      (u["id"], "series", b["series"], 2, f"marked read: {b['title']}", fmt))
+        c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why,format) VALUES (?,?,?,?,?,?)",
+                  (u["id"], "asin", bid or title, -1, f"already read: {b['title']}", fmt))
+    # also put it on the 'read' shelf so it counts toward goal + heatmap
+    rk = db.rating_key(bid if not bid.startswith(("gb:", "ol:")) else "", b.get("title", title), b.get("author", authr))
+    db.shelf_set(u["id"], rk, "read", b.get("title", title), b.get("author", authr), b.get("cover", ""), fmt)
     return jsonify({"ok": True, "matched": b.get("title", title)})
 
 
@@ -733,6 +864,7 @@ def api_rate():
     # what the recommender boosts on, so we must capture it either way.
     title, author = (body.get("title") or "").strip(), (body.get("author") or "").strip()
     review = (body.get("review") or "").strip()[:1500]
+    spoiler = 1 if body.get("spoiler") else 0
     fmt = body.get("format") or ("ebook" if asin.startswith(("gb:", "ol:")) else "audiobook")
     if (not title or not author) and not asin.startswith(("t-", "gb:", "ol:")):
         meta = audible.by_asin(asin) or {}
@@ -740,13 +872,13 @@ def api_rate():
         author = author or meta.get("author", "")
     with db.conn() as c:
         # a blank review on an update must not wipe an existing one
-        c.execute("INSERT INTO ratings (user_id,asin,title,author,stars,review,format,updated_at) "
-                  "VALUES (?,?,?,?,?,?,?,datetime('now','localtime')) "
+        c.execute("INSERT INTO ratings (user_id,asin,title,author,stars,review,spoiler,format,updated_at) "
+                  "VALUES (?,?,?,?,?,?,?,?,datetime('now','localtime')) "
                   "ON CONFLICT(user_id,asin) DO UPDATE SET "
                   "stars=excluded.stars, title=excluded.title, author=excluded.author, "
                   "review=CASE WHEN excluded.review<>'' THEN excluded.review ELSE ratings.review END, "
-                  "format=excluded.format, updated_at=datetime('now','localtime')",
-                  (u["id"], asin, title, author, stars, review, fmt))
+                  "spoiler=excluded.spoiler, format=excluded.format, updated_at=datetime('now','localtime')",
+                  (u["id"], asin, title, author, stars, review, spoiler, fmt))
     return jsonify({"ok": True, "community": db.community_rating(asin)})
 
 
@@ -803,12 +935,13 @@ def api_dnf():
     title, authr = (body.get("title") or "").strip(), (body.get("author") or "").strip()
     if not title:
         return jsonify({"error": "title required"}), 400
-    hit = audible.search(f"{title} {authr}", num=1)
+    fmt = _req_format(body)
+    hit = ebookmeta.search(f"{title} {authr}", num=1) if fmt == "ebook" else audible.search(f"{title} {authr}", num=1)
     b = hit[0] if hit else {"asin": "", "title": title, "author": authr}
-    key = b.get("asin") or db.rating_key("", b.get("title", title), b.get("author", authr))
+    key = b.get("asin") or b.get("id") or db.rating_key("", b.get("title", title), b.get("author", authr))
     with db.conn() as c:
-        c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
-                  (u["id"], "asin", key, -2, f"dnf: {b.get('title', title)}"))
+        c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why,format) VALUES (?,?,?,?,?,?)",
+                  (u["id"], "asin", key, -2, f"dnf: {b.get('title', title)}", fmt))
     return jsonify({"ok": True, "matched": b.get("title", title)})
 
 
@@ -821,6 +954,27 @@ def api_onboard_dismiss():
         c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) "
                   "VALUES (?,?,?,?,?)", (u["id"], "onboard_dismissed", "1", 0, "dismissed onboarding"))
     return jsonify({"ok": True})
+
+
+@bp.route("/api/requests/check", methods=["POST"])
+@auth.login_required
+def api_requests_check():
+    """Re-scan all connected libraries now and flip any request to 'available'
+    if its book has appeared (e.g. the user added it outside Chaptarr). Returns
+    how many flipped."""
+    from . import scheduler
+    before = after = 0
+    with db.conn() as c:
+        before = c.execute("SELECT COUNT(*) n FROM requests WHERE status IN ('queued','handed','failed')").fetchone()["n"]
+    try:
+        scheduler.refresh_library()
+    except Exception as e:
+        return jsonify({"ok": False, "detail": str(e)})
+    with db.conn() as c:
+        after = c.execute("SELECT COUNT(*) n FROM requests WHERE status IN ('queued','handed','failed')").fetchone()["n"]
+    flipped = max(before - after, 0)
+    return jsonify({"ok": True, "flipped": flipped,
+                    "detail": f"{flipped} now available" if flipped else "No new matches in your libraries"})
 
 
 @bp.route("/api/request/<int:rid>/retry", methods=["POST"])
@@ -843,6 +997,98 @@ def api_request_delete(rid):
     with db.conn() as c:
         c.execute("DELETE FROM requests WHERE id=? AND user_id=?", (rid, u["id"]))
     return jsonify({"ok": True})
+
+
+@bp.route("/api/shelf", methods=["POST"])
+@auth.login_required
+def api_shelf():
+    """Set (or clear) a book's personal shelf: want | reading | read | ''."""
+    u = auth.current_user()
+    b = request.get_json(force=True)
+    rkey = (b.get("key") or b.get("asin") or "").strip()
+    state = (b.get("state") or "").strip()
+    if not rkey or state not in ("", "want", "reading", "read"):
+        return jsonify({"error": "key + valid state required"}), 400
+    db.shelf_set(u["id"], rkey, state, b.get("title", ""), b.get("author", ""),
+                 b.get("cover", ""), b.get("format") or "audiobook")
+    return jsonify({"ok": True, "state": state, "counts": db.shelf_counts(u["id"])})
+
+
+@bp.route("/api/feedback", methods=["POST"])
+@auth.login_required
+def api_feedback():
+    """Lightweight 'more like this' / 'less like this' — nudges the engine via
+    author (+ mood) signals without a full rating."""
+    u = auth.current_user()
+    b = request.get_json(force=True)
+    author = (b.get("author") or "").split(",")[0].strip()
+    direction = b.get("direction")          # "more" | "less"
+    fmt = _req_format(b)
+    if not author or direction not in ("more", "less"):
+        return jsonify({"error": "author + direction required"}), 400
+    w = 2 if direction == "more" else -2
+    with db.conn() as c:
+        c.execute("INSERT INTO signals (user_id,kind,value,weight,why,format) VALUES (?,?,?,?,?,?) "
+                  "ON CONFLICT(user_id,kind,value) DO UPDATE SET weight=signals.weight+excluded.weight",
+                  (u["id"], "author", author, w, f"{direction} like: {b.get('title','')}", fmt))
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/review/vote", methods=["POST"])
+@auth.login_required
+def api_review_vote():
+    u = auth.current_user()
+    rid = request.get_json(force=True).get("rating_id")
+    if not rid:
+        return jsonify({"error": "rating_id required"}), 400
+    return jsonify({"ok": True, "votes": db.review_vote(u["id"], int(rid))})
+
+
+@bp.route("/api/get-other-format", methods=["POST"])
+@auth.login_required
+def api_get_other_format():
+    """Own/seen a title in one format → request the other format (audiobook⇄ebook)."""
+    u = auth.current_user()
+    b = request.get_json(force=True)
+    title, author = (b.get("title") or "").strip(), (b.get("author") or "").strip()
+    other = "ebook" if b.get("format") == "audiobook" else "audiobook"
+    if not title:
+        return jsonify({"error": "title required"}), 400
+    hit = (ebookmeta.search if other == "ebook" else audible.search)(f"{title} {author}", num=1)
+    pick = hit[0] if hit else {"title": title, "author": author}
+    pick["format"] = other
+    pick["asin"] = pick.get("asin") or pick.get("id", "")
+    return jsonify(_hand_to_chaptarr(u["id"], pick, "manual"))
+
+
+@bp.route("/api/surprise")
+@auth.login_required
+def api_surprise():
+    """One strong pick on demand — the highest-scored pending suggestion (of the
+    active/echosen format), or a popular fallback. Optional ?mood= filter."""
+    u = auth.current_user()
+    fmt = request.args.get("format") or ""
+    where = "AND format=?" if fmt in ("audiobook", "ebook") else ""
+    args = [u["id"]] + ([fmt] if where else [])
+    with db.conn() as c:
+        rows = [dict(r) for r in c.execute(
+            f"SELECT * FROM suggestions WHERE user_id=? AND status='pending' {where} "
+            "ORDER BY score DESC LIMIT 40", args)]
+    mood = request.args.get("mood", "").lower().strip()
+    if mood:
+        rows = [r for r in rows if mood in [m.lower() for m in db.tags_for(
+            db.rating_key(r["asin"], r["title"], r["author"])).get("mood", [])]] or rows
+    if not rows:
+        pop = discover.popular(8)
+        rows = [{"asin": x["asin"], "title": x["title"], "author": x["author"],
+                 "cover": x.get("cover", ""), "reason": "A popular pick to get you started",
+                 "format": "audiobook"} for x in pop if x.get("asin")]
+    if not rows:
+        return jsonify({"ok": False})
+    import hashlib
+    # deterministic-but-varied: rotate by minute so repeated taps differ
+    idx = int(hashlib.md5(request.args.get("n", "0").encode()).hexdigest(), 16) % len(rows)
+    return jsonify({"ok": True, "book": rows[idx]})
 
 
 SETTING_KEYS = {

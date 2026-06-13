@@ -104,7 +104,31 @@ CREATE TABLE IF NOT EXISTS importlist_items (
   added_at TEXT DEFAULT (datetime('now','localtime')),
   UNIQUE(user_id, source, title, author)
 );
+CREATE TABLE IF NOT EXISTS shelf (
+  user_id INTEGER NOT NULL,
+  rkey TEXT NOT NULL,                          -- rating_key (asin / t-slug / gb:/ol:)
+  state TEXT NOT NULL,                         -- want | reading | read
+  title TEXT DEFAULT '', author TEXT DEFAULT '', cover TEXT DEFAULT '',
+  format TEXT DEFAULT 'audiobook',
+  added_at TEXT DEFAULT (datetime('now','localtime')),
+  finished_at TEXT,                            -- set when state -> read (heatmap/goal)
+  PRIMARY KEY (user_id, rkey)
+);
+CREATE TABLE IF NOT EXISTS book_tags (
+  rkey TEXT NOT NULL,
+  tag TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'genre',          -- genre | mood | pace | warning
+  source TEXT NOT NULL DEFAULT 'auto',         -- auto | user
+  PRIMARY KEY (rkey, tag)
+);
+CREATE TABLE IF NOT EXISTS review_votes (
+  user_id INTEGER NOT NULL,
+  rating_id INTEGER NOT NULL,
+  PRIMARY KEY (user_id, rating_id)
+);
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
+CREATE INDEX IF NOT EXISTS ix_shelf_user_state ON shelf(user_id, state);
+CREATE INDEX IF NOT EXISTS ix_tags_kind ON book_tags(kind);
 CREATE INDEX IF NOT EXISTS ix_sugg_user_status ON suggestions(user_id, status);
 CREATE INDEX IF NOT EXISTS ix_req_user_status ON requests(user_id, status);
 """
@@ -138,7 +162,9 @@ def init():
                      "ALTER TABLE requests ADD COLUMN format TEXT DEFAULT 'audiobook'",
                      "ALTER TABLE ratings ADD COLUMN review TEXT DEFAULT ''",
                      "ALTER TABLE ratings ADD COLUMN format TEXT DEFAULT 'audiobook'",
-                     "ALTER TABLE ratings ADD COLUMN updated_at TEXT"):
+                     "ALTER TABLE ratings ADD COLUMN updated_at TEXT",
+                     "ALTER TABLE ratings ADD COLUMN spoiler INTEGER DEFAULT 0",
+                     "ALTER TABLE signals ADD COLUMN format TEXT DEFAULT ''"):
             try:
                 c.execute(stmt)
             except sqlite3.OperationalError:
@@ -211,13 +237,104 @@ def community_rating(key: str) -> dict:
 
 
 def reviews_for(key: str) -> list[dict]:
-    """Text reviews other users have left for a book, newest first."""
+    """Text reviews other users have left for a book, most-helpful first then
+    newest. Carries id (for voting), spoiler flag, and helpful-vote count."""
     with conn() as c:
         return [dict(r) for r in c.execute(
-            "SELECT r.stars, r.review, r.created_at, u.username "
+            "SELECT r.id, r.stars, r.review, r.spoiler, r.created_at, u.username, "
+            "(SELECT COUNT(*) FROM review_votes v WHERE v.rating_id=r.id) AS votes "
             "FROM ratings r JOIN users u ON u.id=r.user_id "
-            "WHERE r.asin=? AND r.review<>'' ORDER BY COALESCE(r.updated_at,r.created_at) DESC",
+            "WHERE r.asin=? AND r.review<>'' ORDER BY votes DESC, COALESCE(r.updated_at,r.created_at) DESC",
             (key,))]
+
+
+# --- personal shelves (want / reading / read) -------------------------------
+def shelf_set(user_id: int, rkey: str, state: str, title="", author="", cover="", fmt="audiobook"):
+    """Put a book on a shelf (want|reading|read). 'read' stamps finished_at
+    (drives the goal + heatmap). state='' removes it from shelves."""
+    with conn() as c:
+        if not state:
+            c.execute("DELETE FROM shelf WHERE user_id=? AND rkey=?", (user_id, rkey))
+            return
+        fin = "datetime('now','localtime')" if state == "read" else "NULL"
+        c.execute(
+            f"INSERT INTO shelf (user_id,rkey,state,title,author,cover,format,finished_at) "
+            f"VALUES (?,?,?,?,?,?,?,{fin}) "
+            f"ON CONFLICT(user_id,rkey) DO UPDATE SET state=excluded.state, "
+            f"title=CASE WHEN excluded.title<>'' THEN excluded.title ELSE shelf.title END, "
+            f"author=CASE WHEN excluded.author<>'' THEN excluded.author ELSE shelf.author END, "
+            f"cover=CASE WHEN excluded.cover<>'' THEN excluded.cover ELSE shelf.cover END, "
+            f"format=excluded.format, "
+            f"finished_at=CASE WHEN excluded.state='read' AND shelf.finished_at IS NULL "
+            f"THEN datetime('now','localtime') WHEN excluded.state<>'read' THEN NULL ELSE shelf.finished_at END",
+            (user_id, rkey, state, title, author, cover, fmt))
+
+
+def shelf_state(user_id: int, rkey: str) -> str:
+    with conn() as c:
+        r = c.execute("SELECT state FROM shelf WHERE user_id=? AND rkey=?", (user_id, rkey)).fetchone()
+        return r["state"] if r else ""
+
+
+def shelf_list(user_id: int, state: str) -> list[dict]:
+    with conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM shelf WHERE user_id=? AND state=? ORDER BY COALESCE(finished_at,added_at) DESC",
+            (user_id, state))]
+
+
+def shelf_counts(user_id: int) -> dict:
+    with conn() as c:
+        rows = c.execute("SELECT state, COUNT(*) n FROM shelf WHERE user_id=? GROUP BY state", (user_id,)).fetchall()
+    return {r["state"]: r["n"] for r in rows}
+
+
+def finished_dates(user_id: int) -> list[str]:
+    """YYYY-MM-DD of every 'read'-shelf finish — feeds the goal ring + heatmap."""
+    with conn() as c:
+        return [r["d"] for r in c.execute(
+            "SELECT substr(finished_at,1,10) d FROM shelf WHERE user_id=? AND state='read' AND finished_at IS NOT NULL",
+            (user_id,))]
+
+
+# --- book tags (mood / pace / genre / content-warning) ----------------------
+def set_tags(rkey: str, tags: list[tuple], replace_kind: str | None = None):
+    """tags: list of (tag, kind). If replace_kind given, clear that kind's
+    'auto' tags for this book first (so a re-fetch refreshes cleanly)."""
+    with conn() as c:
+        if replace_kind:
+            c.execute("DELETE FROM book_tags WHERE rkey=? AND kind=? AND source='auto'", (rkey, replace_kind))
+        for tag, kind in tags:
+            t = (tag or "").strip()
+            if t:
+                c.execute("INSERT OR IGNORE INTO book_tags (rkey,tag,kind,source) VALUES (?,?,?,?)",
+                          (rkey, t, kind, "auto"))
+
+
+def tags_for(rkey: str) -> dict:
+    with conn() as c:
+        rows = c.execute("SELECT tag, kind FROM book_tags WHERE rkey=?", (rkey,)).fetchall()
+    out = {}
+    for r in rows:
+        out.setdefault(r["kind"], []).append(r["tag"])
+    return out
+
+
+def has_tags(rkey: str) -> bool:
+    with conn() as c:
+        return bool(c.execute("SELECT 1 FROM book_tags WHERE rkey=? LIMIT 1", (rkey,)).fetchone())
+
+
+def review_vote(user_id: int, rating_id: int) -> int:
+    """Toggle a helpful vote; returns the new vote count for that review."""
+    with conn() as c:
+        ex = c.execute("SELECT 1 FROM review_votes WHERE user_id=? AND rating_id=?",
+                       (user_id, rating_id)).fetchone()
+        if ex:
+            c.execute("DELETE FROM review_votes WHERE user_id=? AND rating_id=?", (user_id, rating_id))
+        else:
+            c.execute("INSERT OR IGNORE INTO review_votes (user_id,rating_id) VALUES (?,?)", (user_id, rating_id))
+        return c.execute("SELECT COUNT(*) n FROM review_votes WHERE rating_id=?", (rating_id,)).fetchone()["n"]
 
 
 def recent_ratings(limit: int = 14) -> list[dict]:
