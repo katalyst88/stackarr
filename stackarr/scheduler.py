@@ -6,7 +6,7 @@ import logging
 import threading
 import time
 
-from . import absclient, config, db, notify, recommend
+from . import absclient, backends, config, db, notify, recommend
 
 log = logging.getLogger("stackarr.scheduler")
 
@@ -14,24 +14,30 @@ log = logging.getLogger("stackarr.scheduler")
 def refresh_library():
     seen = set()
     with db.conn() as c:
-        for lib in absclient.libraries():
+        # aggregate the library snapshot across every connected source backend
+        # (ABS today; Kavita/Calibre-Web once connected). One source = identical
+        # to the old ABS-only behaviour, just now stamped with format/source.
+        for backend in backends.sources():
             try:
-                for it in absclient.items(lib["id"]):
-                    m = absclient.item_meta(it)
-                    if not m["item_id"]:
-                        continue
-                    seen.add(m["item_id"])
-                    c.execute(
-                        "INSERT INTO library (item_id,library_id,title,author,asin,series,series_seq,narrator,last_seen) "
-                        "VALUES (?,?,?,?,?,?,?,?,datetime('now','localtime')) "
-                        "ON CONFLICT(item_id) DO UPDATE SET title=excluded.title,"
-                        "author=excluded.author,asin=excluded.asin,series=excluded.series,"
-                        "series_seq=excluded.series_seq,narrator=excluded.narrator,"
-                        "last_seen=excluded.last_seen,gone_at=NULL",
-                        (m["item_id"], lib["id"], m["title"], m["author"], m["asin"],
-                         m.get("series", ""), m.get("series_seq"), m.get("narrator", "")))
+                items = backend.library_items()
             except Exception as e:
-                log.warning("library refresh failed for %s: %s", lib.get("name"), e)
+                log.warning("library refresh failed for %s: %s", backend.id, e)
+                continue
+            for m in items:
+                if not m.get("item_id"):
+                    continue
+                seen.add(m["item_id"])
+                c.execute(
+                    "INSERT INTO library (item_id,library_id,title,author,asin,series,series_seq,narrator,format,source,last_seen) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now','localtime')) "
+                    "ON CONFLICT(item_id) DO UPDATE SET title=excluded.title,"
+                    "author=excluded.author,asin=excluded.asin,series=excluded.series,"
+                    "series_seq=excluded.series_seq,narrator=excluded.narrator,"
+                    "format=excluded.format,source=excluded.source,"
+                    "last_seen=excluded.last_seen,gone_at=NULL",
+                    (m["item_id"], m.get("library_id", ""), m["title"], m["author"], m.get("asin", ""),
+                     m.get("series", ""), m.get("series_seq"), m.get("narrator", ""),
+                     m.get("format", "audiobook"), m.get("source", "abs")))
 
         # deletions -> "delete habit" negative signal for every user
         user_ids = [r["id"] for r in c.execute("SELECT id FROM users")]

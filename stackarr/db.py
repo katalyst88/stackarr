@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS suggestions (
   cover TEXT DEFAULT '',
   reason TEXT DEFAULT '',
   lane TEXT DEFAULT 'foryou',                  -- foryou | series | narrator | discover | importlist
+  format TEXT DEFAULT 'audiobook',             -- audiobook | ebook
   score REAL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'pending',      -- pending | approved | rejected
   extra TEXT DEFAULT '',                        -- e.g. release date for upcoming titles
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS requests (
   cover TEXT DEFAULT '',
   status TEXT NOT NULL DEFAULT 'queued',       -- queued | handed | available | failed
   detail TEXT DEFAULT '',
+  format TEXT DEFAULT 'audiobook',             -- audiobook | ebook
   chaptarr_ref TEXT DEFAULT '',                -- chaptarr author/book id
   source TEXT DEFAULT 'suggestion',            -- suggestion | manual | importlist
   created_at TEXT DEFAULT (datetime('now','localtime')),
@@ -83,6 +85,8 @@ CREATE TABLE IF NOT EXISTS library (
   series TEXT DEFAULT '',
   series_seq REAL,
   narrator TEXT DEFAULT '',
+  format TEXT DEFAULT 'audiobook',             -- audiobook | ebook
+  source TEXT DEFAULT 'abs',                    -- backend id the book came from
   first_seen TEXT DEFAULT (datetime('now','localtime')),
   last_seen TEXT,
   gone_at TEXT
@@ -124,7 +128,11 @@ def init():
         for stmt in ("ALTER TABLE suggestions ADD COLUMN extra TEXT DEFAULT ''",
                      "ALTER TABLE library ADD COLUMN series TEXT DEFAULT ''",
                      "ALTER TABLE library ADD COLUMN series_seq REAL",
-                     "ALTER TABLE library ADD COLUMN narrator TEXT DEFAULT ''"):
+                     "ALTER TABLE library ADD COLUMN narrator TEXT DEFAULT ''",
+                     "ALTER TABLE library ADD COLUMN format TEXT DEFAULT 'audiobook'",
+                     "ALTER TABLE library ADD COLUMN source TEXT DEFAULT 'abs'",
+                     "ALTER TABLE suggestions ADD COLUMN format TEXT DEFAULT 'audiobook'",
+                     "ALTER TABLE requests ADD COLUMN format TEXT DEFAULT 'audiobook'"):
             try:
                 c.execute(stmt)
             except sqlite3.OperationalError:

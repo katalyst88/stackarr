@@ -7,7 +7,7 @@ from functools import wraps
 
 from flask import jsonify, redirect, request, session, url_for
 
-from . import absclient, config, db
+from . import backends, config, db
 
 
 def current_user() -> dict | None:
@@ -16,7 +16,7 @@ def current_user() -> dict | None:
 
 
 def do_login(username: str, password: str) -> dict | None:
-    info = absclient.login(username, password)
+    info = backends.LOGIN.login(username, password)
     if not info:
         return None
     role = "admin" if (info["isAdmin"] or info["username"] in config.ADMIN_USERS) else "user"
