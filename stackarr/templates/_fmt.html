@@ -1,0 +1,32 @@
+{# Shared format-aware UI: an icon per media format, and the All/Audiobooks/
+   eBooks filter bar. Import `with context` so multi_format is visible:
+   {% from "_fmt.html" import fmt_icon, fmt_filter with context %} #}
+
+{# headphones = audiobook · open book = ebook · stacked = all/both #}
+{% macro fmt_icon(fmt) -%}
+{%- if fmt == 'ebook' -%}
+<svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5A2.5 2.5 0 0 1 5.5 2H11v18.2l-.9-.5a4 4 0 0 0-1.9-.5H3zM13 2h5.5A2.5 2.5 0 0 1 21 4.5v14.7h-5.2a4 4 0 0 0-1.9.5l-.9.5z"/></svg>
+{%- elif fmt == 'audiobook' -%}
+<svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9v4.5A2.5 2.5 0 0 0 5.5 19H7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5v-0a7 7 0 0 1 14 0v0h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.5A2.5 2.5 0 0 0 21 16.5V12a9 9 0 0 0-9-9z"/></svg>
+{%- else -%}
+<svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h12v2H4zm0 4h12v2H4zm0 4h12v2H4zM18 7h2v10h-2z"/></svg>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro fmt_label(fmt) -%}
+{%- if fmt == 'ebook' -%}eBook{%- elif fmt == 'audiobook' -%}Audiobook{%- else -%}All{%- endif -%}
+{%- endmacro %}
+
+{# The filter bar — only rendered when both formats are active. #}
+{% macro fmt_filter() -%}
+{% if multi_format %}<span class="fmt-filter" id="fmt-filter">
+  <button class="fmt-pill active" type="button" data-fmt="all" title="All" aria-label="All" onclick="Stackarr.filterFormat('all',this)">{{ fmt_icon('all') }}</button>
+  <button class="fmt-pill" type="button" data-fmt="audiobook" title="Audiobooks" aria-label="Audiobooks" onclick="Stackarr.filterFormat('audiobook',this)">{{ fmt_icon('audiobook') }}</button>
+  <button class="fmt-pill" type="button" data-fmt="ebook" title="eBooks" aria-label="eBooks" onclick="Stackarr.filterFormat('ebook',this)">{{ fmt_icon('ebook') }}</button>
+</span>{% endif %}
+{%- endmacro %}
+
+{# A small format badge for a media card cover (icon only). #}
+{% macro fmt_badge(fmt) -%}
+{% if multi_format %}<span class="fmt-badge {{ fmt or 'audiobook' }}" title="{{ fmt_label(fmt) }}">{{ fmt_icon(fmt) }}</span>{% endif %}
+{%- endmacro %}

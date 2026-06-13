@@ -60,21 +60,24 @@ def run(user_id: int, max_new: int | None = None) -> int:
 
     seeds = _ebook_seeds(user)
 
+    # Format-isolated by default: ebook picks dedupe only against owned/suggested/
+    # requested EBOOKS (so a book you own/like as an audiobook can still be
+    # suggested as an ebook — "give me the option for either"), and only ebook
+    # ratings inform author boost. cross_format_taste opts into sharing.
+    xfmt = db.get_meta("cross_format_taste", "0") == "1"
+    rate_where = "" if xfmt else " AND format='ebook'"
     with db.conn() as c:
         known = set()
-        for row in c.execute("SELECT title, author FROM library WHERE gone_at IS NULL"):
+        for row in c.execute("SELECT title, author FROM library WHERE gone_at IS NULL AND format='ebook'"):
             known.add(_key(row["title"], row["author"]))
-        # dedupe against ALL pending suggestions (incl. audiobook picks) so we
-        # never suggest the same title twice across formats — audiobook is run
-        # first and wins.
         for tbl in ("requests", "suggestions"):
-            for row in c.execute(f"SELECT title, author FROM {tbl} WHERE user_id=?", (user_id,)):
+            for row in c.execute(f"SELECT title, author FROM {tbl} WHERE user_id=? AND format='ebook'", (user_id,)):
                 known.add(_key(row["title"], row["author"]))
         neg = {(s["kind"], s["value"].lower()): s["weight"]
                for s in c.execute("SELECT kind,value,weight FROM signals WHERE user_id=? AND weight<0", (user_id,))}
         pos = {(s["kind"], s["value"].lower()): s["weight"]
                for s in c.execute("SELECT kind,value,weight FROM signals WHERE user_id=? AND weight>0", (user_id,))}
-        for r in c.execute("SELECT stars,author FROM ratings WHERE user_id=?", (user_id,)):
+        for r in c.execute(f"SELECT stars,author FROM ratings WHERE user_id=?{rate_where}", (user_id,)):
             if r["author"]:
                 k = ("author", r["author"].split(",")[0].lower())
                 pos[k] = pos.get(k, 0) + (r["stars"] - 3) * 1.5

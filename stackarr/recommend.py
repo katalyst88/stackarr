@@ -61,20 +61,29 @@ def run(user_id: int, max_new: int | None = None) -> int:
         return 0
 
     seeds = absclient.listening_history(user["abs_token"])
+    # Taste is format-isolated by default: audiobook picks dedupe only against
+    # owned/suggested/requested AUDIOBOOKS, and only audiobook ratings boost
+    # authors — so a title you own/like as an ebook can still be suggested as an
+    # audiobook (and vice versa). The cross_format_taste setting opts into
+    # sharing ratings across formats.
+    xfmt = db.get_meta("cross_format_taste", "0") == "1"
+    rate_where = "" if xfmt else " AND (format='audiobook' OR format IS NULL OR format='')"
     with db.conn() as c:
-        # exclusion + preference state
+        # exclusion + preference state (audiobook-scoped ownership/dedup)
         known = set()
-        for row in c.execute("SELECT title, author FROM library WHERE gone_at IS NULL"):
+        for row in c.execute("SELECT title, author FROM library WHERE gone_at IS NULL "
+                             "AND (format='audiobook' OR format IS NULL OR format='')"):
             known.add(_key(row["title"], row["author"]))
         for tbl in ("requests", "suggestions"):
-            for row in c.execute(f"SELECT title, author FROM {tbl} WHERE user_id=?", (user_id,)):
+            for row in c.execute(f"SELECT title, author FROM {tbl} WHERE user_id=? "
+                                 "AND (format='audiobook' OR format IS NULL OR format='')", (user_id,)):
                 known.add(_key(row["title"], row["author"]))
         neg = {(s["kind"], s["value"].lower()): s["weight"]
                for s in c.execute("SELECT kind,value,weight FROM signals WHERE user_id=? AND weight<0", (user_id,))}
         pos = {(s["kind"], s["value"].lower()): s["weight"]
                for s in c.execute("SELECT kind,value,weight FROM signals WHERE user_id=? AND weight>0", (user_id,))}
-        # 5-star ratings -> per-author/series preference boost
-        for r in c.execute("SELECT asin,stars,author FROM ratings WHERE user_id=?", (user_id,)):
+        # 5-star ratings -> per-author/series preference boost (format-scoped)
+        for r in c.execute(f"SELECT asin,stars,author FROM ratings WHERE user_id=?{rate_where}", (user_id,)):
             if r["author"]:
                 k = ("author", r["author"].split(",")[0].lower())
                 pos[k] = pos.get(k, 0) + (r["stars"] - 3) * 1.5   # +3 for 5★, -3 for 1★

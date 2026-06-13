@@ -31,6 +31,13 @@
             <option value="both" {{ 'selected' if format_mode=='both' }}>Both audiobooks &amp; eBooks</option>
           </select></label>
         <p class="muted">Changing this reloads the page so format-specific menus update.</p>
+        {% if format_mode == 'both' %}
+        <label class="row"><span>Let audiobook &amp; ebook taste inform each other</span>
+          <input type="checkbox" class="switch" {{ 'checked' if cross_format_taste }}
+                 onchange="Stackarr.setSetting({cross_format_taste: this.checked})"></label>
+        <p class="muted">Off (default): each format is recommended only from that format's own history and ratings —
+          your audiobook likes won't shape ebook picks, or vice versa. On: ratings cross-pollinate both ways.</p>
+        {% endif %}
       </div>
       {% endif %}
     </div>

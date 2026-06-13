@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% from "_fmt.html" import fmt_filter, fmt_icon with context %}
 {% macro seq(n) %}{% if n is not none %}{{ n | int if n == n | int else n }}{% endif %}{% endmacro %}
 {% block content %}
 <div class="page-head">
   <h2 class="page-title">Up Next
     <span class="subtle">{{ series|length }} series in your library{% if have_next %} · {{ have_next }} with a next book ready{% endif %}</span></h2>
+  <div class="page-head-actions">{{ fmt_filter() }}</div>
 </div>
 
 {% if not series %}
@@ -11,9 +13,9 @@
   Audiobookshelf), the series you're collecting show up here with the next book to grab.</p></div>
 {% endif %}
 
-<div class="series-list">
+<div class="series-list fmt-group">
   {% for s in series %}
-  <div class="series-card">
+  <div class="series-card" data-format="{{ s.format or 'audiobook' }}">
     <div class="series-info">
       <div class="series-name">{{ s.name }}</div>
       <div class="series-meta">{{ s.owned }} book{{ 's' if s.owned != 1 }} in your library{% if s.highest is not none %}
@@ -21,6 +23,7 @@
       <div class="series-books">
         {% for b in s.books %}<span class="series-chip" title="{{ b.title }}">{% if b.series_seq is not none %}#{{ seq(b.series_seq) }} {% endif %}{{ b.title }}</span>{% endfor %}
       </div>
+      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('{{ s.name|e }}', '{{ (s.books[0].author if s.books else '')|e }}', this)">＋ Get full series</button>
     </div>
     <div class="series-next">
       {% if s.next %}
@@ -39,7 +42,7 @@
         {% endif %}
       </div>
       {% else %}
-      <div class="series-next-info"><div class="series-next-label muted">You're all caught up</div></div>
+      <div class="series-next-info"><div class="series-next-label muted">All books available</div></div>
       {% endif %}
     </div>
   </div>

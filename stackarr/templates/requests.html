@@ -1,24 +1,28 @@
 {% extends "base.html" %}
+{% from "_fmt.html" import fmt_filter, fmt_badge, fmt_icon with context %}
 {% block content %}
 <div class="page-head">
   <h2 class="page-title">{{ 'Wanted' if wanted else 'Requests' }} <span class="subtle">{{ "couldn't be grabbed" if wanted else '' }}</span></h2>
-  <div class="topbar-actions">
-    <a class="btn small ghost" href="{{ url_for('main.requests_page') }}">All</a>
-    <a class="btn small ghost" href="?wanted=1">Wanted</a>
-    {% if admin %}<a class="btn small ghost" href="?all=1">All users</a>{% endif %}
+  <div class="page-head-actions">
+    {{ fmt_filter() }}
+    <div class="seg">
+      <a class="btn small ghost {{ 'on' if not wanted }}" href="{{ url_for('main.requests_page') }}">All</a>
+      <a class="btn small ghost {{ 'on' if wanted }}" href="?wanted=1">Wanted</a>
+      {% if admin %}<a class="btn small ghost" href="?all=1">All users</a>{% endif %}
+    </div>
   </div>
 </div>
 {% if not requests %}
 <div class="empty"><p>No requests yet. Approve a suggestion or add one from Discover.</p></div>
 {% endif %}
-<div class="req-list">
+<div class="req-list fmt-group">
   {% for r in requests %}
-  <div class="req-row" data-id="{{ r.id }}">
-    <img class="req-cover" src="{{ r.cover or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
+  <div class="req-row" data-id="{{ r.id }}" data-format="{{ r.format or 'audiobook' }}">
+    <img class="req-cover" src="{{ r.cover or url_for('static', filename='icon.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}'">
     <div class="req-info">
-      <div class="req-title">{{ r.title }}{% if r.username %} <span class="subtle">· {{ r.username }}</span>{% endif %}</div>
+      <div class="req-title">{% if multi_format %}<span class="req-fmt" title="{{ 'eBook' if r.format=='ebook' else 'Audiobook' }}">{{ fmt_icon(r.format) }}</span> {% endif %}{{ r.title }}{% if r.username %} <span class="subtle">· {{ r.username }}</span>{% endif %}</div>
       <div class="req-author">{{ r.author }}</div>
-      <div class="req-detail" title="{{ r.detail }}">{{ r.detail }}</div>
+      {% if r.detail %}<div class="req-detail" title="{{ r.detail }}">{{ r.detail }}</div>{% endif %}
     </div>
     <span class="badge badge-{{ r.status }}">{{ {'queued':'Requested','handed':'Requested','available':'Available','failed':'Failed'}.get(r.status, r.status) }}</span>
     <div class="req-actions">
@@ -29,3 +33,4 @@
   {% endfor %}
 </div>
 {% endblock %}
+{% block scripts %}<script>Stackarr.initFormatFilter&&Stackarr.initFormatFilter();</script>{% endblock %}

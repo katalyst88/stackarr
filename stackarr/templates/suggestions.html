@@ -1,6 +1,7 @@
 {% extends "base.html" %}
+{% from "_fmt.html" import fmt_filter, fmt_badge with context %}
 {% macro lane_row(lane, items, title, see_all=None) %}
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     {% if see_all %}<a class="section-link" href="{{ see_all }}"><h3>{{ title }}</h3><span class="chev">›</span></a>
     {% else %}<h3>{{ title }}</h3>{% endif %}
@@ -15,14 +16,11 @@
 {% block content %}
 <div class="page-head">
   <h2 class="page-title">Suggestions <span class="subtle">curated from your
-    {% if multi_format %}listening &amp; reading history{% elif show_ebook %}reading history{% else %}listening history{% endif %}</span>
-    {% if multi_format %}<span class="fmt-filter" id="fmt-filter">
-      <span class="fmt-pill active" data-fmt="all" onclick="Stackarr.filterFormat('all',this)">All</span>
-      <span class="fmt-pill" data-fmt="audiobook" onclick="Stackarr.filterFormat('audiobook',this)">Audiobooks</span>
-      <span class="fmt-pill" data-fmt="ebook" onclick="Stackarr.filterFormat('ebook',this)">eBooks</span>
-    </span>{% endif %}
-  </h2>
-  <div><button class="btn small" onclick="Stackarr.scan()">Update Suggestions</button></div>
+    {% if multi_format %}listening &amp; reading history{% elif show_ebook %}reading history{% else %}listening history{% endif %}</span></h2>
+  <div class="page-head-actions">
+    {{ fmt_filter() }}
+    <button class="btn small" onclick="Stackarr.scan()">Update Suggestions</button>
+  </div>
 </div>
 
 {% if onboard_books %}
@@ -69,8 +67,9 @@
   {% if recent_requests %}
   {% call lane_row('req', recent_requests, 'Recent requests', url_for('main.requests_page')) %}
     {% for r in recent_requests %}
-    <a class="media-card" href="{% if r.asin %}{{ url_for('main.book_page', asin=r.asin) }}{% else %}{{ url_for('main.requests_page') }}{% endif %}">
-      <div class="media-poster"><img src="{{ (r.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
+    <a class="media-card" data-format="{{ r.format or 'audiobook' }}" href="{% if r.asin %}{{ url_for('main.book_page', asin=r.asin) }}{% else %}{{ url_for('main.requests_page') }}{% endif %}">
+      <div class="media-poster"><img src="{{ (r.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}'">
+        {{ fmt_badge(r.format) }}
         <span class="corner-badge {{ r.status }}">{{ {'queued':'Requested','handed':'Requested','available':'Available','failed':'Failed'}.get(r.status, r.status) }}</span></div>
       <div class="media-foot"><div class="media-title" title="{{ r.title }}">{{ r.title }}</div><div class="media-author">{{ r.author }}</div></div>
     </a>
@@ -81,8 +80,9 @@
   {% if recently_added %}
   {% call lane_row('added', recently_added, 'Recently added to your library') %}
     {% for r in recently_added %}
-    <a class="media-card" href="{% if r.asin %}{{ url_for('main.book_page', asin=r.asin) }}{% else %}{{ abs_base }}/item/{{ r.item_id }}{% endif %}">
-      <div class="media-poster"><img src="{{ url_for('main.cover', item_id=r.item_id) }}" loading="lazy" alt="" onerror="this.src='{{ url_for('static', filename='icon.svg') }}'">
+    <a class="media-card" data-format="{{ r.format or 'audiobook' }}" href="{% if r.asin %}{{ url_for('main.book_page', asin=r.asin) }}{% else %}{{ abs_base }}/item/{{ r.item_id }}{% endif %}">
+      <div class="media-poster"><img src="{{ url_for('main.cover', item_id=r.item_id) }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}'">
+        {{ fmt_badge(r.format) }}
         <span class="corner-badge available">In library</span></div>
       <div class="media-foot"><div class="media-title" title="{{ r.title }}">{{ r.title }}</div><div class="media-author">{{ r.author }}</div></div>
     </a>
@@ -95,8 +95,8 @@
     {% for s in items %}
     <div class="media-card" data-id="{{ s.id }}" data-format="{{ s.format or 'audiobook' }}">
       <a class="media-poster" href="{{ url_for('main.book_page', asin=s.asin) }}">
-        <img src="{{ (s.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
-        {% if multi_format %}<span class="fmt-badge {{ s.format or 'audiobook' }}">{{ 'eBook' if s.format == 'ebook' else 'Audio' }}</span>{% endif %}
+        <img src="{{ (s.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}'">
+        {{ fmt_badge(s.format) }}
         {% if s.available %}<span class="corner-badge available">Available</span>
         {% elif lane == 'upcoming' %}<span class="corner-badge handed">Coming {{ s.extra }}</span>
         {% elif lane == 'series' %}<span class="corner-badge series">Series</span>{% endif %}

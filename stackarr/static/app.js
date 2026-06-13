@@ -148,16 +148,31 @@ const Stackarr = (() => {
     },
     filterFormat(fmt, pill) {
       document.querySelectorAll("#fmt-filter .fmt-pill").forEach(p => p.classList.toggle("active", p === pill));
-      document.querySelectorAll(".media-card[data-format]").forEach(c => {
-        c.style.display = (fmt === "all" || c.dataset.format === fmt) ? "" : "none";
+      try { localStorage.setItem("stackarr-fmt", fmt); } catch (e) {}
+      // filter every format-tagged item on the page (cards, list rows, series cards…)
+      document.querySelectorAll("[data-format]").forEach(el => {
+        el.style.display = (fmt === "all" || el.dataset.format === fmt) ? "" : "none";
       });
-      // hide a whole lane row if every card in it is now filtered out
-      document.querySelectorAll(".section").forEach(sec => {
-        const cards = sec.querySelectorAll(".media-card[data-format]");
-        if (!cards.length) return;
-        const anyVisible = [...cards].some(c => c.style.display !== "none");
-        sec.style.display = anyVisible ? "" : "none";
+      // hide any group wrapper (lane section, etc.) left with no visible items
+      document.querySelectorAll(".fmt-group").forEach(g => {
+        const items = g.querySelectorAll("[data-format]");
+        if (!items.length) return;
+        g.style.display = [...items].some(i => i.style.display !== "none") ? "" : "none";
       });
+    },
+    initFormatFilter() {
+      // re-apply the last chosen format on load so it sticks across pages
+      const f = (() => { try { return localStorage.getItem("stackarr-fmt"); } catch (e) { return null; } })();
+      if (!f || f === "all") return;
+      const pill = document.querySelector(`#fmt-filter .fmt-pill[data-fmt="${f}"]`);
+      if (pill) this.filterFormat(f, pill);
+    },
+    async getSeries(name, author, btn) {
+      if (!author) { toast("No author found for this series."); return; }
+      if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+      const r = await api("/api/series/add", { method: "POST", body: JSON.stringify({ series: name, author }) });
+      toast(r.detail || (r.ok ? "Sent to Chaptarr." : "Couldn't add right now."));
+      if (btn) { btn.disabled = false; btn.textContent = r.ok ? "✓ Requested" : "＋ Get full series"; }
     },
     toggleTheme() {
       localStorage.setItem("stackarr-theme", localStorage.getItem("stackarr-theme") === "light" ? "dark" : "light");

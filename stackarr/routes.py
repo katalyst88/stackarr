@@ -106,7 +106,7 @@ def suggestions_page():
                    "short": "Short listens", "epic": "Epic listens",
                    "upcoming": "New & upcoming", "importlist": "From your reading list",
                    "discover": "Popular picks", "foryou": "For you"}
-    lane_order = ["series", "author", "enjoyed", "discover_author", "narrator", "genre",
+    lane_order = ["series", "enjoyed", "discover_author", "author", "narrator", "genre",
                   "hidden", "awards", "short", "epic", "upcoming", "importlist", "foryou", "discover"]
     lanes = {k: lanes[k] for k in lane_order if k in lanes}
     # authors to feature as browse cards — only SUGGESTED authors (new discoveries /
@@ -298,7 +298,7 @@ def series_page():
     u = auth.current_user()
     with db.conn() as c:
         libr = [dict(r) for r in c.execute(
-            "SELECT title,author,series,series_seq,asin FROM library "
+            "SELECT title,author,series,series_seq,asin,format FROM library "
             "WHERE gone_at IS NULL AND series<>'' ORDER BY series, series_seq")]
         sugg = [dict(r) for r in c.execute(
             "SELECT id,title,author,series,asin,cover,reason FROM suggestions "
@@ -330,8 +330,10 @@ def series_page():
         books.sort(key=lambda b: b["series_seq"] if b["series_seq"] is not None else 0)
         seqs = [b["series_seq"] for b in books if b["series_seq"] is not None]
         nxt = next_by_series.get(norm(name))
+        fmts = {b.get("format") or "audiobook" for b in books}
         cards.append({"name": name, "owned": len(books),
                       "highest": max(seqs) if seqs else None, "books": books,
+                      "format": books[0].get("format") or "audiobook" if len(fmts) == 1 else "both",
                       "next": nxt, "next_status": req_status(nxt["title"]) if nxt else None})
     # "Up Next" is for series you're actually collecting — 2+ books, or one with
     # a next pick queued. Drops single-book noise and mislabelled one-offs.
@@ -434,6 +436,25 @@ def browse_page():
     return render_template("browse.html", books=uniq, title=title, kind=kind, author=author)
 
 
+@bp.route("/api/series/add", methods=["POST"])
+@auth.login_required
+def api_series_add():
+    """Get the rest of a series: hand its author to Chaptarr, which monitors and
+    searches all their books (covering the remaining entries in the series)."""
+    u = auth.current_user()
+    body = request.get_json(force=True)
+    name = (body.get("series") or "").strip()
+    author = (body.get("author") or "").split(",")[0].strip()
+    if not name or not author:
+        return jsonify({"ok": False, "detail": "Series needs an author Stackarr can look up."}), 400
+    res = chaptarr.add_and_search(name, author)
+    with db.conn() as c:
+        c.execute("INSERT INTO requests (user_id,title,author,status,detail,source) VALUES (?,?,?,?,?,?)",
+                  (u["id"], f"Full series: {name}", author,
+                   "handed" if res["ok"] else "failed", res.get("detail", ""), "series"))
+    return jsonify(res)
+
+
 @bp.route("/api/author/add", methods=["POST"])
 @auth.login_required
 def api_author_add():
@@ -486,6 +507,7 @@ def settings_page():
                                     "hardcover_token": g("hardcover_token", config.HARDCOVER_TOKEN)},
                            hide_rated_history=db.get_meta("hide_rated_history", "0") == "1",
                            format_mode=formats.mode(),
+                           cross_format_taste=db.get_meta("cross_format_taste", "0") == "1",
                            log_level=config.LOG_LEVEL,
                            is_admin=auth.current_user()["role"] == "admin")
 
@@ -835,7 +857,7 @@ SETTING_KEYS = {
     "calibreweb_url", "calibreweb_user", "calibreweb_pass",
 }
 BOOL_KEYS = {"email_enabled", "discord_enabled", "hide_rated_history",
-             "notify_avail_enabled", "notify_newrelease_enabled"}
+             "notify_avail_enabled", "notify_newrelease_enabled", "cross_format_taste"}
 
 
 @bp.route("/api/settings", methods=["POST"])
