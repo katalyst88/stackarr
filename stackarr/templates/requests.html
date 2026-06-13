@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="topbar">
+  <h2 class="page-title">Requests</h2>
+  <div class="topbar-actions">
+    {% if admin %}<a class="btn small ghost" href="?all=1">All users</a>{% endif %}
+    <button class="btn small ghost" onclick="Stackarr.toggleTheme()" id="theme-toggle" title="Light / dark">◑</button>
+  </div>
+</div>
+{% if not requests %}
+<div class="empty"><p>No requests yet. Approve a suggestion or add one from Discover.</p></div>
+{% endif %}
+<div class="req-list">
+  {% for r in requests %}
+  <div class="req-row" data-id="{{ r.id }}">
+    <img class="req-cover" src="{{ r.cover or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
+    <div class="req-info">
+      <div class="req-title">{{ r.title }}{% if r.username %} <span class="subtle">· {{ r.username }}</span>{% endif %}</div>
+      <div class="req-author">{{ r.author }}</div>
+      <div class="req-detail" title="{{ r.detail }}">{{ r.detail }}</div>
+    </div>
+    <span class="badge badge-{{ r.status }}">{{ {'queued':'Queued','handed':'Sent to Chaptarr','available':'In library','failed':'Failed'}.get(r.status, r.status) }}</span>
+    <div class="req-actions">
+      {% if r.status == 'failed' %}<button class="btn small" onclick="Stackarr.retry({{ r.id }})">Retry</button>{% endif %}
+      <button class="btn small ghost" onclick="Stackarr.removeRequest({{ r.id }})">Remove</button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

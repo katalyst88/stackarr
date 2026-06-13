@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="topbar">
+  <h2 class="page-title">Suggestions <span class="subtle">picked from your listening — no AI</span></h2>
+  <div class="topbar-actions">
+    <button class="btn small ghost" onclick="Stackarr.toggleTheme()" id="theme-toggle" title="Light / dark">◑</button>
+    <button class="btn small" onclick="Stackarr.runNow(this)">Refresh picks</button>
+  </div>
+</div>
+
+{% if not lanes %}
+<div class="empty"><p>No suggestions yet. As you finish books in Audiobookshelf, Stackarr fills your shelf —
+each pick tells you exactly why it's here. Hit <b>Refresh picks</b> to generate now, or add what you've
+already read on the <a href="{{ url_for('main.settings_page') }}">Settings</a> page to sharpen them.</p></div>
+{% endif %}
+
+{% for lane, items in lanes.items() %}
+<h3 class="lane-title">{{ lane_titles.get(lane, lane) }}</h3>
+<div class="grid">
+  {% for s in items %}
+  <div class="card" data-id="{{ s.id }}">
+    <div class="poster">
+      <img src="{{ s.cover or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
+    </div>
+    <div class="card-body">
+      <div class="card-title">{{ s.title }}</div>
+      <div class="card-author">{{ s.author }}</div>
+      {% if s.series %}<div class="card-meta">{{ s.series }}</div>{% endif %}
+      <div class="card-reason">{{ s.reason }}</div>
+      <div class="card-actions">
+        <button class="btn" onclick="Stackarr.decide({{ s.id }}, 'approve', this)">Approve</button>
+        <button class="btn ghost" onclick="Stackarr.decide({{ s.id }}, 'reject', this)">Pass</button>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+{% endblock %}

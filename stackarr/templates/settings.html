@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="topbar">
+  <h2 class="page-title">Settings</h2>
+  <button class="btn small ghost" onclick="Stackarr.toggleTheme()" id="theme-toggle" title="Light / dark">◑</button>
+</div>
+
+<section class="panel">
+  <h3>Appearance</h3>
+  <label class="row"><span>Light theme</span>
+    <input type="checkbox" id="ui-theme" onchange="Stackarr.toggleTheme()"></label>
+</section>
+
+<section class="panel">
+  <h3>I've already read…</h3>
+  <p class="muted">Tell Stackarr a book you've read so it shapes your suggestions — no download.</p>
+  <div class="inline-form">
+    <input id="mr-title" placeholder="Title">
+    <input id="mr-author" placeholder="Author (optional)">
+    <button class="btn" onclick="Stackarr.markRead(this)">Add</button>
+  </div>
+</section>
+
+<section class="panel">
+  <h3>Email digests</h3>
+  {% if not email_configured %}
+  <p class="muted">No SMTP server configured. Set SMTP_* in your environment to enable email digests.</p>
+  {% else %}
+  <label class="row"><span>Send email digests</span>
+    <input type="checkbox" id="email-enabled" {{ 'checked' if email_enabled }}
+           onchange="Stackarr.setSetting({email_enabled: this.checked})"></label>
+  <div class="theme-picker">
+    <p class="muted">Email theme</p>
+    <div class="theme-tabs">
+      {% for t in themes %}
+      <button class="theme-tab {{ 'active' if t == email_theme }}" data-theme="{{ t }}"
+              onclick="Stackarr.pickEmailTheme('{{ t }}', this)">{{ t|capitalize }}</button>
+      {% endfor %}
+    </div>
+    <iframe id="email-preview" class="email-preview" title="email preview"></iframe>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h3>Discord</h3>
+  {% if not discord_configured %}
+  <p class="muted">No Discord webhook configured. Set DISCORD_WEBHOOK (and optionally a bot token) in your environment.</p>
+  {% else %}
+  <label class="row"><span>Post digests to Discord</span>
+    <input type="checkbox" id="discord-enabled" {{ 'checked' if discord_enabled }}
+           onchange="Stackarr.setSetting({discord_enabled: this.checked})"></label>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}<script>Stackarr.initSettings("{{ email_theme }}");</script>{% endblock %}

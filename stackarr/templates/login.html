@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ app_name }} — sign in</title>
+<link rel="icon" href="{{ url_for('static', filename='icon.svg') }}" type="image/svg+xml">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style>:root { --accent: {{ accent }}; }</style>
+</head>
+<body class="login-body">
+<div class="login-card">
+  <img src="{{ url_for('static', filename='icon.svg') }}" alt="" class="login-logo">
+  <h1>{{ app_name }}</h1>
+  <p class="tagline">Your next listen, picked from your shelf.</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post">
+    <input name="username" placeholder="Audiobookshelf username" autocomplete="username" autofocus>
+    <input name="password" type="password" placeholder="Password" autocomplete="current-password">
+    <button type="submit">Sign in</button>
+  </form>
+  <p class="hint">Sign in with your Audiobookshelf account.</p>
+  <p class="hint">v{{ version }} · {{ stage }}</p>
+</div>
+<script>
+// honour saved light/dark preference on the login screen too
+if (localStorage.getItem('stackarr-theme') === 'light') document.body.setAttribute('data-theme','light');
+</script>
+</body>
+</html>

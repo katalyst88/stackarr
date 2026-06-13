@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="topbar">
+  <h2 class="page-title">Discover <span class="subtle">popular & new in your genres</span></h2>
+  <button class="btn small ghost" onclick="Stackarr.toggleTheme()" id="theme-toggle" title="Light / dark">◑</button>
+</div>
+<div class="searchbar">
+  <svg viewBox="0 0 24 24"><path d="M15.5 14h-.8l-.3-.3a6.5 6.5 0 1 0-.7.7l.3.3v.8l5 5 1.5-1.5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
+  <input id="q" type="search" placeholder="Search any audiobook to add or mark as read…">
+</div>
+<div id="results" class="grid"></div>
+<div id="discover" class="grid"></div>
+{% endblock %}
+{% block scripts %}<script>Stackarr.initDiscover();</script>{% endblock %}
