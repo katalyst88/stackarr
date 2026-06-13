@@ -99,6 +99,28 @@ def items(library_id: str) -> list[dict]:
             return out
 
 
+def recent_added(limit: int = 14) -> list[dict]:
+    """Most recently added audiobooks across libraries, for the dashboard row.
+    Each: {item_id, title, author, asin, cover, added}."""
+    out = []
+    tok = admin_token()
+    for lib in libraries():
+        try:
+            d = _user_get(tok, f"/api/libraries/{lib['id']}/items",
+                          {"limit": limit, "sort": "addedAt", "desc": 1})
+            for it in d.get("results", []):
+                m = item_meta(it)
+                if not m["item_id"]:
+                    continue
+                m["added"] = it.get("addedAt", 0)
+                m["cover"] = f"{abs_url()}/api/items/{m['item_id']}/cover?token={tok}"
+                out.append(m)
+        except Exception as e:
+            log.warning("recent_added failed for %s: %s", lib.get("name"), e)
+    out.sort(key=lambda x: x.get("added", 0), reverse=True)
+    return out[:limit]
+
+
 def item_meta(it: dict) -> dict:
     md = ((it.get("media") or {}).get("metadata") or {})
     return {"item_id": it.get("id", ""), "title": md.get("title") or "",

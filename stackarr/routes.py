@@ -61,8 +61,37 @@ def suggestions_page():
                   "hidden", "awards", "short", "epic", "upcoming", "importlist", "foryou", "discover"]
     lanes = {k: lanes[k] for k in lane_order if k in lanes}
     from . import discover
+    # dashboard rows (only render if content exists)
+    try:
+        recently_added = absclient.recent_added(14)
+    except Exception:
+        recently_added = []
+    with db.conn() as c:
+        recent_requests = [dict(r) for r in c.execute(
+            "SELECT title, author, cover, status, asin FROM requests WHERE user_id=? "
+            "ORDER BY id DESC LIMIT 14", (u["id"],))]
     return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles,
-                           genres=discover.DEFAULT_GENRES)
+                           genres=discover.DEFAULT_GENRES, abs_base=absclient.abs_url(),
+                           recently_added=recently_added, recent_requests=recent_requests)
+
+
+@bp.route("/lane/<lane>")
+@auth.login_required
+def lane_grid(lane):
+    u = auth.current_user()
+    titles = {"series": "Series to finish", "author": "More from authors you love",
+              "enjoyed": "Readers also enjoyed", "discover_author": "New authors to discover",
+              "narrator": "Narrators you love", "genre": "More in your favourite genres",
+              "hidden": "Hidden gems", "awards": "Award winners", "short": "Short listens",
+              "epic": "Epic listens", "upcoming": "New & upcoming", "importlist": "From your reading list",
+              "discover": "Popular picks", "foryou": "For you"}
+    with db.conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT * FROM suggestions WHERE user_id=? AND lane=? AND status='pending' ORDER BY score DESC",
+            (u["id"], lane))]
+        for r in rows:
+            r["available"] = _owned(c, r["asin"], r["title"], r["author"])
+    return render_template("lane.html", rows=rows, lane=lane, title=titles.get(lane, lane))
 
 
 @bp.route("/discover")
@@ -566,7 +595,7 @@ def manifest():
 def service_worker():
     base = config.URL_BASE or ""
     js = (
-        "const C='stackarr-v1';\n"
+        "const C='stackarr-v2';\n"
         f"const SHELL=['{base}/','{base}/static/style.css','{base}/static/app.js','{base}/static/icon.svg'];\n"
         "self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()))});\n"
         "self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});\n"

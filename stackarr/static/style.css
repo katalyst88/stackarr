@@ -110,6 +110,11 @@ main { padding: 18px clamp(14px,3vw,40px) 96px; max-width: 2400px; width: 100%; 
 .section { margin-bottom: 30px; }
 .section-head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 12px; }
 .section-head h3 { font-size: 17px; font-weight: 700; }
+.section-link { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: var(--text); }
+.section-link .chev { color: var(--subtle); font-size: 22px; line-height: 1; transition: transform .15s, color .15s; }
+.section-link:hover .chev { transform: translateX(3px); color: var(--accent); }
+.section-link:hover h3 { color: var(--accent); }
+.media-card { backface-visibility: hidden; }   /* keep posters crisp through hover transform */
 .slider-wrap { position: relative; }
 .slider { display: grid; grid-auto-flow: column; grid-auto-columns: clamp(180px, 13vw, 260px); gap: 18px; overflow-x: auto;
   padding: 4px 2px 12px; scroll-snap-type: x proximity; scroll-behavior: smooth;

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<button class="btn small ghost back-btn" onclick="history.back()">‹ Back</button>
+<div class="page-head"><h2 class="page-title">{{ title }} <span class="subtle">{{ rows|length }} picks</span></h2></div>
+{% if not rows %}<div class="empty"><p>Nothing here right now.</p></div>{% endif %}
+<div class="grid">
+  {% for s in rows %}
+  <div class="media-card" data-id="{{ s.id }}">
+    <a class="media-poster" href="{{ url_for('main.book_page', asin=s.asin) }}">
+      <img src="{{ (s.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
+      {% if s.available %}<span class="corner-badge available">Available</span>
+      {% elif lane == 'upcoming' %}<span class="corner-badge handed">Coming {{ s.extra }}</span>
+      {% elif lane == 'series' %}<span class="corner-badge series">Series</span>{% endif %}
+      <div class="media-overlay">
+        <div class="ov-reason">{{ s.reason }}</div>
+        <div class="ov-actions">
+          {% if s.available %}<button class="btn" disabled>In library</button>
+          {% elif lane == 'upcoming' %}<button class="btn" disabled>Coming soon</button>
+          {% else %}<button class="btn" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'approve',this)">Approve</button>{% endif %}
+          <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'read',this)">Read it</button>
+          <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'reject',this)">Ignore</button>
+        </div>
+      </div>
+    </a>
+    <div class="media-foot"><div class="media-title" title="{{ s.title }}">{{ s.title }}</div><div class="media-author">{{ s.author }}</div></div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}<script>Stackarr.boot();</script>{% endblock %}

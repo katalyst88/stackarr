@@ -1,4 +1,17 @@
 {% extends "base.html" %}
+{% macro lane_row(lane, items, title, see_all=None) %}
+<section class="section">
+  <div class="section-head">
+    {% if see_all %}<a class="section-link" href="{{ see_all }}"><h3>{{ title }}</h3><span class="chev">›</span></a>
+    {% else %}<h3>{{ title }}</h3>{% endif %}
+  </div>
+  <div class="slider-wrap">
+    <button class="slider-arrow left" onclick="Stackarr.slide(this,-1)" aria-label="scroll left">‹</button>
+    <div class="slider">{{ caller() }}</div>
+    <button class="slider-arrow right" onclick="Stackarr.slide(this,1)" aria-label="scroll right">›</button>
+  </div>
+</section>
+{% endmacro %}
 {% block content %}
 <div class="page-head">
   <h2 class="page-title">Suggestions <span class="subtle">curated based on your listening history</span></h2>
@@ -7,10 +20,8 @@
 
 <div id="shelf-loader" class="shelf-loader" hidden>
   <div class="shelf-scene">
-    <div class="shelf-books">
-      <span class="sb sb1"></span><span class="sb sb2"></span><span class="sb sb3"></span>
-      <span class="sb sb4"></span><span class="sb sb5"></span><span class="sb sb6"></span><span class="sb sb7"></span>
-    </div>
+    <div class="shelf-books"><span class="sb sb1"></span><span class="sb sb2"></span><span class="sb sb3"></span>
+      <span class="sb sb4"></span><span class="sb sb5"></span><span class="sb sb6"></span><span class="sb sb7"></span></div>
     <div class="shelf-plank"></div><div class="shelf-hand">📖</div>
   </div>
   <p class="shelf-text">Pulling books off the shelf…</p>
@@ -22,43 +33,59 @@
     appear — or add what you've already read on the <a href="{{ url_for('main.settings_page') }}">Settings</a> page.</p></div>
 
   {% if genres %}
-  <div class="genre-chips">
-    <span class="subtle">Browse by genre:</span>
+  <div class="genre-chips"><span class="subtle">Browse by genre:</span>
     {% for g in genres %}<a class="genre-chip" href="{{ url_for('main.browse_page', genre=g) }}">{{ g }}</a>{% endfor %}
   </div>
   {% endif %}
 
+  {% if recent_requests %}
+  {% call lane_row('req', recent_requests, 'Recent requests', url_for('main.requests_page')) %}
+    {% for r in recent_requests %}
+    <a class="media-card" href="{% if r.asin %}{{ url_for('main.book_page', asin=r.asin) }}{% else %}{{ url_for('main.requests_page') }}{% endif %}">
+      <div class="media-poster"><img src="{{ (r.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
+        <span class="corner-badge {{ r.status }}">{{ {'queued':'Requested','handed':'Requested','available':'Available','failed':'Failed'}.get(r.status, r.status) }}</span></div>
+      <div class="media-foot"><div class="media-title" title="{{ r.title }}">{{ r.title }}</div><div class="media-author">{{ r.author }}</div></div>
+    </a>
+    {% endfor %}
+  {% endcall %}
+  {% endif %}
+
+  {% if recently_added %}
+  {% call lane_row('added', recently_added, 'Recently added to your library') %}
+    {% for r in recently_added %}
+    <a class="media-card" href="{% if r.asin %}{{ url_for('main.book_page', asin=r.asin) }}{% else %}{{ abs_base }}/item/{{ r.item_id }}{% endif %}">
+      <div class="media-poster"><img src="{{ r.cover or url_for('static', filename='icon.svg') }}" loading="lazy" alt="" onerror="this.src='{{ url_for('static', filename='icon.svg') }}'">
+        <span class="corner-badge available">In library</span></div>
+      <div class="media-foot"><div class="media-title" title="{{ r.title }}">{{ r.title }}</div><div class="media-author">{{ r.author }}</div></div>
+    </a>
+    {% endfor %}
+  {% endcall %}
+  {% endif %}
+
   {% for lane, items in lanes.items() %}
-  <section class="section">
-    <div class="section-head"><h3>{{ lane_titles.get(lane, lane) }}</h3></div>
-    <div class="slider-wrap">
-      <button class="slider-arrow left" onclick="Stackarr.slide(this,-1)">‹</button>
-      <div class="slider">
-        {% for s in items %}
-        <div class="media-card" data-id="{{ s.id }}">
-          <a class="media-poster" href="{{ url_for('main.book_page', asin=s.asin) }}">
-            <img src="{{ (s.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
-            {% if s.available %}<span class="corner-badge available">Available</span>
-            {% elif lane == 'upcoming' %}<span class="corner-badge handed">Coming {{ s.extra }}</span>
-            {% elif lane == 'series' %}<span class="corner-badge series">Series</span>{% endif %}
-            <div class="media-overlay">
-              <div class="ov-reason">{{ s.reason }}</div>
-              <div class="ov-actions">
-                {% if s.available %}<button class="btn" disabled>In library</button>
-                {% elif lane == 'upcoming' %}<button class="btn" disabled>Coming soon</button>
-                {% else %}<button class="btn" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'approve',this)">Approve</button>{% endif %}
-                <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'read',this)">Read it</button>
-                <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'reject',this)">Ignore</button>
-              </div>
-            </div>
-          </a>
-          <div class="media-foot"><div class="media-title" title="{{ s.title }}">{{ s.title }}</div><div class="media-author">{{ s.author }}</div></div>
+  {% call lane_row(lane, items, lane_titles.get(lane, lane), url_for('main.lane_grid', lane=lane)) %}
+    {% for s in items %}
+    <div class="media-card" data-id="{{ s.id }}">
+      <a class="media-poster" href="{{ url_for('main.book_page', asin=s.asin) }}">
+        <img src="{{ (s.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
+        {% if s.available %}<span class="corner-badge available">Available</span>
+        {% elif lane == 'upcoming' %}<span class="corner-badge handed">Coming {{ s.extra }}</span>
+        {% elif lane == 'series' %}<span class="corner-badge series">Series</span>{% endif %}
+        <div class="media-overlay">
+          <div class="ov-reason">{{ s.reason }}</div>
+          <div class="ov-actions">
+            {% if s.available %}<button class="btn" disabled>In library</button>
+            {% elif lane == 'upcoming' %}<button class="btn" disabled>Coming soon</button>
+            {% else %}<button class="btn" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'approve',this)">Approve</button>{% endif %}
+            <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'read',this)">Read it</button>
+            <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'reject',this)">Ignore</button>
+          </div>
         </div>
-        {% endfor %}
-      </div>
-      <button class="slider-arrow right" onclick="Stackarr.slide(this,1)">›</button>
+      </a>
+      <div class="media-foot"><div class="media-title" title="{{ s.title }}">{{ s.title }}</div><div class="media-author">{{ s.author }}</div></div>
     </div>
-  </section>
+    {% endfor %}
+  {% endcall %}
   {% endfor %}
 </div>
 {% endblock %}
