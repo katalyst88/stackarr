@@ -276,6 +276,18 @@ const Stackarr = (() => {
       const c = btn.querySelector(".vcount"); if (c) c.textContent = r.votes;
       btn.classList.toggle("voted");
     },
+    async pollRequestStatus() {
+      try {
+        const s = await api("/api/requests/status");
+        for (const [id, st] of Object.entries(s || {})) {
+          const row = document.querySelector(`.req-row[data-id="${id}"] .badge`);
+          if (row && (st === "downloading" || st === "importing")) {
+            row.textContent = st === "importing" ? "Importing" : "Downloading";
+            row.className = "badge badge-handed";
+          }
+        }
+      } catch (e) {}
+    },
     async checkLibraries(btn) {
       if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
       const r = await api("/api/requests/check", { method: "POST", body: "{}" });

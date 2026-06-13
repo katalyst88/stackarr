@@ -117,6 +117,10 @@
         <label class="row"><span>Metadata profile id</span><input type="number" data-setting="chaptarr_metadata_profile_id" value="{{ conn.chaptarr_metadata_profile_id }}"></label>
         <div class="conn-actions"><button class="btn small ghost" onclick="Stackarr.testConn('chaptarr', this)">Test</button>
           <span class="conn-result" id="test-chaptarr"></span></div>
+        <p class="muted" style="margin-top:12px">Optional — real-time status: in <b>Chaptarr → Settings → Connect → + → Webhook</b>,
+          set the URL below (triggers: On Grab, On Import). Stackarr then flips requests to Available the moment Chaptarr imports them.</p>
+        <label class="row"><span>Webhook URL</span><input readonly onclick="this.select()"
+          value="{{ (conn.public_url or 'http://YOUR-STACKARR-HOST:8484') }}/api/webhook/chaptarr?token={{ conn.chaptarr_webhook_token }}"></label>
       </div>
 
       {% if show_ebook %}

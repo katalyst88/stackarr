@@ -735,6 +735,8 @@ def settings_page():
                                  "chaptarr_root_folder": g("chaptarr_root_folder", config.CHAPTARR_ROOT_FOLDER),
                                  "chaptarr_quality_profile_id": g("chaptarr_quality_profile_id", str(config.CHAPTARR_QUALITY_PROFILE_ID)),
                                  "chaptarr_metadata_profile_id": g("chaptarr_metadata_profile_id", str(config.CHAPTARR_METADATA_PROFILE_ID)),
+                                 "chaptarr_webhook_token": db.get_meta("chaptarr_webhook_token") or _ensure_webhook_token(),
+                                 "public_url": db.get_meta("public_url", ""),
                                  "kavita_url": g("kavita_url", config.KAVITA_URL),
                                  "kavita_api_key": g("kavita_api_key", config.KAVITA_API_KEY),
                                  "calibreweb_url": g("calibreweb_url", config.CALIBREWEB_URL),
@@ -764,6 +766,16 @@ def _owned(c, asin, title, author) -> bool:
     return bool(c.execute(
         "SELECT 1 FROM library WHERE gone_at IS NULL AND lower(title)=? AND lower(author) LIKE ?",
         ((title or "").strip().lower(), f"%{a}%")).fetchone())
+
+
+def _ensure_webhook_token() -> str:
+    """A stable per-install token for the Chaptarr Connect webhook URL."""
+    import secrets
+    t = db.get_meta("chaptarr_webhook_token", "")
+    if not t:
+        t = secrets.token_urlsafe(16)
+        db.set_meta("chaptarr_webhook_token", t)
+    return t
 
 
 def _req_format(body) -> str:
@@ -1091,6 +1103,47 @@ def api_onboard_dismiss():
     return jsonify({"ok": True})
 
 
+@bp.route("/api/requests/status")
+@auth.login_required
+def api_requests_status():
+    """Live per-request status, merging the stored status with Chaptarr's queue
+    (downloading / importing) so the Requests page shows real progress."""
+    u = auth.current_user()
+    with db.conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT id,title,status FROM requests WHERE user_id=? AND status IN ('queued','handed')", (u["id"],))]
+    live = chaptarr.queue_status() if rows else {}
+    out = {}
+    for r in rows:
+        t = (r["title"] or "").lower().strip()
+        hit = next((v for k, v in live.items() if t and (t in k or k in t)), None)
+        out[r["id"]] = hit or r["status"]
+    return jsonify(out)
+
+
+@bp.route("/api/webhook/chaptarr", methods=["POST"])
+def api_webhook_chaptarr():
+    """Chaptarr Connect webhook → real-time request updates. Token-protected via
+    ?token= (set the same token in Settings). On import/download, flips the
+    matching request to available/handed."""
+    token = db.get_meta("chaptarr_webhook_token", "")
+    if not token or request.args.get("token") != token:
+        return jsonify({"error": "bad token"}), 403
+    body = request.get_json(silent=True) or {}
+    event = (body.get("eventType") or "").lower()
+    book = (body.get("book") or {})
+    title = (book.get("title") or body.get("bookTitle") or "").strip()
+    if not title:
+        return jsonify({"ok": True, "ignored": "no title"})
+    new = "available" if event in ("download", "bookfileimported", "import") else None
+    if new:
+        with db.conn() as c:
+            c.execute("UPDATE requests SET status=?,updated_at=datetime('now','localtime') "
+                      "WHERE lower(title) LIKE ? AND status IN ('queued','handed','failed')",
+                      (new, f"%{title.lower()[:40]}%"))
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/requests/check", methods=["POST"])
 @auth.login_required
 def api_requests_check():
@@ -1236,6 +1289,7 @@ SETTING_KEYS = {
     "auto_add_level", "formats",
     "kavita_url", "kavita_api_key",
     "calibreweb_url", "calibreweb_user", "calibreweb_pass",
+    "chaptarr_webhook_token",
 }
 BOOL_KEYS = {"email_enabled", "discord_enabled", "hide_rated_history",
              "notify_avail_enabled", "notify_newrelease_enabled", "cross_format_taste"}
@@ -1266,7 +1320,13 @@ def api_test(service):
             import requests as rq
             r = rq.get(f"{chaptarr.url()}/api/v1/system/status",
                        headers={"X-Api-Key": chaptarr.api_key()}, timeout=15)
-            return jsonify({"ok": r.ok, "detail": "Connected" if r.ok else f"HTTP {r.status_code}"})
+            if not r.ok:
+                return jsonify({"ok": False, "detail": f"HTTP {r.status_code}"})
+            warns = chaptarr.health()
+            msg = "Connected"
+            if warns:
+                msg += " — heads up: " + "; ".join(w["message"][:80] for w in warns[:2])
+            return jsonify({"ok": True, "detail": msg, "warnings": warns})
         # every library source backend (abs / kavita / calibreweb) self-tests
         from . import backends
         b = backends.by_id(service)
