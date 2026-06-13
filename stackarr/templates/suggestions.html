@@ -32,16 +32,6 @@
   <div class="empty" id="empty-state" hidden><p>No new picks right now. As you finish more books, fresh suggestions
     appear — or add what you've already read on the <a href="{{ url_for('main.settings_page') }}">Settings</a> page.</p></div>
 
-  {% if genres %}
-  {% call lane_row('genrebrowse', genres, 'Browse by genre') %}
-    {% for g in genres %}
-    <a class="media-card genre-card" href="{{ url_for('main.browse_page', genre=g) }}">
-      <div class="media-poster genre-poster"><span class="genre-card-label">{{ g }}</span></div>
-    </a>
-    {% endfor %}
-  {% endcall %}
-  {% endif %}
-
   {% if recent_requests %}
   {% call lane_row('req', recent_requests, 'Recent requests', url_for('main.requests_page')) %}
     {% for r in recent_requests %}
@@ -90,6 +80,15 @@
     </div>
     {% endfor %}
   {% endcall %}
+  {% if loop.first and genres %}
+  {% call lane_row('genrebrowse', genres, 'Browse by genre') %}
+    {% for g in genres %}
+    <a class="media-card genre-card" href="{{ url_for('main.browse_page', genre=g) }}">
+      <div class="media-poster genre-poster"><span class="genre-card-label">{{ g }}</span></div>
+    </a>
+    {% endfor %}
+  {% endcall %}
+  {% endif %}
   {% endfor %}
 
   <section class="section" id="home-discover-section">
