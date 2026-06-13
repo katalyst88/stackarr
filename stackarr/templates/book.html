@@ -10,14 +10,22 @@
   <div class="book-info">
     <h1 class="book-title">{{ b.title }}</h1>
     {% if b.subtitle %}<p class="book-subtitle">{{ b.subtitle }}</p>{% endif %}
-    <p class="book-author">{{ b.author }}{% if b.narrator %} · narrated by {{ b.narrator }}{% endif %}</p>
+    <p class="book-author">
+      {% for a in (b.author or '').split(',') if a.strip() %}<a class="author-link" href="{{ url_for('main.browse_page', author=a.strip()) }}">{{ a.strip() }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+      {% if b.narrator %}<span class="subtle"> · narrated by {{ b.narrator }}</span>{% endif %}
+    </p>
     <div class="book-meta">
       {% if b.series %}<span class="chip">{{ b.series }}{% if b.sequence %} #{{ b.sequence }}{% endif %}</span>{% endif %}
-      {% if b.runtime_hours %}<span class="chip">{{ b.runtime_hours }}h</span>{% endif %}
-      {% if b.rating %}<span class="chip">★ {{ b.rating }}</span>{% endif %}
-      {% if b.release_date %}<span class="chip">{{ b.release_date }}</span>{% endif %}
-      {% for g in b.genres or [] %}<span class="chip subtle-chip">{{ g }}</span>{% endfor %}
+      {% if b.runtime_hours %}<span class="chip">⏱ {{ b.runtime_hours }}h</span>{% endif %}
+      {% if b.rating %}<span class="chip">★ {{ b.rating }}{% if b.num_ratings %} ({{ '{:,}'.format(b.num_ratings) }}){% endif %}</span>{% endif %}
+      {% if b.release_date %}<span class="chip">📅 {{ b.release_date }}</span>{% endif %}
+      {% if b.format %}<span class="chip">{{ b.format }}</span>{% endif %}
+      {% if b.language %}<span class="chip">{{ b.language }}</span>{% endif %}
+      {% if b.publisher %}<span class="chip subtle-chip">{{ b.publisher }}</span>{% endif %}
     </div>
+    {% if b.genres %}<div class="book-meta">
+      {% for g in b.genres %}<a class="chip subtle-chip" href="{{ url_for('main.browse_page', genre=g) }}">{{ g }}</a>{% endfor %}
+    </div>{% endif %}
     {% if b.summary %}<p class="book-summary">{{ b.summary }}</p>{% endif %}
     <div class="book-actions">
       {% if b.state == 'available' %}<button class="btn" disabled>In library</button>

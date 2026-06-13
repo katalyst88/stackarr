@@ -21,6 +21,13 @@
   <div class="empty" id="empty-state" hidden><p>No new picks right now. As you finish more books, fresh suggestions
     appear — or add what you've already read on the <a href="{{ url_for('main.settings_page') }}">Settings</a> page.</p></div>
 
+  {% if genres %}
+  <div class="genre-chips">
+    <span class="subtle">Browse by genre:</span>
+    {% for g in genres %}<a class="genre-chip" href="{{ url_for('main.browse_page', genre=g) }}">{{ g }}</a>{% endfor %}
+  </div>
+  {% endif %}
+
   {% for lane, items in lanes.items() %}
   <section class="section">
     <div class="section-head"><h3>{{ lane_titles.get(lane, lane) }}</h3></div>
@@ -30,7 +37,7 @@
         {% for s in items %}
         <div class="media-card" data-id="{{ s.id }}">
           <a class="media-poster" href="{{ url_for('main.book_page', asin=s.asin) }}">
-            <img src="{{ s.cover or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
+            <img src="{{ (s.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
             {% if s.available %}<span class="corner-badge available">Available</span>
             {% elif lane == 'upcoming' %}<span class="corner-badge handed">Coming {{ s.extra }}</span>
             {% elif lane == 'series' %}<span class="corner-badge series">Series</span>{% endif %}

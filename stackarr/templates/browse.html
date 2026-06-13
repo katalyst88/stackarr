@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<button class="btn small ghost back-btn" onclick="history.back()">‹ Back</button>
+<div class="page-head">
+  <h2 class="page-title">{% if kind == 'author' %}Books by {{ title }}{% else %}{{ title }}{% endif %}
+    <span class="subtle">{{ books|length }} found</span></h2>
+  {% if kind == 'author' %}
+  <button class="btn small" onclick="Stackarr.addAllByAuthor('{{ author|e }}', this)">Add all books by {{ title }}</button>
+  {% endif %}
+</div>
+{% if not books %}<div class="empty"><p>Nothing found.</p></div>{% endif %}
+<div class="grid">
+  {% for b in books %}
+  <div class="media-card">
+    <a class="media-poster" href="{{ url_for('main.book_page', asin=b.asin) }}">
+      <img src="{{ b.cover or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
+      {% if b.state == 'available' %}<span class="corner-badge available">Available</span>
+      {% elif b.state in ('handed','queued') %}<span class="corner-badge handed">Requested</span>{% endif %}
+      <div class="media-overlay">
+        <div class="ov-reason">{{ b.author }}{% if b.series %} · {{ b.series }}{% endif %}</div>
+        <div class="ov-actions">
+          {% if b.state in ('available','handed','queued') %}<button class="btn" disabled>{{ 'In library' if b.state=='available' else 'Requested' }}</button>
+          {% else %}<button class="btn" onclick='event.preventDefault();event.stopPropagation();Stackarr.bookRequest({{ b|tojson }}, this)'>Request</button>{% endif %}
+          <button class="btn ghost" onclick='event.preventDefault();event.stopPropagation();Stackarr.bookIgnore({{ b|tojson }}, this)'>Ignore</button>
+        </div>
+      </div>
+    </a>
+    <div class="media-foot"><div class="media-title" title="{{ b.title }}">{{ b.title }}</div><div class="media-author">{{ b.author }}</div></div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}<script>Stackarr.boot();</script>{% endblock %}

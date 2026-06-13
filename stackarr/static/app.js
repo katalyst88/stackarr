@@ -13,6 +13,7 @@ const Stackarr = (() => {
     return ct.includes("json") ? r.json() : r.text();
   };
   const esc = (s) => (s || "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const hires = (u) => (u || "").replace(/\._S[XYL]\d+_\./, "._SL1500_.");
 
   const applyTheme = () => {
     const light = localStorage.getItem("stackarr-theme") === "light";
@@ -36,7 +37,7 @@ const Stackarr = (() => {
     const j = (o) => JSON.stringify(o).replace(/'/g, "&#39;");
     return `<div class="media-card">
       <div class="media-poster">
-        ${b.cover ? `<img src="${esc(b.cover)}" loading="lazy" alt="">` : ""}
+        ${b.cover ? `<img src="${esc(hires(b.cover))}" loading="lazy" alt="">` : ""}
         ${tag ? `<span class="corner-badge ${tag[1]}">${tag[0]}</span>` : ""}
         <div class="media-overlay">
           <div class="ov-reason">${esc(reason)}</div>
@@ -78,7 +79,12 @@ const Stackarr = (() => {
   };
 
   return {
-    boot() { applyTheme(); document.body.classList.add("loaded"); this.initSearchSuggest(); },
+    boot() {
+      applyTheme();
+      if (localStorage.getItem("stackarr-nav") === "collapsed") document.body.classList.add("nav-collapsed");
+      document.body.classList.add("loaded");
+      this.initSearchSuggest();
+    },
     initSearchSuggest() {
       const inp = document.getElementById("topsearch"), box = document.getElementById("search-suggest");
       if (!inp || !box) return;
@@ -91,7 +97,7 @@ const Stackarr = (() => {
           const rs = await api("/api/suggest?q=" + encodeURIComponent(q));
           if (!rs) return;
           box.innerHTML = rs.map(b => `<a class="ss-item" href="${B()}/book/${encodeURIComponent(b.asin)}">
-            <img src="${esc(b.cover)}" alt=""><div style="min-width:0"><div class="ss-title">${esc(b.title)}</div>
+            <img src="${esc(hires(b.cover))}" alt=""><div style="min-width:0"><div class="ss-title">${esc(b.title)}</div>
             <div class="ss-sub">${esc(b.author)}${b.series ? " · " + esc(b.series) : ""}</div></div></a>`).join("");
           box.classList.toggle("open", rs.length > 0);
         }, 250);
@@ -101,6 +107,17 @@ const Stackarr = (() => {
     async bookRequest(b, btn) { btn.disabled = true; btn.textContent = "Requesting…"; const r = await api("/api/request", { method: "POST", body: JSON.stringify(b) }); if (r) { btn.textContent = r.ok ? "Requested" : "Failed"; toast(r.detail || "Done."); } },
     async bookMarkRead(b, btn) { btn.disabled = true; await api("/api/markread-book", { method: "POST", body: JSON.stringify(b) }); toast("Marked as read — your picks will improve."); },
     async bookIgnore(b, btn) { btn.disabled = true; await api("/api/ignore", { method: "POST", body: JSON.stringify(b) }); toast("Ignored — you won't see this again."); },
+    async addAllByAuthor(author, btn) {
+      btn.disabled = true; btn.textContent = "Adding…";
+      const r = await api("/api/author/add", { method: "POST", body: JSON.stringify({ author }) });
+      btn.textContent = r && r.ok ? "Added to Chaptarr" : "Failed";
+      if (r) toast(r.detail || "Done.");
+    },
+    toggleNav() {
+      const c = !document.body.classList.contains("nav-collapsed");
+      document.body.classList.toggle("nav-collapsed", c);
+      localStorage.setItem("stackarr-nav", c ? "collapsed" : "open");
+    },
     slide(btn, dir) {
       const s = btn.parentElement.querySelector(".slider");
       if (s) s.scrollBy({ left: dir * s.clientWidth * 0.82, behavior: "smooth" });

@@ -59,6 +59,9 @@ def create_app() -> Flask:
         resp.headers["Content-Security-Policy"] = "frame-ancestors *"
         return resp
 
+    from . import audible
+    app.jinja_env.filters["hires"] = lambda u: audible._hi_res(u or "")
+
     from .routes import bp
     app.register_blueprint(bp)
 

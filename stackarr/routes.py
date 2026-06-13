@@ -60,7 +60,9 @@ def suggestions_page():
     lane_order = ["series", "author", "enjoyed", "discover_author", "narrator", "genre",
                   "hidden", "awards", "short", "epic", "upcoming", "importlist", "foryou", "discover"]
     lanes = {k: lanes[k] for k in lane_order if k in lanes}
-    return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles)
+    from . import discover
+    return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles,
+                           genres=discover.DEFAULT_GENRES)
 
 
 @bp.route("/discover")
@@ -137,6 +139,42 @@ def book_page(asin):
         b["series"], b["sequence"] = ax["series"], ax.get("sequence")
     b["state"] = _state_for(asin, b.get("title", ""), b.get("author", ""))
     return render_template("book.html", b=b)
+
+
+@bp.route("/browse")
+@auth.login_required
+def browse_page():
+    from . import discover
+    genre = request.args.get("genre", "").strip()
+    author = request.args.get("author", "").strip()
+    if author:
+        books, title, kind = audible.by_author(author, num=40), author, "author"
+    elif genre:
+        books, title, kind = discover.genre_new([genre], num_per=40), genre, "genre"
+    else:
+        return redirect(url_for("main.discover_page"))
+    seen, uniq = set(), []
+    for b in books:
+        if b.get("asin") and b["asin"] not in seen:
+            seen.add(b["asin"])
+            b["state"] = _state_for(b["asin"], b["title"], b["author"])
+            uniq.append(b)
+    return render_template("browse.html", books=uniq, title=title, kind=kind, author=author)
+
+
+@bp.route("/api/author/add", methods=["POST"])
+@auth.login_required
+def api_author_add():
+    u = auth.current_user()
+    author = request.get_json(force=True).get("author", "").strip()
+    if not author:
+        return jsonify({"error": "author required"}), 400
+    res = chaptarr.add_and_search(author, author)
+    with db.conn() as c:
+        c.execute("INSERT INTO requests (user_id,title,author,status,detail,source) VALUES (?,?,?,?,?,?)",
+                  (u["id"], f"All books by {author}", author,
+                   "handed" if res["ok"] else "failed", res.get("detail", ""), "manual"))
+    return jsonify(res)
 
 
 @bp.route("/settings")

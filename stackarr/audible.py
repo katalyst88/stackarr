@@ -16,11 +16,13 @@ def _hi_res(url: str) -> str:
     token (e.g. ._SL500_. -> ._SL1500_.), so covers aren't blurry on big cards."""
     return re.sub(r"\._S[XYL]\d+_\.", "._SL1500_.", url) if url else url
 
-GROUPS = "contributors,media,product_attrs,product_desc,series,category_ladders,rating"
+GROUPS = "contributors,media,product_attrs,product_desc,product_extended_attrs,series,category_ladders,rating"
 
 
 def _products(params: dict) -> list[dict]:
     params.setdefault("image_sizes", "1024,500")
+    if "num_results" in params:                       # Audible caps num_results at 50
+        params["num_results"] = min(int(params["num_results"]), 50)
     try:
         r = requests.get(f"{config.AUDIBLE_API}/catalog/products", params=params, timeout=20)
         r.raise_for_status()
@@ -77,10 +79,12 @@ def normalize(p: dict) -> dict:
         "release_date": (p.get("release_date") or "")[:10],
         "runtime_hours": round(minutes / 60, 1) if minutes else None,
         "rating": rating, "num_ratings": num_ratings,
-        "summary": (p.get("merchandising_summary") or "")[:600],
+        "summary": re.sub(r"<[^>]+>", "", (p.get("publisher_summary") or p.get("merchandising_summary") or "")).strip()[:2500],
+        "publisher": p.get("publisher_name") or "",
+        "format": (p.get("format_type") or "").title(),
         "categories": [c.get("name", "") for ladder in p.get("category_ladders") or []
                        for c in ladder.get("ladder", [])],
-        "language": (p.get("language") or "").lower(),
+        "language": (p.get("language") or "").title(),
     }
 
 
