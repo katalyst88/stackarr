@@ -89,6 +89,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
         return _finalize(user_id, cands, known, neg, max_new)
 
     now_ms = time.time() * 1000
+    target_lang = db.get_meta("language", config.TARGET_LANGUAGE)   # user-set; "any" disables filter
     cands: dict[str, dict] = {}
     narrators_seen: dict[str, float] = {}
 
@@ -98,6 +99,8 @@ def run(user_id: int, max_new: int | None = None) -> int:
             return
         if any(d in (b["title"] or "").lower() for d in DRAMATIZED):
             return                                          # skip dramatized/GraphicAudio variants
+        if target_lang != "any" and (b.get("language") or "english").lower() != target_lang:
+            return                                          # skip non-target-language editions
         if (b.get("rating") or 5) < config.SUGGEST_RATING_FLOOR:
             return
         # negative signals -> hard exclude

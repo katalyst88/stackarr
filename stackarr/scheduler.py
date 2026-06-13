@@ -55,33 +55,51 @@ def refresh_library():
                 c.execute("UPDATE requests SET status='available',updated_at=datetime('now','localtime') WHERE id=?", (r["id"],))
 
 
-def suggestion_cycle():
+def interval_hours() -> int:
+    try:
+        return max(int(db.get_meta("suggest_interval_hours", str(config.SUGGEST_INTERVAL_HOURS))), 1)
+    except ValueError:
+        return config.SUGGEST_INTERVAL_HOURS
+
+
+def run_for_user(user_id: int, force: bool = False) -> int:
+    """Run the recommender for one user if due (or forced), notify on new
+    picks, and stamp the per-user last-run time. Returns picks added."""
     if not config.SUGGEST_ENABLED:
-        return
-    last = db.get_meta("last_suggest_run")
-    if last and (time.time() - float(last)) / 3600 < config.SUGGEST_INTERVAL_HOURS:
-        return
-    db.set_meta("last_suggest_run", str(time.time()))
+        return 0
+    key = f"suggest_run_{user_id}"
+    last = db.get_meta(key)
+    if not force and last and (time.time() - float(last)) / 3600 < interval_hours():
+        return 0
+    db.set_meta(key, str(time.time()))
     with db.conn() as c:
-        users = [dict(r) for r in c.execute("SELECT id FROM users")]
-    for u in users:
+        pending = c.execute("SELECT COUNT(*) n FROM suggestions WHERE user_id=? AND status='pending'",
+                            (user_id,)).fetchone()["n"]
+    room = max(config.SUGGEST_MAX_PENDING - pending, 0)
+    if not room:
+        return 0
+    db.set_meta(f"running_{user_id}", "1")
+    try:
+        added = recommend.run(user_id, room)
+    except Exception as e:
+        log.warning("recommend failed for user %s: %s", user_id, e)
+        return 0
+    finally:
+        db.set_meta(f"running_{user_id}", "0")
+    if added:
         with db.conn() as c:
-            pending = c.execute("SELECT COUNT(*) n FROM suggestions WHERE user_id=? AND status='pending'",
-                                (u["id"],)).fetchone()["n"]
-        room = max(config.SUGGEST_MAX_PENDING - pending, 0)
-        if not room:
-            continue
-        try:
-            added = recommend.run(u["id"], room)
-        except Exception as e:
-            log.warning("recommend failed for user %s: %s", u["id"], e)
-            continue
-        if added:
-            with db.conn() as c:
-                rows = [dict(r) for r in c.execute(
-                    "SELECT title,author,reason,cover FROM suggestions "
-                    "WHERE user_id=? AND status='pending' ORDER BY score DESC", (u["id"],))]
-            notify.suggestion_digest(rows, base_url=db.get_meta("public_url", ""))
+            rows = [dict(r) for r in c.execute(
+                "SELECT title,author,reason,cover FROM suggestions "
+                "WHERE user_id=? AND status='pending' ORDER BY score DESC", (user_id,))]
+        notify.suggestion_digest(rows, base_url=db.get_meta("public_url", ""))
+    return added
+
+
+def suggestion_cycle():
+    with db.conn() as c:
+        users = [r["id"] for r in c.execute("SELECT id FROM users")]
+    for uid in users:
+        run_for_user(uid)
 
 
 def _loop():

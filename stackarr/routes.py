@@ -45,6 +45,10 @@ def suggestions_page():
         rows = [dict(r) for r in c.execute(
             "SELECT * FROM suggestions WHERE user_id=? AND status='pending' ORDER BY lane,score DESC",
             (u["id"],))]
+        for r in rows:
+            owned = c.execute("SELECT 1 FROM library WHERE gone_at IS NULL AND lower(title) LIKE ?",
+                              (f"%{(r['title'] or '').lower()[:40]}%",)).fetchone()
+            r["available"] = bool(owned)
     lanes = {}
     for r in rows:
         lanes.setdefault(r["lane"], []).append(r)
@@ -103,6 +107,9 @@ def settings_page():
                            discord_configured=bool(config.DISCORD_WEBHOOK),
                            discord_enabled=db.get_meta("discord_enabled", "1") == "1",
                            themes=list(notify.THEMES),
+                           interval_hours=db.get_meta("suggest_interval_hours", str(config.SUGGEST_INTERVAL_HOURS)),
+                           language=db.get_meta("language", config.TARGET_LANGUAGE),
+                           languages=["english","german","spanish","french","italian","dutch","portuguese","japanese","any"],
                            is_admin=auth.current_user()["role"] == "admin")
 
 
@@ -254,6 +261,13 @@ def api_settings():
         db.set_meta("discord_enabled", "1" if body["discord_enabled"] else "0")
     if body.get("email_theme") in notify.THEMES:
         db.set_meta("email_theme", body["email_theme"])
+    if "suggest_interval_hours" in body:
+        try:
+            db.set_meta("suggest_interval_hours", str(max(int(body["suggest_interval_hours"]), 1)))
+        except (ValueError, TypeError):
+            pass
+    if body.get("language"):
+        db.set_meta("language", str(body["language"]).lower())
     return jsonify({"ok": True})
 
 
@@ -272,9 +286,25 @@ def api_email_preview(theme):
 @bp.route("/api/run-now", methods=["POST"])
 @auth.login_required
 def api_run_now():
+    """Manual history scan — kicks the recommender in the background so the
+    loader animation can play, same as first login."""
+    import threading
+    from . import scheduler
     u = auth.current_user()
-    added = recommend.run(u["id"])
-    return jsonify({"ok": True, "added": added})
+    threading.Thread(target=scheduler.run_for_user, args=(u["id"],),
+                     kwargs={"force": True}, daemon=True).start()
+    return jsonify({"ok": True, "started": True})
+
+
+@bp.route("/api/suggestions/status")
+@auth.login_required
+def api_suggestions_status():
+    u = auth.current_user()
+    with db.conn() as c:
+        pending = c.execute("SELECT COUNT(*) n FROM suggestions WHERE user_id=? AND status='pending'",
+                            (u["id"],)).fetchone()["n"]
+    return jsonify({"pending": pending,
+                    "running": db.get_meta(f"running_{u['id']}", "0") == "1"})
 
 
 @bp.route("/api/health")

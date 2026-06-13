@@ -4,7 +4,7 @@ import os
 
 # Pre-public-release. The -pre suffix signals "not yet tested for public use";
 # bump to 1.0.0 only after real-world testing.
-VERSION = "0.1.0-pre"
+VERSION = "0.1.1-pre"
 RELEASE_STAGE = "pre-release · untested"
 
 
@@ -50,8 +50,9 @@ AUDNEXUS_REGION = os.environ.get("AUDNEXUS_REGION", AUDIBLE_DOMAIN if AUDIBLE_DO
 
 # --- suggestion engine ------------------------------------------------------
 SUGGEST_ENABLED = _bool("STACKARR_SUGGEST", True)
-SUGGEST_INTERVAL_HOURS = int(os.environ.get("STACKARR_SUGGEST_HOURS", "24"))
+SUGGEST_INTERVAL_HOURS = int(os.environ.get("STACKARR_SUGGEST_HOURS", "12"))   # default; user-overridable in Settings
 SUGGEST_MAX_PENDING = int(os.environ.get("STACKARR_SUGGEST_MAX", "12"))
+TARGET_LANGUAGE = os.environ.get("STACKARR_LANGUAGE", "english").lower()
 SUGGEST_RATING_FLOOR = float(os.environ.get("STACKARR_RATING_FLOOR", "4.0"))
 SUGGEST_MAX_PER_AUTHOR = int(os.environ.get("STACKARR_MAX_PER_AUTHOR", "2"))
 LIBRARY_REFRESH_MINUTES = int(os.environ.get("STACKARR_LIBRARY_REFRESH_MIN", "30"))

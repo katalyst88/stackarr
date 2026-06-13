@@ -2,6 +2,7 @@
 with their ABS username/password; Stackarr verifies against ABS, stores the
 returned token (to read that user's history), and tracks role. Admins (set
 via STACKARR_ADMINS, or ABS admins) can see all queues and auto-approve."""
+import threading
 from functools import wraps
 
 from flask import jsonify, redirect, request, session, url_for
@@ -22,6 +23,13 @@ def do_login(username: str, password: str) -> dict | None:
     user = db.upsert_user(info["id"], info["username"], info["token"], role)
     session.permanent = True
     session["uid"] = user["id"]
+    # First login (never run before) -> generate picks immediately in the
+    # background so the suggestions page is populated within seconds.
+    if not db.get_meta(f"suggest_run_{user['id']}"):
+        def _first_run(uid):
+            from . import scheduler
+            scheduler.run_for_user(uid, force=True)
+        threading.Thread(target=_first_run, args=(user["id"],), daemon=True).start()
     return user
 
 

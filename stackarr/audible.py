@@ -22,9 +22,24 @@ def _products(params: dict) -> list[dict]:
         return []
 
 
+ROLE_NOISE = ("translator", "illustrator", "editor", "- contributor", "foreword",
+              "introduction", "adapted", "afterword")
+
+
+def _clean_contributors(people: list) -> str:
+    """Drop translators/illustrators/editors and any name carrying a role
+    suffix, so authors/narrators are the real ones (rreading-glasses lesson)."""
+    out = []
+    for x in people or []:
+        nm = (x.get("name") or "").strip()
+        if nm and not any(r in nm.lower() for r in ROLE_NOISE):
+            out.append(nm.split(" - ")[0].strip())
+    return ", ".join(dict.fromkeys(out))          # de-dup, keep order
+
+
 def normalize(p: dict) -> dict:
-    authors = ", ".join(a["name"] for a in p.get("authors") or [] if a.get("name"))
-    narrators = ", ".join(n["name"] for n in p.get("narrators") or [] if n.get("name"))
+    authors = _clean_contributors(p.get("authors"))
+    narrators = _clean_contributors(p.get("narrators"))
     img = ""
     images = p.get("product_images") or {}
     for size in ("500", "256", "1024"):

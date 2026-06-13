@@ -1,15 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="topbar">
-  <h2 class="page-title">Insights</h2>
-  <button class="btn small ghost" onclick="Stackarr.toggleTheme()" id="theme-toggle" title="Light / dark">◑</button>
-</div>
+<div class="page-head"><h2 class="page-title">Insights</h2></div>
 <div class="stat-row">
   <div class="stat"><div class="stat-num">{{ total }}</div><div class="stat-label">books tracked</div></div>
   <div class="stat"><div class="stat-num">{{ finished }}</div><div class="stat-label">finished</div></div>
   <div class="stat"><div class="stat-num">{{ top_authors|length }}</div><div class="stat-label">authors</div></div>
 </div>
-<h3 class="lane-title">Your most-listened authors</h3>
+<section class="section"><div class="section-head"><h3>Your most-listened authors</h3></div>
 {% if not top_authors %}<div class="empty"><p>Listen to a few books and your stats appear here.</p></div>{% endif %}
 <div class="bar-list">
   {% for name, count in top_authors %}
@@ -19,5 +16,6 @@
     <span class="bar-count">{{ count }}</span>
   </div>
   {% endfor %}
-</div>
+</div></section>
 {% endblock %}
+{% block scripts %}<script>Stackarr.boot();</script>{% endblock %}
