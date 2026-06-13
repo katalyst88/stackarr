@@ -2,10 +2,21 @@
 own ABS credentials), reads each user's listening history (the recommendation
 seed), and lists library contents for dedupe + deletion detection."""
 import logging
+import re
 
 import requests
 
 from . import config, db
+
+
+def _dedup_key(title: str, author: str) -> tuple:
+    """Collapse multi-disc / CD fragments of the same book to one key."""
+    t = (title or "").lower()
+    t = re.sub(r"\(.*?\)", "", t)                                   # drop "(unabridged)" etc.
+    t = re.sub(r"\b(disc|cd|part|vol|volume)\s*\d+\b", "", t)       # drop disc/cd markers
+    t = re.sub(r"\s+\d+\s*$", "", t)                               # drop a trailing number
+    t = re.sub(r"[^a-z0-9]+", " ", t).strip()
+    return (t, (author or "").split(",")[0].strip().lower())
 
 log = logging.getLogger("stackarr.abs")
 
@@ -120,7 +131,7 @@ def recent_added(limit: int = 14) -> list[dict]:
     # one entry per book (dedupe by title+author, keep the most recent)
     seen, uniq = set(), []
     for m in out:
-        key = (m["title"].strip().lower(), (m["author"] or "").split(",")[0].strip().lower())
+        key = _dedup_key(m["title"], m["author"])
         if key in seen:
             continue
         seen.add(key)
