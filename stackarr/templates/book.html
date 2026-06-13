@@ -43,5 +43,35 @@
     </div>
   </div>
 </div>
+
+<section class="reviews" id="reviews" data-key="{{ rate_key }}" data-title="{{ b.title }}" data-author="{{ b.author }}" data-format="{{ b.format or 'audiobook' }}">
+  <div class="reviews-head">
+    <h3>Ratings &amp; reviews</h3>
+    {% if community.count %}<span class="community-rating">★ {{ community.avg }}
+      <span class="subtle">· {{ community.count }} rating{{ '' if community.count == 1 else 's' }}</span></span>{% endif %}
+  </div>
+  <div class="my-review">
+    <p class="muted">Your rating</p>
+    <div class="rate-stars big" id="my-stars" data-asin="{{ rate_key }}" data-title="{{ b.title }}" data-author="{{ b.author }}">
+      {% for n in [1,2,3,4,5] %}<span class="star {{ 'on' if my_stars and n <= my_stars }}"
+        onclick="Stackarr.rate('{{ rate_key }}',{{ n }},this)">★</span>{% endfor %}
+    </div>
+    <textarea id="my-review-text" class="review-input" rows="3" maxlength="1500"
+      placeholder="Write a short review to share with everyone (optional)…">{{ my_review }}</textarea>
+    <button class="btn small" onclick="Stackarr.submitReview(this)">Save review</button>
+  </div>
+  {% if reviews %}
+  <div class="review-list">
+    {% for r in reviews %}
+    <div class="review-item">
+      <div class="review-meta"><strong>{{ r.username }}</strong>
+        <span class="review-stars">{% for n in [1,2,3,4,5] %}<span class="star {{ 'on' if n <= r.stars }}">★</span>{% endfor %}</span>
+        <span class="subtle">{{ (r.created_at or '')[:10] }}</span></div>
+      <p class="review-text">{{ r.review }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p class="muted">No written reviews yet — be the first.</p>{% endif %}
+</section>
 {% endblock %}
 {% block scripts %}<script>Stackarr.boot();</script>{% endblock %}

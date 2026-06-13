@@ -525,3 +525,20 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
   border: 1px solid var(--line); background: var(--bg3); color: var(--subtle); transition: all .15s; }
 .fmt-pill.active { background: var(--accent); color: #1a0f02; border-color: var(--accent); }
 .fmt-pill:hover:not(.active) { color: var(--text); }
+
+/* ---- shared ratings & reviews (Phase 6) ---- */
+.reviews { max-width: 820px; margin: 30px auto 10px; padding: 0 clamp(14px,3vw,24px); }
+.reviews-head { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.community-rating { font-size: 18px; font-weight: 700; color: var(--accent); }
+.my-review { background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin: 16px 0; }
+.rate-stars.big .star { font-size: 28px; }
+.review-input { width: 100%; margin: 10px 0; background: var(--bg3); border: 1px solid var(--line); border-radius: 9px;
+  color: var(--text); padding: 10px 12px; font: inherit; resize: vertical; }
+.review-input:focus { outline: none; border-color: var(--accent); }
+.review-list { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+.review-item { background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 15px; }
+.review-meta { display: flex; align-items: center; gap: 10px; font-size: 13px; margin-bottom: 4px; }
+.review-text { margin: 0; color: var(--text); white-space: pre-wrap; }
+.star.on, .review-stars .star.on, .ministar.on { color: var(--accent); }
+.review-stars .star, .ministar { color: var(--line); font-size: 13px; }
+.ministar { font-size: 11px; }

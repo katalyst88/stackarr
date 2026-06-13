@@ -135,10 +135,12 @@ def suggestions_page():
             "SELECT 1 FROM signals WHERE user_id=? AND kind='onboard_dismissed'", (u["id"],)).fetchone())
     # quick-rate onboarding: only when taste is thin and not dismissed
     onboard_books = [] if (rated_count >= ONBOARD_THRESHOLD or onboard_off) else _onboarding_books(u)
+    recently_rated = db.recent_ratings(14)
     return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles,
                            genres=discover.DEFAULT_GENRES, rec_authors=rec_authors,
                            abs_base=absclient.abs_url(),
                            recently_added=recently_added, recent_requests=recent_requests,
+                           recently_rated=recently_rated,
                            onboard_books=onboard_books, onboard_target=ONBOARD_THRESHOLD)
 
 
@@ -391,11 +393,18 @@ def book_page(asin):
         if ax.get("series") and not b.get("series"):
             b["series"], b["sequence"] = ax["series"], ax.get("sequence")
     b["state"] = _state_for(asin, b.get("title", ""), b.get("author", ""))
+    u = auth.current_user()
+    key = db.rating_key(asin if not asin.startswith(("gb:", "ol:")) else "",
+                        b.get("title", ""), b.get("author", "")) if asin.startswith(("gb:", "ol:")) else asin
     with db.conn() as c:
         req = c.execute("SELECT status, detail FROM requests WHERE asin=? AND asin<>'' ORDER BY id DESC LIMIT 1",
                         (asin,)).fetchone()
+        my = c.execute("SELECT stars, review FROM ratings WHERE user_id=? AND asin=?",
+                       (u["id"], key)).fetchone()
     b["req_detail"] = (req["detail"] if req else "") or ""
-    return render_template("book.html", b=b)
+    return render_template("book.html", b=b, rate_key=key,
+                           community=db.community_rating(key), reviews=db.reviews_for(key),
+                           my_stars=(my["stars"] if my else 0), my_review=(my["review"] if my else ""))
 
 
 @bp.route("/browse")
@@ -447,6 +456,7 @@ def settings_page():
                            discord_webhook=db.setting("discord_webhook", config.DISCORD_WEBHOOK),
                            discord_enabled=db.get_meta("discord_enabled", "0") == "1",
                            notify_avail_enabled=db.get_meta("notify_avail_enabled", "0") == "1",
+                           notify_newrelease_enabled=db.get_meta("notify_newrelease_enabled", "0") == "1",
                            custom_webhook=db.setting("custom_webhook", ""),
                            themes=list(notify.THEMES),
                            auto_add_level=db.get_meta("auto_add_level", "off"),
@@ -659,16 +669,22 @@ def api_rate():
     # real ASIN); only look them up on Audible for genuine ASINs. The author is
     # what the recommender boosts on, so we must capture it either way.
     title, author = (body.get("title") or "").strip(), (body.get("author") or "").strip()
-    if (not title or not author) and not asin.startswith("t-"):
+    review = (body.get("review") or "").strip()[:1500]
+    fmt = body.get("format") or ("ebook" if asin.startswith(("gb:", "ol:")) else "audiobook")
+    if (not title or not author) and not asin.startswith(("t-", "gb:", "ol:")):
         meta = audible.by_asin(asin) or {}
         title = title or meta.get("title", "")
         author = author or meta.get("author", "")
     with db.conn() as c:
-        c.execute("INSERT INTO ratings (user_id,asin,title,author,stars) VALUES (?,?,?,?,?) "
+        # a blank review on an update must not wipe an existing one
+        c.execute("INSERT INTO ratings (user_id,asin,title,author,stars,review,format,updated_at) "
+                  "VALUES (?,?,?,?,?,?,?,datetime('now','localtime')) "
                   "ON CONFLICT(user_id,asin) DO UPDATE SET "
-                  "stars=excluded.stars, title=excluded.title, author=excluded.author",
-                  (u["id"], asin, title, author, stars))
-    return jsonify({"ok": True})
+                  "stars=excluded.stars, title=excluded.title, author=excluded.author, "
+                  "review=CASE WHEN excluded.review<>'' THEN excluded.review ELSE ratings.review END, "
+                  "format=excluded.format, updated_at=datetime('now','localtime')",
+                  (u["id"], asin, title, author, stars, review, fmt))
+    return jsonify({"ok": True, "community": db.community_rating(asin)})
 
 
 @bp.route("/api/history/remove", methods=["POST"])
@@ -777,7 +793,8 @@ SETTING_KEYS = {
     "kavita_url", "kavita_api_key",
     "calibreweb_url", "calibreweb_user", "calibreweb_pass",
 }
-BOOL_KEYS = {"email_enabled", "discord_enabled", "hide_rated_history", "notify_avail_enabled"}
+BOOL_KEYS = {"email_enabled", "discord_enabled", "hide_rated_history",
+             "notify_avail_enabled", "notify_newrelease_enabled"}
 
 
 @bp.route("/api/settings", methods=["POST"])

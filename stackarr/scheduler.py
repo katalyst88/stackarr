@@ -192,6 +192,52 @@ def suggestion_cycle():
             log.warning("auto-approve failed for user %s: %s", uid, e)
 
 
+def new_release_radar():
+    """Follow-author new-release radar: for authors users read (4-5★ ratings +
+    positive author signals), surface a brand-new release once and notify.
+    Off by default (notify_newrelease_enabled); capped + deduped so it's cheap."""
+    import datetime
+    if db.get_meta("notify_newrelease_enabled", "0") != "1":
+        return
+    today = datetime.date.today()
+    cutoff = str(today - datetime.timedelta(days=30))
+    base = db.get_meta("public_url", "")
+    # check the catalogue of the primary active format
+    fmt = formats.primary()
+    if fmt == "ebook":
+        from . import ebookmeta
+        lookup = lambda a: ebookmeta.by_author(a, num=6)
+    else:
+        from . import audible
+        lookup = lambda a: audible.by_author(a, num=6)
+    with db.conn() as c:
+        authors = {r["author"].split(",")[0].strip()
+                   for r in c.execute("SELECT author FROM ratings WHERE stars>=4 AND author<>''")}
+        authors |= {r["value"].split(",")[0].strip()
+                    for r in c.execute("SELECT value FROM signals WHERE kind='author' AND weight>0")}
+    for author in list(authors)[:20]:
+        if not author:
+            continue
+        try:
+            books = lookup(author)
+        except Exception:
+            continue
+        for b in books:
+            rd = b.get("release_date") or ""
+            if not (cutoff <= rd <= str(today)):       # released in the last 30 days
+                continue
+            key = f"nr:{(b.get('asin') or b.get('id') or b.get('title',''))}"
+            if db.get_meta(key):
+                continue
+            db.set_meta(key, str(today))
+            b.setdefault("format", fmt)
+            try:
+                notify.new_release(b, base_url=base)
+                log.info("new-release radar: %s — %s", b.get("title"), author)
+            except Exception as e:
+                log.warning("new-release notify failed: %s", e)
+
+
 def _loop():
     while True:
         try:
@@ -202,6 +248,10 @@ def _loop():
             suggestion_cycle()
         except Exception as e:
             log.warning("suggestion cycle failed: %s", e)
+        try:
+            new_release_radar()
+        except Exception as e:
+            log.warning("new-release radar failed: %s", e)
         time.sleep(config.LIBRARY_REFRESH_MINUTES * 60)
 
 

@@ -220,6 +220,19 @@ const Stackarr = (() => {
       const onb = el.closest(".onboard-item");
       if (onb) this._onboardRated(onb);
     },
+    async submitReview(btn) {
+      const sec = document.getElementById("reviews");
+      const starsRow = document.getElementById("my-stars");
+      const stars = starsRow ? starsRow.querySelectorAll(".star.on").length : 0;
+      if (!stars) { toast("Pick a star rating first."); return; }
+      const review = (document.getElementById("my-review-text")?.value || "").trim();
+      if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+      await api("/api/rate", { method: "POST", body: JSON.stringify({
+        asin: sec.dataset.key, stars, review,
+        title: sec.dataset.title, author: sec.dataset.author, format: sec.dataset.format }) });
+      if (btn) { btn.disabled = false; btn.textContent = "Save review"; }
+      toast("Review saved — thanks for sharing.");
+    },
     _onboardRated(onb) {
       if (onb.dataset.done === "1") return;
       onb.dataset.done = "1";

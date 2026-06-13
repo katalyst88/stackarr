@@ -136,7 +136,10 @@
         <label class="row"><span>Tell me when a requested book lands in my library</span>
           <input type="checkbox" class="switch" id="notify-avail" {{ 'checked' if notify_avail_enabled }}
                  onchange="Stackarr.setSetting({notify_avail_enabled: this.checked})"></label>
-        <p class="muted">Delivered through whichever channels you enable below (email, Discord, Apprise, custom webhook). Off by default.</p>
+        <label class="row"><span>New-release radar — alert me when an author I read publishes</span>
+          <input type="checkbox" class="switch" id="notify-newrelease" {{ 'checked' if notify_newrelease_enabled }}
+                 onchange="Stackarr.setSetting({notify_newrelease_enabled: this.checked})"></label>
+        <p class="muted">Delivered through whichever channels you enable below (email, Discord, Apprise, custom webhook). Both off by default.</p>
       </div>
       <div class="sub-tabs">
         <button class="sub-tab active" onclick="Stackarr.subTab('notify','email', this)">Email</button>

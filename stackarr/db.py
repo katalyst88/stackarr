@@ -73,7 +73,10 @@ CREATE TABLE IF NOT EXISTS ratings (
   title TEXT DEFAULT '',
   author TEXT DEFAULT '',
   stars INTEGER NOT NULL,                      -- 1..5
+  review TEXT DEFAULT '',                       -- optional free-text review (shared)
+  format TEXT DEFAULT 'audiobook',
   created_at TEXT DEFAULT (datetime('now','localtime')),
+  updated_at TEXT,
   UNIQUE(user_id, asin)
 );
 CREATE TABLE IF NOT EXISTS library (
@@ -132,7 +135,10 @@ def init():
                      "ALTER TABLE library ADD COLUMN format TEXT DEFAULT 'audiobook'",
                      "ALTER TABLE library ADD COLUMN source TEXT DEFAULT 'abs'",
                      "ALTER TABLE suggestions ADD COLUMN format TEXT DEFAULT 'audiobook'",
-                     "ALTER TABLE requests ADD COLUMN format TEXT DEFAULT 'audiobook'"):
+                     "ALTER TABLE requests ADD COLUMN format TEXT DEFAULT 'audiobook'",
+                     "ALTER TABLE ratings ADD COLUMN review TEXT DEFAULT ''",
+                     "ALTER TABLE ratings ADD COLUMN format TEXT DEFAULT 'audiobook'",
+                     "ALTER TABLE ratings ADD COLUMN updated_at TEXT"):
             try:
                 c.execute(stmt)
             except sqlite3.OperationalError:
@@ -193,3 +199,43 @@ def get_user(user_id: int) -> dict | None:
     with conn() as c:
         row = c.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
         return dict(row) if row else None
+
+
+# --- shared ratings & reviews (community signal across all Stackarr users) ---
+def community_rating(key: str) -> dict:
+    """Aggregate star rating for a book across every user. {avg, count}."""
+    with conn() as c:
+        r = c.execute("SELECT ROUND(AVG(stars),1) a, COUNT(*) n FROM ratings WHERE asin=?",
+                      (key,)).fetchone()
+    return {"avg": r["a"] or 0, "count": r["n"] or 0}
+
+
+def reviews_for(key: str) -> list[dict]:
+    """Text reviews other users have left for a book, newest first."""
+    with conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT r.stars, r.review, r.created_at, u.username "
+            "FROM ratings r JOIN users u ON u.id=r.user_id "
+            "WHERE r.asin=? AND r.review<>'' ORDER BY COALESCE(r.updated_at,r.created_at) DESC",
+            (key,))]
+
+
+def recent_ratings(limit: int = 14) -> list[dict]:
+    """Most-recently-rated books across all users — the 'Recently rated'
+    discovery row. One row per book (latest rating wins)."""
+    with conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT r.asin, r.title, r.author, r.stars, r.review, r.format, u.username, "
+            "COALESCE(r.updated_at, r.created_at) AS ts "
+            "FROM ratings r JOIN users u ON u.id=r.user_id "
+            "WHERE r.title<>'' ORDER BY ts DESC LIMIT 120")]
+    seen, out = set(), []
+    for r in rows:
+        k = (r["title"] or "").strip().lower()
+        if not k or k in seen:
+            continue
+        seen.add(k)
+        out.append(r)
+        if len(out) >= limit:
+            break
+    return out

@@ -181,6 +181,26 @@ def available(book: dict, base_url: str = ""):
         _send_email(subject, body, f"<p style='font-family:sans-serif;font-size:15px'>{body}</p>")
 
 
+def new_release(book: dict, base_url: str = ""):
+    """Fire when an author the user reads puts out a new release (the
+    follow-author 'new-release radar'). Master switch notify_newrelease_enabled;
+    each channel self-gates."""
+    if db.get_meta("notify_newrelease_enabled", "0") != "1":
+        return
+    title, author = book.get("title", "a book"), book.get("author", "")
+    fmt = "eBook" if book.get("format") == "ebook" else "audiobook"
+    base = base_url or db.get_meta("public_url", "")
+    subject = f"{config.APP_NAME}: new from {author} — “{title}”"
+    body = (f"{author} just released a new {fmt}: “{title}”"
+            + (f" ({book['release_date']})" if book.get("release_date") else "") + ".")
+    _discord(f"🆕 **{author}** released **{title}**" + (f" {base}" if base else ""))
+    _apprise(subject, body)
+    _custom_webhook({"event": "new_release", "title": title, "author": author,
+                     "format": book.get("format", "audiobook"), "url": base})
+    if email_enabled():
+        _send_email(subject, body, f"<p style='font-family:sans-serif;font-size:15px'>{body}</p>")
+
+
 def suggestion_digest(pending: list[dict], base_url: str = "") -> bool:
     n = len(pending)
     text = f"{n} audiobook suggestion(s) waiting for approval:\n" + \
