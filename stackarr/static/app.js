@@ -78,7 +78,11 @@ const Stackarr = (() => {
   };
 
   return {
-    boot() { applyTheme(); },
+    boot() { applyTheme(); document.body.classList.add("loaded"); },
+    slide(btn, dir) {
+      const s = btn.parentElement.querySelector(".slider");
+      if (s) s.scrollBy({ left: dir * s.clientWidth * 0.82, behavior: "smooth" });
+    },
     toggleTheme() {
       localStorage.setItem("stackarr-theme", localStorage.getItem("stackarr-theme") === "light" ? "dark" : "light");
       applyTheme();
@@ -140,6 +144,17 @@ const Stackarr = (() => {
     settingsCat(cat, el) {
       document.querySelectorAll(".settings-nav button").forEach(b => b.classList.toggle("active", b === el));
       document.querySelectorAll(".settings-cat").forEach(s => s.classList.toggle("active", s.id === "cat-" + cat));
+      if (cat === "logs") this.loadLogs();
+    },
+    async loadLogs() {
+      const lvl = (document.getElementById("log-level") || {}).value || "INFO";
+      const r = await api("/api/logs?level=" + lvl);
+      const v = document.getElementById("log-view");
+      if (v && r) v.textContent = (r.lines || []).join("\n") || "(no entries at this level)";
+    },
+    downloadLogs() {
+      const lvl = (document.getElementById("log-level") || {}).value || "DEBUG";
+      window.open(B() + "/api/logs/download?level=" + lvl, "_blank");
     },
     subTab(group, name, el) {
       el.parentElement.querySelectorAll(".sub-tab").forEach(b => b.classList.remove("active")); el.classList.add("active");

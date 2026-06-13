@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="page-head">
-  <h2 class="page-title">Requests</h2>
-  {% if admin %}<a class="btn small ghost" href="?all=1">All users</a>{% endif %}
+  <h2 class="page-title">{{ 'Wanted' if wanted else 'Requests' }} <span class="subtle">{{ "couldn't be grabbed" if wanted else '' }}</span></h2>
+  <div class="topbar-actions">
+    <a class="btn small ghost" href="{{ url_for('main.requests_page') }}">All</a>
+    <a class="btn small ghost" href="?wanted=1">Wanted</a>
+    {% if admin %}<a class="btn small ghost" href="?all=1">All users</a>{% endif %}
+  </div>
 </div>
 {% if not requests %}
 <div class="empty"><p>No requests yet. Approve a suggestion or add one from Discover.</p></div>

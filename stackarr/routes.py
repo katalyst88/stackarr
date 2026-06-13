@@ -46,15 +46,17 @@ def suggestions_page():
             "SELECT * FROM suggestions WHERE user_id=? AND status='pending' ORDER BY lane,score DESC",
             (u["id"],))]
         for r in rows:
-            owned = c.execute("SELECT 1 FROM library WHERE gone_at IS NULL AND lower(title) LIKE ?",
-                              (f"%{(r['title'] or '').lower()[:40]}%",)).fetchone()
-            r["available"] = bool(owned)
+            r["available"] = _owned(c, r["asin"], r["title"], r["author"])
     lanes = {}
     for r in rows:
         lanes.setdefault(r["lane"], []).append(r)
-    lane_titles = {"series": "Next in your series", "foryou": "For you",
-                   "narrator": "From narrators you love", "discover": "Popular picks",
-                   "importlist": "From your reading list"}
+    lane_titles = {"series": "Series to finish", "author": "More from authors you love",
+                   "enjoyed": "Readers also enjoyed", "discover_author": "New authors to discover",
+                   "narrator": "Narrators you love", "genre": "More in your favourite genres",
+                   "discover": "Popular picks", "importlist": "From your reading list",
+                   "foryou": "For you"}
+    lane_order = ["series", "author", "enjoyed", "discover_author", "narrator", "genre", "foryou", "importlist", "discover"]
+    lanes = {k: lanes[k] for k in lane_order if k in lanes}
     return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles)
 
 
@@ -69,13 +71,15 @@ def discover_page():
 def requests_page():
     u = auth.current_user()
     admin = u["role"] == "admin"
+    wanted = bool(request.args.get("wanted"))            # Sonarr-style: couldn't-grab list
+    where = "WHERE status='failed'" if wanted else "WHERE 1=1"
     with db.conn() as c:
         if admin and request.args.get("all"):
-            rows = [dict(r) for r in c.execute("SELECT r.*, u.username FROM requests r "
-                    "JOIN users u ON u.id=r.user_id ORDER BY r.id DESC LIMIT 200")]
+            rows = [dict(r) for r in c.execute(f"SELECT r.*, u.username FROM requests r "
+                    f"JOIN users u ON u.id=r.user_id {where.replace('status','r.status')} ORDER BY r.id DESC LIMIT 200")]
         else:
-            rows = [dict(r) for r in c.execute("SELECT * FROM requests WHERE user_id=? ORDER BY id DESC LIMIT 200", (u["id"],))]
-    return render_template("requests.html", requests=rows, admin=admin)
+            rows = [dict(r) for r in c.execute(f"SELECT * FROM requests {where} AND user_id=? ORDER BY id DESC LIMIT 200", (u["id"],))]
+    return render_template("requests.html", requests=rows, admin=admin, wanted=wanted)
 
 
 @bp.route("/insights")
@@ -110,15 +114,32 @@ def settings_page():
                            interval_hours=db.get_meta("suggest_interval_hours", str(config.SUGGEST_INTERVAL_HOURS)),
                            language=db.get_meta("language", config.TARGET_LANGUAGE),
                            languages=["english","german","spanish","french","italian","dutch","portuguese","japanese","any"],
+                           smtp=notify.smtp_settings(),
+                           log_level=config.LOG_LEVEL,
                            is_admin=auth.current_user()["role"] == "admin")
 
 
 # ------------------------------------------------------------------- api ---
+def _owned(c, asin, title, author) -> bool:
+    """True only if the book is really in the library — ASIN match, or exact
+    title AND author match. Title-only matching gives false positives on
+    common one-word titles (e.g. 'Emergence')."""
+    if asin and c.execute("SELECT 1 FROM library WHERE gone_at IS NULL AND asin=? AND asin<>''",
+                          (asin,)).fetchone():
+        return True
+    a = (author or "").split(",")[0].strip().lower()
+    if not a:
+        return False
+    return bool(c.execute(
+        "SELECT 1 FROM library WHERE gone_at IS NULL AND lower(title)=? AND lower(author) LIKE ?",
+        ((title or "").strip().lower(), f"%{a}%")).fetchone())
+
+
 def _state_for(asin, title, author):
     with db.conn() as c:
-        owned = c.execute("SELECT 1 FROM library WHERE gone_at IS NULL AND lower(title) LIKE ?",
-                          (f"%{(title or '').lower()[:40]}%",)).fetchone()
-        req = c.execute("SELECT status FROM requests WHERE asin=? ORDER BY id DESC LIMIT 1", (asin,)).fetchone()
+        owned = _owned(c, asin, title, author)
+        req = c.execute("SELECT status FROM requests WHERE asin=? AND asin<>'' ORDER BY id DESC LIMIT 1",
+                        (asin,)).fetchone()
     return "available" if owned else (req["status"] if req else "none")
 
 
@@ -268,6 +289,9 @@ def api_settings():
             pass
     if body.get("language"):
         db.set_meta("language", str(body["language"]).lower())
+    for k in ("smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from", "smtp_to"):
+        if k in body:
+            db.set_meta(k, str(body[k]))
     return jsonify({"ok": True})
 
 
@@ -305,6 +329,41 @@ def api_suggestions_status():
                             (u["id"],)).fetchone()["n"]
     return jsonify({"pending": pending,
                     "running": db.get_meta(f"running_{u['id']}", "0") == "1"})
+
+
+LOG_LEVELS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40}
+
+
+def _read_logs(min_level: str, limit: int) -> list[str]:
+    import os, re
+    if not os.path.exists(config.LOG_FILE):
+        return []
+    thresh = LOG_LEVELS.get(min_level, 20)
+    out = []
+    with open(config.LOG_FILE, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            m = re.search(r"\[(\w+)\]", line)
+            lvl = LOG_LEVELS.get(m.group(1), 20) if m else 20
+            if lvl >= thresh:
+                out.append(line.rstrip())
+    return out[-limit:]
+
+
+@bp.route("/api/logs")
+@auth.admin_required
+def api_logs():
+    level = request.args.get("level", "INFO").upper()
+    return jsonify({"lines": _read_logs(level, int(request.args.get("limit", "300")))})
+
+
+@bp.route("/api/logs/download")
+@auth.admin_required
+def api_logs_download():
+    from flask import Response
+    level = request.args.get("level", "DEBUG").upper()
+    body = "\n".join(_read_logs(level, 200000)) or "(no log entries)"
+    return Response(body, mimetype="text/plain",
+                    headers={"Content-Disposition": f"attachment; filename=stackarr-{level.lower()}.log"})
 
 
 @bp.route("/api/health")

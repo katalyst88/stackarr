@@ -79,6 +79,9 @@ def run(user_id: int, max_new: int | None = None) -> int:
                 pos[k] = pos.get(k, 0) + (r["stars"] - 3) * 1.5   # +3 for 5★, -3 for 1★
         seed_lib = {row["item_id"]: dict(row) for row in
                     c.execute("SELECT item_id,title,author,asin FROM library")}
+        # authors the user has already listened to (drives "love" vs "discover")
+        read_authors = {(row["author"].split(",")[0].strip().lower())
+                        for row in c.execute("SELECT DISTINCT author FROM library WHERE author<>''")}
 
     # cold-start: thin/no history -> deterministic popular/curated fallback
     if len(seeds) < 2:
@@ -92,6 +95,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
     target_lang = db.get_meta("language", config.TARGET_LANGUAGE)   # user-set; "any" disables filter
     cands: dict[str, dict] = {}
     narrators_seen: dict[str, float] = {}
+    genres_seen: dict[str, float] = {}
 
     def consider(b: dict, base: float, lane: str, reason: str):
         asin = b.get("asin")
@@ -134,8 +138,11 @@ def run(user_id: int, max_new: int | None = None) -> int:
         for nm in ((ax or {}).get("narrator") or "").split(","):
             if nm.strip():
                 narrators_seen[nm.strip()] = narrators_seen.get(nm.strip(), 0) + rw
+        for g in (ax or {}).get("genres") or []:
+            if g:
+                genres_seen[g] = genres_seen.get(g, 0) + rw
 
-        # series-next
+        # series-next  -> "Series to finish"
         srs = (ax or {}).get("series")
         seq = (ax or {}).get("sequence")
         if srs and seq is not None:
@@ -143,22 +150,32 @@ def run(user_id: int, max_new: int | None = None) -> int:
                 if _norm(b.get("series")) == _norm(srs) and b.get("sequence") == seq + 1:
                     consider(b, config.W_SERIES_NEXT * rw, "series",
                              f"Next in {srs} after “{title}”")
-        # author backlist
+        # author backlist -> "More from authors you love"
         if author:
             for b in audible.by_author(author.split(",")[0], num=15):
-                consider(b, config.W_AUTHOR_BACKLIST * rw, "foryou",
-                         f"More from {author.split(',')[0]}, whom you've listened to")
-        # sims
+                consider(b, config.W_AUTHOR_BACKLIST * rw, "author",
+                         f"More from {author.split(',')[0]}, an author you love")
+        # sims -> "Readers also enjoyed" (known author) or "New authors to discover"
         if seed["finished"] and asin:
             for i, b in enumerate(audible.similar(asin, num=8)):
-                consider(b, (config.W_SIMS_FREQ - i * 0.5) * rw, "foryou",
-                         f"Listeners who finished “{title}” also enjoyed this")
+                a1 = (b.get("author") or "").split(",")[0].strip().lower()
+                if a1 and a1 in read_authors:
+                    consider(b, (config.W_SIMS_FREQ - i * 0.5) * rw, "enjoyed",
+                             f"Readers who finished “{title}” also enjoyed this")
+                else:
+                    consider(b, (config.W_SIMS_FREQ - i * 0.5) * rw * 0.9, "discover_author",
+                             f"A new author for you — fans of “{title}” rate this highly")
 
-    # narrator-following lane: top narrators across history
+    # narrator-following -> "Narrators you love"
     for nm, wt in sorted(narrators_seen.items(), key=lambda x: x[1], reverse=True)[:3]:
         for b in audible.search(nm, num=10):
             if nm.lower() in (b.get("narrator") or "").lower():
                 consider(b, config.W_NARRATOR * wt, "narrator", f"Narrated by {nm}, whom you listen to often")
+
+    # genre lane -> "More in your favourite genres"
+    for g, wt in sorted(genres_seen.items(), key=lambda x: x[1], reverse=True)[:2]:
+        for b in discover.genre_new([g], num_per=8)[:10]:
+            consider(b, config.W_RATING * 1.2, "genre", f"Popular in {g}, a genre you enjoy")
 
     return _finalize(user_id, cands, known, neg, max_new)
 

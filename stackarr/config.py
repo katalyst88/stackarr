@@ -4,7 +4,7 @@ import os
 
 # Pre-public-release. The -pre suffix signals "not yet tested for public use";
 # bump to 1.0.0 only after real-world testing.
-VERSION = "0.1.2-pre"
+VERSION = "0.1.4-pre"
 RELEASE_STAGE = "pre-release · untested"
 
 
@@ -23,6 +23,10 @@ APP_NAME = os.environ.get("STACKARR_NAME", "Stackarr")
 ACCENT = os.environ.get("STACKARR_ACCENT", "#d98c3f")          # amber; Seerr uses purple
 # Subpath when reverse-proxied / embedded (e.g. "/stackarr"). Blank = root.
 URL_BASE = "/" + os.environ.get("STACKARR_URL_BASE", "").strip("/") if os.environ.get("STACKARR_URL_BASE", "").strip("/") else ""
+
+# --- logging ----------------------------------------------------------------
+LOG_LEVEL = os.environ.get("STACKARR_LOG_LEVEL", "INFO").upper()
+LOG_FILE = os.path.join(DATA_DIR, "stackarr.log")
 
 # --- Audiobookshelf (auth + library + listening history) --------------------
 # Users sign in with their own ABS credentials (multi-user). The admin token
@@ -51,7 +55,7 @@ AUDNEXUS_REGION = os.environ.get("AUDNEXUS_REGION", AUDIBLE_DOMAIN if AUDIBLE_DO
 # --- suggestion engine ------------------------------------------------------
 SUGGEST_ENABLED = _bool("STACKARR_SUGGEST", True)
 SUGGEST_INTERVAL_HOURS = int(os.environ.get("STACKARR_SUGGEST_HOURS", "12"))   # default; user-overridable in Settings
-SUGGEST_MAX_PENDING = int(os.environ.get("STACKARR_SUGGEST_MAX", "12"))
+SUGGEST_MAX_PENDING = int(os.environ.get("STACKARR_SUGGEST_MAX", "30"))
 TARGET_LANGUAGE = os.environ.get("STACKARR_LANGUAGE", "english").lower()
 SUGGEST_RATING_FLOOR = float(os.environ.get("STACKARR_RATING_FLOOR", "4.0"))
 SUGGEST_MAX_PER_AUTHOR = int(os.environ.get("STACKARR_MAX_PER_AUTHOR", "2"))

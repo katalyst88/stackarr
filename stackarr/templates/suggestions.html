@@ -25,6 +25,8 @@
   {% for lane, items in lanes.items() %}
   <section class="section">
     <div class="section-head"><h3>{{ lane_titles.get(lane, lane) }}</h3></div>
+    <div class="slider-wrap">
+    <button class="slider-arrow left" onclick="Stackarr.slide(this,-1)" aria-label="scroll left">‹</button>
     <div class="slider">
       {% for s in items %}
       <div class="media-card" data-id="{{ s.id }}">
@@ -47,6 +49,8 @@
         </div>
       </div>
       {% endfor %}
+    </div>
+    <button class="slider-arrow right" onclick="Stackarr.slide(this,1)" aria-label="scroll right">›</button>
     </div>
   </section>
   {% endfor %}

@@ -13,6 +13,7 @@ GROUPS = "contributors,media,product_attrs,product_desc,series,category_ladders,
 
 
 def _products(params: dict) -> list[dict]:
+    params.setdefault("image_sizes", "1024,500")
     try:
         r = requests.get(f"{config.AUDIBLE_API}/catalog/products", params=params, timeout=20)
         r.raise_for_status()
@@ -42,7 +43,7 @@ def normalize(p: dict) -> dict:
     narrators = _clean_contributors(p.get("narrators"))
     img = ""
     images = p.get("product_images") or {}
-    for size in ("500", "256", "1024"):
+    for size in ("1024", "900", "500", "256"):          # prefer the largest available
         if images.get(size):
             img = images[size]
             break
@@ -91,7 +92,7 @@ def by_author(author: str, num: int = 25) -> list[dict]:
 def by_asin(asin: str) -> dict | None:
     try:
         r = requests.get(f"{config.AUDIBLE_API}/catalog/products/{asin}",
-                         params={"response_groups": GROUPS}, timeout=20)
+                         params={"response_groups": GROUPS, "image_sizes": "1024,500"}, timeout=20)
         r.raise_for_status()
         p = r.json().get("product")
         return normalize(p) if p else None
@@ -105,7 +106,7 @@ def similar(asin: str, num: int = 10) -> list[dict]:
     (minus the seed) when /sims is unavailable, which it intermittently is."""
     try:
         r = requests.get(f"{config.AUDIBLE_API}/catalog/products/{asin}/sims",
-                         params={"num_results": num, "response_groups": GROUPS}, timeout=20)
+                         params={"num_results": num, "response_groups": GROUPS, "image_sizes": "1024,500"}, timeout=20)
         r.raise_for_status()
         sims = [normalize(p) for p in r.json().get("similar_products", []) if p.get("title")]
         if sims:

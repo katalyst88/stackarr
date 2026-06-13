@@ -7,6 +7,7 @@
     <button onclick="Stackarr.settingsCat('suggest', this)">Suggestions</button>
     <button onclick="Stackarr.settingsCat('library', this)">My reading</button>
     <button onclick="Stackarr.settingsCat('notify', this)">Notifications</button>
+    {% if is_admin %}<button onclick="Stackarr.settingsCat('logs', this)">Logs</button>{% endif %}
     <button onclick="Stackarr.settingsCat('about', this)">About</button>
   </nav>
   <div class="settings-body">
@@ -14,7 +15,7 @@
     <div class="settings-cat active" id="cat-general">
       <div class="panel"><h3>Appearance</h3>
         <label class="row"><span>Light theme</span>
-          <input type="checkbox" onchange="Stackarr.toggleTheme()" id="ui-theme"></label>
+          <input type="checkbox" class="switch" onchange="Stackarr.toggleTheme()" id="ui-theme"></label>
         <p class="muted">Theme is remembered on this device.</p>
       </div>
     </div>
@@ -50,17 +51,23 @@
         <button class="sub-tab" onclick="Stackarr.subTab('notify','apprise', this)">Apprise</button>
       </div>
       <div class="sub-panel active" data-group="notify" data-panel="email">
+        <div class="panel"><h3>SMTP server</h3>
+          <p class="muted">Configure your own mail server here — no separate setup needed.</p>
+          <label class="row"><span>Host</span><input id="smtp_host" value="{{ smtp.host }}" onchange="Stackarr.setSetting({smtp_host:this.value})"></label>
+          <label class="row"><span>Port</span><input type="number" id="smtp_port" value="{{ smtp.port }}" onchange="Stackarr.setSetting({smtp_port:this.value})"></label>
+          <label class="row"><span>Username</span><input id="smtp_user" value="{{ smtp.user }}" onchange="Stackarr.setSetting({smtp_user:this.value})"></label>
+          <label class="row"><span>Password</span><input type="password" id="smtp_pass" value="{{ smtp.pw }}" onchange="Stackarr.setSetting({smtp_pass:this.value})"></label>
+          <label class="row"><span>From</span><input id="smtp_from" value="{{ smtp['from'] }}" onchange="Stackarr.setSetting({smtp_from:this.value})"></label>
+          <label class="row"><span>Send digests to</span><input id="smtp_to" value="{{ smtp.to }}" onchange="Stackarr.setSetting({smtp_to:this.value})"></label>
+        </div>
         <div class="panel"><h3>Email digests</h3>
-          {% if not email_configured %}<p class="muted">No SMTP server configured. Set SMTP_* in your environment.</p>
-          {% else %}
           <label class="row"><span>Send email digests</span>
-            <input type="checkbox" id="email-enabled" {{ 'checked' if email_enabled }} onchange="Stackarr.setSetting({email_enabled: this.checked})"></label>
+            <input type="checkbox" class="switch" id="email-enabled" {{ 'checked' if email_enabled }} onchange="Stackarr.setSetting({email_enabled: this.checked})"></label>
           <p class="muted">Theme</p>
           <div class="theme-tabs">
             {% for t in themes %}<button class="theme-tab {{ 'active' if t == email_theme }}" onclick="Stackarr.pickEmailTheme('{{ t }}', this)">{{ t|capitalize }}</button>{% endfor %}
           </div>
           <iframe id="email-preview" class="email-preview" title="email preview"></iframe>
-          {% endif %}
         </div>
       </div>
       <div class="sub-panel" data-group="notify" data-panel="discord">
@@ -68,7 +75,7 @@
           {% if not discord_configured %}<p class="muted">No Discord webhook configured. Set DISCORD_WEBHOOK in your environment.</p>
           {% else %}
           <label class="row"><span>Post digests to Discord</span>
-            <input type="checkbox" id="discord-enabled" {{ 'checked' if discord_enabled }} onchange="Stackarr.setSetting({discord_enabled: this.checked})"></label>
+            <input type="checkbox" class="switch" id="discord-enabled" {{ 'checked' if discord_enabled }} onchange="Stackarr.setSetting({discord_enabled: this.checked})"></label>
           {% endif %}
         </div>
       </div>
@@ -79,10 +86,26 @@
       </div>
     </div>
 
+    {% if is_admin %}
+    <div class="settings-cat" id="cat-logs">
+      <div class="panel"><h3>Logs</h3>
+        <div class="sub-tabs">
+          <span class="muted" style="align-self:center">Level</span>
+          <select id="log-level" onchange="Stackarr.loadLogs()">
+            <option>DEBUG</option><option selected>INFO</option><option>WARNING</option><option>ERROR</option>
+          </select>
+          <button class="sub-tab" onclick="Stackarr.loadLogs()">Refresh</button>
+          <button class="sub-tab" onclick="Stackarr.downloadLogs()">Download</button>
+        </div>
+        <pre id="log-view" style="background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;max-height:460px;overflow:auto;font-size:12px;white-space:pre-wrap"></pre>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="settings-cat" id="cat-about">
       <div class="panel"><h3>About</h3>
         <p class="muted">{{ app_name }} v{{ version }} · {{ stage }}</p>
-        <p class="muted">A no-AI audiobook recommendation add-on for Chaptarr. Vibecoded.</p>
+        <p class="muted">An audiobook recommendation add-on for Chaptarr. Vibecoded.</p>
       </div>
     </div>
 

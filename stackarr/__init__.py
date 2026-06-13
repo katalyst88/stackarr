@@ -23,10 +23,21 @@ class _PrefixMiddleware:
         return self.app(environ, start_response)
 
 
+def _setup_logging():
+    import os
+    from logging.handlers import RotatingFileHandler
+    os.makedirs(config.DATA_DIR, exist_ok=True)
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", "%Y-%m-%d %H:%M:%S")
+    root = logging.getLogger()
+    root.setLevel(getattr(logging, config.LOG_LEVEL, logging.INFO))
+    root.handlers.clear()
+    console = logging.StreamHandler(); console.setFormatter(fmt); root.addHandler(console)
+    fileh = RotatingFileHandler(config.LOG_FILE, maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+    fileh.setFormatter(fmt); root.addHandler(fileh)
+
+
 def create_app() -> Flask:
-    logging.basicConfig(level=logging.INFO,
-                        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-                        datefmt="%Y-%m-%d %H:%M:%S")
+    _setup_logging()
     problems = config.validate()
     if problems:
         for p in problems:

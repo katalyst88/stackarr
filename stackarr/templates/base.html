@@ -26,12 +26,12 @@
     <svg viewBox="0 0 24 24"><path d="M4 20V10h4v10zm6 0V4h4v16zm6 0v-7h4v7z"/></svg><span>Insights</span></a>
   <a href="{{ url_for('main.settings_page') }}" class="navlink {{ 'active' if request.path.endswith('/settings') }}">
     <svg viewBox="0 0 24 24"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1l-.4-2.6H10.8l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.8 7.8 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h3.4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg><span>Settings</span></a>
-  <div class="version-tag">v{{ version }} · {{ stage }}</div>
   <form method="post" action="{{ url_for('main.logout') }}" class="logout-form">
     <button class="navlink logout" type="submit">
       <svg viewBox="0 0 24 24"><path d="M17 7l-1.4 1.4L18.2 11H8v2h10.2l-2.6 2.6L17 17l5-5zM4 5h8V3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8v-2H4z"/></svg>
       <span>{{ user.username if user else 'Sign out' }}</span></button>
   </form>
+  <div class="version-tag">v{{ version }} · {{ stage }}</div>
 </nav>
 
 <div class="shell">

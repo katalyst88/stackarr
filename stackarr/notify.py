@@ -19,7 +19,7 @@ THEMES = {
                   foot="#f8fafc", footfg="#94a3b8", btnbg="#d98c3f", btnfg="#1a0f02",
                   headline="{n} suggestion{s} waiting for approval",
                   tagline="new arrivals on your shelf", btn="Review suggestions",
-                  blurb="Picked from your listening history — every one has a reason, none of it AI."),
+                  blurb="Curated from your listening history — every one comes with its reason."),
     "dark": dict(page="#0b1120", card="#1e293b", head="#0f172a", brand="#f0b27a",
                  tag="#64748b", title="#e2e8f0", sub="#94a3b8", reason="#94a3b8",
                  foot="#0f172a", footfg="#64748b", btnbg="#d98c3f", btnfg="#1a0f02",
@@ -31,12 +31,26 @@ THEMES = {
                 foot="#fffbeb", footfg="#d97706", btnbg="#ea8a3f", btnfg="#3b1300",
                 headline="📚 {n} fresh pick{s} for your ears!",
                 tagline="hot off the stacks 🔥", btn="Show me the books →",
-                blurb="Hand-picked from what you've been listening to. Zero robots consulted. 🤖🚫"),
+                blurb="Hand-picked from what you've been listening to. 🎧"),
 }
 
 
+def smtp_settings() -> dict:
+    """Effective SMTP config: in-app DB settings override env defaults."""
+    g = db.get_meta
+    try:
+        port = int(g("smtp_port", str(config.SMTP_PORT)) or config.SMTP_PORT)
+    except ValueError:
+        port = config.SMTP_PORT
+    return {"host": g("smtp_host", config.SMTP_HOST), "port": port,
+            "user": g("smtp_user", config.SMTP_USER), "pw": g("smtp_pass", config.SMTP_PASS),
+            "from": g("smtp_from", config.SMTP_FROM or config.SMTP_USER),
+            "to": g("smtp_to", config.SMTP_TO)}
+
+
 def email_configured() -> bool:
-    return bool(config.SMTP_HOST and config.SMTP_TO)
+    s = smtp_settings()
+    return bool(s["host"] and s["to"])
 
 
 def email_enabled() -> bool:
@@ -49,16 +63,17 @@ def current_theme() -> str:
 
 
 def _send_email(subject: str, text: str, html: str) -> bool:
+    s = smtp_settings()
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"], msg["From"], msg["To"] = subject, f"{config.APP_NAME} <{config.SMTP_FROM}>", config.SMTP_TO
+        msg["Subject"], msg["From"], msg["To"] = subject, f"{config.APP_NAME} <{s['from']}>", s["to"]
         msg.attach(MIMEText(text, "plain", "utf-8"))
         msg.attach(MIMEText(html, "html", "utf-8"))
-        with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=30) as s:
-            s.starttls()
-            if config.SMTP_USER:
-                s.login(config.SMTP_USER, config.SMTP_PASS)
-            s.send_message(msg)
+        with smtplib.SMTP(s["host"], s["port"], timeout=30) as srv:
+            srv.starttls()
+            if s["user"]:
+                srv.login(s["user"], s["pw"])
+            srv.send_message(msg)
         return True
     except Exception as e:
         log.warning("email send failed: %s", e)
