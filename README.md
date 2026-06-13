@@ -39,6 +39,8 @@ book/audiobook manager) does the searching, grabbing and importing.
   optional 1–5★ ratings feed back in). "I've already read this" seeding too.
 - **Discover** gallery (endless scroll) + search-to-add typeahead.
 - **Insights** (Spotify-wrapped style): hours listened, top authors, fun facts.
+- **History & ratings** — every book you've finished, rated, or marked read, with
+  a 1–5★ control that sharpens future picks.
 - **Notifications** — email digests (3 themes + live preview), Discord webhook, and
   Apprise (100+ channels). All **off by default**.
 - In-app **Settings** for service connections (Audiobookshelf, Chaptarr), SMTP,

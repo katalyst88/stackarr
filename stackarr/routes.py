@@ -183,6 +183,56 @@ def insights_page():
                            facts=facts, top_authors=top_authors)
 
 
+@bp.route("/history")
+@auth.login_required
+def history_page():
+    """Books you've read — finished in Audiobookshelf, rated, or marked read —
+    each with a 1-5 star rating control that feeds the recommender."""
+    u = auth.current_user()
+    hist = absclient.listening_history(u["abs_token"])
+    with db.conn() as c:
+        lib = {r["item_id"]: dict(r) for r in
+               c.execute("SELECT item_id,title,author,asin FROM library")}
+        rated = {r["asin"]: dict(r) for r in c.execute(
+            "SELECT asin,title,author,stars FROM ratings WHERE user_id=? AND asin<>''", (u["id"],))}
+        read_sig = c.execute(
+            "SELECT value,why FROM signals WHERE user_id=? AND kind='asin' "
+            "AND (why LIKE 'already read:%' OR why LIKE 'marked read:%')", (u["id"],)).fetchall()
+
+    books, seen = [], set()
+
+    def key(asin, title):
+        return (asin or "").lower() or (title or "").strip().lower()
+
+    def add(asin, title, author, cover, when):
+        k = key(asin, title)
+        if not k or k in seen:
+            return
+        seen.add(k)
+        books.append({"asin": asin or "", "title": title or "Untitled", "author": author or "",
+                      "cover": cover, "stars": (rated.get(asin) or {}).get("stars", 0), "when": when})
+
+    # 1) finished in Audiobookshelf (the real listening history, with covers)
+    for h in hist:
+        if not h["finished"]:
+            continue
+        m = lib.get(h["item_id"]) or {}
+        add((m.get("asin") or "").strip(), m.get("title", ""), m.get("author", ""),
+            url_for("main.cover", item_id=h["item_id"]), h["last_update"])
+    # 2) books you've rated that aren't already listed
+    for asin, r in rated.items():
+        add(asin, r["title"], r["author"], "", 0)
+    # 3) titles you marked read in Stackarr
+    for s in read_sig:
+        val = s["value"] or ""
+        title = s["why"].split(":", 1)[1].strip() if ":" in s["why"] else val
+        add(val if val.startswith("B0") else "", title, "", "", 0)
+
+    books.sort(key=lambda b: (b["when"] or 0), reverse=True)
+    rated_n = sum(1 for b in books if b["stars"])
+    return render_template("history.html", books=books, rated_n=rated_n)
+
+
 @bp.route("/book/<asin>")
 @auth.login_required
 def book_page(asin):

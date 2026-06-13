@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <h2 class="page-title">History &amp; ratings
+    <span class="subtle">{{ books|length }} book{{ 's' if books|length != 1 }}{% if rated_n %} · {{ rated_n }} rated{% endif %}</span></h2>
+</div>
+
+{% if not books %}
+<div class="empty"><p>No read books yet. Finish a book in Audiobookshelf, or mark one
+  "Already read" from any book page — it'll show up here for you to rate.</p></div>
+{% endif %}
+
+<div class="grid">
+  {% for b in books %}
+  <div class="media-card">
+    <a class="media-poster" {% if b.asin %}href="{{ url_for('main.book_page', asin=b.asin) }}"{% endif %}>
+      <img src="{{ (b.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt=""
+           onerror="this.src='{{ url_for('static', filename='icon.svg') }}'">
+      <span class="corner-badge available">Read</span>
+    </a>
+    <div class="media-foot">
+      <div class="media-title" title="{{ b.title }}">{{ b.title }}</div>
+      <div class="media-author">{{ b.author }}</div>
+      {% if b.asin %}
+      <div class="rate-row" data-asin="{{ b.asin }}" title="Rate this book">
+        {% for n in [1,2,3,4,5] %}
+        <span class="star {{ 'on' if n <= b.stars }}" onclick="Stackarr.rate('{{ b.asin }}',{{ n }},this)">★</span>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="rate-row disabled" title="Open this title from search to rate it">
+        {% for n in [1,2,3,4,5] %}<span class="star">★</span>{% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
+{% block scripts %}<script>Stackarr.boot();</script>{% endblock %}

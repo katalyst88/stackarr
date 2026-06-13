@@ -2,6 +2,18 @@
 
 All notable changes to Stackarr.
 
+## [1.1.0] - 2026-06-13
+
+### Added
+- **History & ratings** page (new sidebar item): every book you've finished in
+  Audiobookshelf, rated, or marked read, shown as cards with an always-visible
+  1–5★ rating control that feeds the recommender. Included in the demo.
+
+### Fixed
+- Reading-list import (`importlists.all_for_user`) now honours the Goodreads /
+  Hardcover values set in **Settings** (DB), not just the env defaults — the
+  in-app reading-list panel was previously inert.
+
 ## [1.0.0] - 2026-06-13
 First stable release.
 

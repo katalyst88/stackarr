@@ -195,6 +195,7 @@ def render_info(path):
 with app.test_request_context("/"):
     repl = {url_for("main.suggestions_page"): "index.html",
             url_for("main.insights_page"): "insights.html",
+            url_for("main.history_page"): "history.html",
             url_for("main.requests_page"): "requests.html",
             url_for("main.settings_page"): "demo-info.html",
             url_for("main.discover_page"): "demo-info.html",
@@ -253,6 +254,10 @@ write("index.html", render("suggestions.html", "/suggestions", lanes=lanes,
       lane_titles=LANE_TITLES, genres=home_genres, rec_authors=rec_authors,
       recently_added=recently_added, recent_requests=recent_requests, abs_base="#")); pages += 1
 write("insights.html", render("insights.html", "/insights", **insights_ctx)); pages += 1
+_read = [{"asin": b["asin"], "title": b["title"], "author": b["author"], "cover": b["cover"],
+          "stars": [5, 4, 5, 3, 4, 5, 4][k % 7]} for k, b in enumerate(BOOKS[:24])]
+write("history.html", render("history.html", "/history", books=_read,
+      rated_n=sum(1 for b in _read if b["stars"]))); pages += 1
 write("requests.html", render("browse.html", "/requests", kind="genre",
       title="Your requests", author=None, books=genre_books(all_genres[0]))); pages += 1
 write("demo-info.html", render_info("/settings")); pages += 1

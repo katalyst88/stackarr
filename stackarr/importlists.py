@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-from . import config
+from . import config, db
 
 log = logging.getLogger("stackarr.importlists")
 
@@ -60,8 +60,12 @@ def hardcover(token: str) -> list[dict]:
 
 
 def all_for_user() -> list[dict]:
+    # Settings-UI values (DB) take precedence over the env defaults, matching the
+    # rest of the app — otherwise the in-app reading-list panel would be inert.
+    rss = db.setting("goodreads_rss", config.GOODREADS_RSS)
+    token = db.setting("hardcover_token", config.HARDCOVER_TOKEN)
     items = []
-    for url in [u for u in config.GOODREADS_RSS.split(",") if u.strip()]:
+    for url in [u for u in (rss or "").split(",") if u.strip()]:
         items += goodreads(url.strip())
-    items += hardcover(config.HARDCOVER_TOKEN)
+    items += hardcover(token)
     return items
