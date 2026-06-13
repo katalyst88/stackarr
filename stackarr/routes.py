@@ -545,6 +545,22 @@ def api_discover():
     return jsonify(books)
 
 
+def _search_catalog(q, num):
+    """Search the catalogue of the active format(s). Ebook-only installs search
+    the ebook catalogue (mapping its id into `asin` so the front-end's book
+    links work); otherwise the audiobook catalogue. 'both' stays audiobook-led
+    for the quick box — full ebook search lives in the format-aware lanes."""
+    if formats.active() == ["ebook"]:
+        from . import ebookmeta
+        out = []
+        for x in ebookmeta.search(q, num=num):
+            x = dict(x, asin=x.get("id", ""))
+            if x["asin"]:
+                out.append(x)
+        return out
+    return [x for x in audible.search(q, num=num) if x.get("asin")]
+
+
 @bp.route("/api/suggest")
 @auth.login_required
 def api_suggest():
@@ -554,7 +570,7 @@ def api_suggest():
         return jsonify([])
     return jsonify([{"asin": x["asin"], "title": x["title"], "author": x["author"],
                      "series": x.get("series", ""), "cover": x["cover"]}
-                    for x in audible.search(q, num=7) if x.get("asin")])
+                    for x in _search_catalog(q, 7)])
 
 
 @bp.route("/api/ignore", methods=["POST"])
@@ -597,7 +613,7 @@ def api_search():
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify([])
-    books = audible.search(q)
+    books = _search_catalog(q, 12)
     for b in books:
         b["state"] = _state_for(b["asin"], b["title"], b["author"])
     return jsonify(books)

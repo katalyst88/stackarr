@@ -130,7 +130,7 @@
     </div>
     {% endfor %}
   {% endcall %}
-  {% if loop.first and genres %}
+  {% if loop.first and genres and show_audio %}
   {% call lane_row('genrebrowse', genres, 'Browse by genre') %}
     {% for g in genres %}
     <a class="media-card genre-card" href="{{ url_for('main.browse_page', genre=g) }}">
@@ -139,7 +139,7 @@
     {% endfor %}
   {% endcall %}
   {% endif %}
-  {% if loop.first and rec_authors %}
+  {% if loop.first and rec_authors and show_audio %}
   {% call lane_row('authorbrowse', rec_authors, 'Authors you might like') %}
     {% for a in rec_authors %}
     <a class="media-card genre-card" href="{{ url_for('main.browse_page', author=a) }}">
@@ -150,11 +150,13 @@
   {% endif %}
   {% endfor %}
 
+  {% if show_audio %}
   <section class="section" id="home-discover-section">
     <div class="section-head"><h3>Discover more <span class="subtle">popular &amp; new in your genres</span></h3></div>
     <div id="home-discover" class="grid"></div>
     <div id="home-sentinel" class="subtle" style="text-align:center;padding:28px">Loading more…</div>
   </section>
+  {% endif %}
 </div>
 {% endblock %}
-{% block scripts %}<script>Stackarr.initSuggestions({{ 'true' if not lanes else 'false' }}); Stackarr.initDiscoverGallery();</script>{% endblock %}
+{% block scripts %}<script>Stackarr.initSuggestions({{ 'true' if not lanes else 'false' }});{% if show_audio %} Stackarr.initDiscoverGallery();{% endif %}</script>{% endblock %}
