@@ -84,6 +84,18 @@ const Stackarr = (() => {
       if (localStorage.getItem("stackarr-nav") === "collapsed") document.body.classList.add("nav-collapsed");
       document.body.classList.add("loaded");
       this.initSearchSuggest();
+      this.fitCovers();
+    },
+    fitImg(img) {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      // only non-square covers get black bars (letterbox); square ones fill
+      img.classList.toggle("letterbox", !!(w && h) && Math.abs(w - h) / Math.max(w, h) > 0.03);
+    },
+    fitCovers() {
+      document.querySelectorAll(".media-poster img").forEach(img => {
+        if (img.complete && img.naturalWidth) this.fitImg(img);
+        else img.addEventListener("load", () => this.fitImg(img), { once: true });
+      });
     },
     initSearchSuggest() {
       const inp = document.getElementById("topsearch"), box = document.getElementById("search-suggest");
@@ -238,6 +250,7 @@ const Stackarr = (() => {
         loading = false;
         if (!b || !b.length) { done = true; if (sentinel) sentinel.textContent = ""; return; }
         disc.insertAdjacentHTML("beforeend", b.map(mediaCard).join(""));
+        this.fitCovers();
         page++;
       };
       if (sentinel && "IntersectionObserver" in window)
@@ -278,6 +291,7 @@ const Stackarr = (() => {
         if (!books || mine !== seq) return;
         if (discSec) discSec.style.display = "none"; rhead.hidden = false;
         results.innerHTML = books.map(mediaCard).join("") || `<div class="empty"><p>No results.</p></div>`;
+        Stackarr.fitCovers();
       };
       const q = document.getElementById("topsearch");
       if (q) { q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => doSearch(q.value.trim()), 350); }); }
