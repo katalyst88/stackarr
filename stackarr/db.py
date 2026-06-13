@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS suggestions (
   lane TEXT DEFAULT 'foryou',                  -- foryou | series | narrator | discover | importlist
   score REAL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'pending',      -- pending | approved | rejected
+  extra TEXT DEFAULT '',                        -- e.g. release date for upcoming titles
   created_at TEXT DEFAULT (datetime('now','localtime')),
   decided_at TEXT,
   UNIQUE(user_id, asin)
@@ -115,6 +116,12 @@ def init():
     os.makedirs(config.DATA_DIR, exist_ok=True)
     with conn() as c:
         c.executescript(SCHEMA)
+        # lightweight migrations for existing DBs
+        for stmt in ("ALTER TABLE suggestions ADD COLUMN extra TEXT DEFAULT ''",):
+            try:
+                c.execute(stmt)
+            except sqlite3.OperationalError:
+                pass
 
 
 def get_meta(k: str, default: str = "") -> str:
@@ -126,6 +133,13 @@ def get_meta(k: str, default: str = "") -> str:
 def set_meta(k: str, v: str):
     with conn() as c:
         c.execute("INSERT INTO meta(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (k, v))
+
+
+def setting(key: str, fallback: str = "") -> str:
+    """Runtime setting: in-app value (DB) wins, else env/config fallback.
+    Lets service connections be configured in the UI instead of only env."""
+    v = get_meta(key, "")
+    return v if v else fallback
 
 
 def secret_key() -> str:

@@ -4,12 +4,25 @@ themes (light / dark / fun) and a live preview, plus a simple Discord
 webhook. All optional and per-deployment; toggled from Settings."""
 import logging
 import smtplib
+import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import requests
 
 from . import config, db
+
+
+def _email_due() -> bool:
+    """Throttle digests to the configured frequency (immediate/daily/weekly)."""
+    freq = db.get_meta("email_frequency", "immediate")
+    if freq == "immediate":
+        return True
+    last = db.get_meta("last_email_ts")
+    if not last:
+        return True
+    window = {"daily": 86400, "weekly": 604800}.get(freq, 0)
+    return (time.time() - float(last)) >= window
 
 log = logging.getLogger("stackarr.notify")
 
@@ -130,10 +143,11 @@ def _apprise(title: str, body: str):
 
 
 def _discord(text: str):
-    if not config.DISCORD_WEBHOOK or db.get_meta("discord_enabled", "1") != "1":
+    hook = db.setting("discord_webhook", config.DISCORD_WEBHOOK)
+    if not hook or db.get_meta("discord_enabled", "1") != "1":
         return
     try:
-        requests.post(config.DISCORD_WEBHOOK, json={"content": text}, timeout=10)
+        requests.post(hook, json={"content": text}, timeout=10)
     except Exception as e:
         log.warning("discord webhook failed: %s", e)
 
@@ -143,9 +157,11 @@ def suggestion_digest(pending: list[dict], base_url: str = "") -> bool:
     text = f"{n} audiobook suggestion(s) waiting for approval:\n" + \
            "\n".join(f"  - {s['title']} — {s['author']}  ({s['reason']})" for s in pending)
     sent = False
-    if email_enabled():
+    if email_enabled() and _email_due():
         sent = _send_email(f"{config.APP_NAME}: {n} suggestion{'s' if n!=1 else ''} awaiting approval",
                            text, render_digest(pending, base_url=base_url))
+        if sent:
+            db.set_meta("last_email_ts", str(time.time()))
     _apprise(f"{config.APP_NAME}: {n} suggestion(s) to review", text)
     _discord(f"**{config.APP_NAME}** — {n} suggestion(s) waiting for approval"
              + (f": {base_url}/suggestions" if base_url else ""))

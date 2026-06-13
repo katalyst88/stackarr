@@ -53,11 +53,30 @@ def suggestions_page():
     lane_titles = {"series": "Series to finish", "author": "More from authors you love",
                    "enjoyed": "Readers also enjoyed", "discover_author": "New authors to discover",
                    "narrator": "Narrators you love", "genre": "More in your favourite genres",
-                   "discover": "Popular picks", "importlist": "From your reading list",
-                   "foryou": "For you"}
-    lane_order = ["series", "author", "enjoyed", "discover_author", "narrator", "genre", "foryou", "importlist", "discover"]
+                   "hidden": "Hidden gems", "awards": "Award winners",
+                   "short": "Short listens", "epic": "Epic listens",
+                   "upcoming": "New & upcoming", "importlist": "From your reading list",
+                   "discover": "Popular picks", "foryou": "For you"}
+    lane_order = ["series", "author", "enjoyed", "discover_author", "narrator", "genre",
+                  "hidden", "awards", "short", "epic", "upcoming", "importlist", "foryou", "discover"]
     lanes = {k: lanes[k] for k in lane_order if k in lanes}
-    return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles)
+
+    # "Finish what you started": in-progress library books (resume in ABS)
+    in_progress = []
+    try:
+        hist = absclient.listening_history(u["abs_token"])
+        with db.conn() as c:
+            libmeta = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author FROM library")}
+        for h in hist:
+            if not h["finished"] and 0.02 < h["progress"] < 0.95:
+                m = libmeta.get(h["item_id"])
+                if m:
+                    in_progress.append({**m, "progress": round(h["progress"] * 100)})
+        in_progress = in_progress[:12]
+    except Exception:
+        pass
+    return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles,
+                           in_progress=in_progress, abs_base=absclient.abs_url())
 
 
 @bp.route("/discover")
@@ -104,17 +123,30 @@ def insights_page():
 @bp.route("/settings")
 @auth.login_required
 def settings_page():
+    g = db.setting
     return render_template("settings.html",
                            email_configured=notify.email_configured(),
                            email_enabled=db.get_meta("email_enabled", "1") == "1",
                            email_theme=notify.current_theme(),
-                           discord_configured=bool(config.DISCORD_WEBHOOK),
+                           email_frequency=db.get_meta("email_frequency", "immediate"),
+                           discord_configured=bool(db.setting("discord_webhook", config.DISCORD_WEBHOOK)),
                            discord_enabled=db.get_meta("discord_enabled", "1") == "1",
                            themes=list(notify.THEMES),
                            interval_hours=db.get_meta("suggest_interval_hours", str(config.SUGGEST_INTERVAL_HOURS)),
                            language=db.get_meta("language", config.TARGET_LANGUAGE),
                            languages=["english","german","spanish","french","italian","dutch","portuguese","japanese","any"],
                            smtp=notify.smtp_settings(),
+                           conn={"abs_url": g("abs_url", config.ABS_URL),
+                                 "abs_admin_token": g("abs_admin_token", config.ABS_ADMIN_TOKEN),
+                                 "chaptarr_url": g("chaptarr_url", config.CHAPTARR_URL),
+                                 "chaptarr_api_key": g("chaptarr_api_key", config.CHAPTARR_API_KEY),
+                                 "chaptarr_root_folder": g("chaptarr_root_folder", config.CHAPTARR_ROOT_FOLDER),
+                                 "chaptarr_quality_profile_id": g("chaptarr_quality_profile_id", str(config.CHAPTARR_QUALITY_PROFILE_ID)),
+                                 "chaptarr_metadata_profile_id": g("chaptarr_metadata_profile_id", str(config.CHAPTARR_METADATA_PROFILE_ID)),
+                                 "prowlarr_url": g("prowlarr_url", config.PROWLARR_URL),
+                                 "prowlarr_api_key": g("prowlarr_api_key", config.PROWLARR_API_KEY)},
+                           reading={"goodreads_rss": g("goodreads_rss", config.GOODREADS_RSS),
+                                    "hardcover_token": g("hardcover_token", config.HARDCOVER_TOKEN)},
                            log_level=config.LOG_LEVEL,
                            is_admin=auth.current_user()["role"] == "admin")
 
@@ -190,22 +222,33 @@ def api_request():
 @auth.login_required
 def api_suggestion(sid, verdict):
     u = auth.current_user()
-    if verdict not in ("approve", "reject"):
+    if verdict not in ("approve", "reject", "read"):
         return jsonify({"error": "bad verdict"}), 400
     with db.conn() as c:
         row = c.execute("SELECT * FROM suggestions WHERE id=? AND user_id=?", (sid, u["id"])).fetchone()
         if not row:
             return jsonify({"error": "not found"}), 404
         row = dict(row)
+        new_status = "approved" if verdict == "approve" else "rejected"
         c.execute("UPDATE suggestions SET status=?,decided_at=datetime('now','localtime') WHERE id=?",
-                  ("approved" if verdict == "approve" else "rejected", sid))
+                  (new_status, sid))
         if verdict == "reject":
             c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
                       (u["id"], "asin", row["asin"], -3, f"passed: {row['title']}"))
+        elif verdict == "read":
+            # treat like the manual 'already read' seed: positive author/series,
+            # never re-suggest this title, and drop it from the queue.
+            if row.get("author"):
+                c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
+                          (u["id"], "author", row["author"].split(",")[0], 3, f"already read: {row['title']}"))
+            if row.get("series"):
+                c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
+                          (u["id"], "series", row["series"], 2, f"already read: {row['title']}"))
+            c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
+                      (u["id"], "asin", row["asin"], -1, f"already read: {row['title']}"))
     if verdict == "approve":
-        # admins auto-hand; regular users' approvals also hand (their approval IS the gate)
         return jsonify(_hand_to_chaptarr(u["id"], row, "suggestion"))
-    return jsonify({"status": "rejected"})
+    return jsonify({"status": new_status})
 
 
 @bp.route("/api/mark-read", methods=["POST"])
@@ -272,27 +315,52 @@ def api_request_delete(rid):
     return jsonify({"ok": True})
 
 
+SETTING_KEYS = {
+    "email_theme", "language", "email_frequency", "suggest_interval_hours",
+    "smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from", "smtp_to",
+    "abs_url", "abs_admin_token",
+    "chaptarr_url", "chaptarr_api_key", "chaptarr_root_folder",
+    "chaptarr_quality_profile_id", "chaptarr_metadata_profile_id",
+    "prowlarr_url", "prowlarr_api_key", "goodreads_rss", "hardcover_token",
+}
+BOOL_KEYS = {"email_enabled", "discord_enabled"}
+
+
 @bp.route("/api/settings", methods=["POST"])
 @auth.login_required
 def api_settings():
     body = request.get_json(force=True)
-    if "email_enabled" in body:
-        db.set_meta("email_enabled", "1" if body["email_enabled"] else "0")
-    if "discord_enabled" in body:
-        db.set_meta("discord_enabled", "1" if body["discord_enabled"] else "0")
-    if body.get("email_theme") in notify.THEMES:
-        db.set_meta("email_theme", body["email_theme"])
-    if "suggest_interval_hours" in body:
-        try:
-            db.set_meta("suggest_interval_hours", str(max(int(body["suggest_interval_hours"]), 1)))
-        except (ValueError, TypeError):
-            pass
-    if body.get("language"):
-        db.set_meta("language", str(body["language"]).lower())
-    for k in ("smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from", "smtp_to"):
-        if k in body:
-            db.set_meta(k, str(body[k]))
+    for k, v in body.items():
+        if k in BOOL_KEYS:
+            db.set_meta(k, "1" if v else "0")
+        elif k in SETTING_KEYS:
+            db.set_meta(k, str(v).strip())
     return jsonify({"ok": True})
+
+
+@bp.route("/api/test/<service>", methods=["POST"])
+@auth.admin_required
+def api_test(service):
+    body = request.get_json(silent=True) or {}
+    # let the user test values typed in the form before saving them
+    for k, v in body.items():
+        if k in SETTING_KEYS:
+            db.set_meta(k, str(v).strip())
+    try:
+        if service == "abs":
+            libs = absclient.libraries()
+            return jsonify({"ok": True, "detail": f"Connected — {len(libs)} book librar{'y' if len(libs)==1 else 'ies'}"})
+        if service == "chaptarr":
+            import requests as rq
+            r = rq.get(f"{chaptarr.url()}/api/v1/system/status",
+                       headers={"X-Api-Key": chaptarr.api_key()}, timeout=15)
+            return jsonify({"ok": r.ok, "detail": "Connected" if r.ok else f"HTTP {r.status_code}"})
+        if service == "prowlarr":
+            from . import prowlarr
+            return jsonify(prowlarr.test())
+    except Exception as e:
+        return jsonify({"ok": False, "detail": str(e)})
+    return jsonify({"ok": False, "detail": "unknown service"}), 404
 
 
 @bp.route("/api/email/preview/<theme>")

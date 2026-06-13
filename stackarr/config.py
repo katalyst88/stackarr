@@ -4,7 +4,7 @@ import os
 
 # Pre-public-release. The -pre suffix signals "not yet tested for public use";
 # bump to 1.0.0 only after real-world testing.
-VERSION = "0.1.4-pre"
+VERSION = "0.1.5-pre"
 RELEASE_STAGE = "pre-release · untested"
 
 
@@ -46,6 +46,10 @@ CHAPTARR_ROOT_FOLDER = os.environ.get("CHAPTARR_ROOT_FOLDER", "")
 CHAPTARR_QUALITY_PROFILE_ID = int(os.environ.get("CHAPTARR_QUALITY_PROFILE_ID", "2"))
 CHAPTARR_METADATA_PROFILE_ID = int(os.environ.get("CHAPTARR_METADATA_PROFILE_ID", "1"))
 
+# --- Prowlarr (optional: connection test + release-availability checks) ------
+PROWLARR_URL = os.environ.get("PROWLARR_URL", "").rstrip("/")
+PROWLARR_API_KEY = os.environ.get("PROWLARR_API_KEY", "")
+
 # --- metadata sources (no API key needed; deterministic, no AI) -------------
 AUDIBLE_DOMAIN = os.environ.get("AUDIBLE_DOMAIN", "com")           # com, co.uk, com.au, de…
 AUDIBLE_API = f"https://api.audible.{AUDIBLE_DOMAIN}/1.0"
@@ -56,6 +60,7 @@ AUDNEXUS_REGION = os.environ.get("AUDNEXUS_REGION", AUDIBLE_DOMAIN if AUDIBLE_DO
 SUGGEST_ENABLED = _bool("STACKARR_SUGGEST", True)
 SUGGEST_INTERVAL_HOURS = int(os.environ.get("STACKARR_SUGGEST_HOURS", "12"))   # default; user-overridable in Settings
 SUGGEST_MAX_PENDING = int(os.environ.get("STACKARR_SUGGEST_MAX", "30"))
+SUGGEST_PER_LANE = int(os.environ.get("STACKARR_PER_LANE", "12"))   # how many to keep per category
 TARGET_LANGUAGE = os.environ.get("STACKARR_LANGUAGE", "english").lower()
 SUGGEST_RATING_FLOOR = float(os.environ.get("STACKARR_RATING_FLOOR", "4.0"))
 SUGGEST_MAX_PER_AUTHOR = int(os.environ.get("STACKARR_MAX_PER_AUTHOR", "2"))

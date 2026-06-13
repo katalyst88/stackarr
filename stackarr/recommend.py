@@ -12,12 +12,13 @@ dampening (so it isn't only bestsellers), and your negative signals
 (passes / DNF / deleted items hard-exclude or de-weight). Results are
 de-duplicated by edition, diversity-capped per author, and ranked.
 """
+import datetime
 import logging
 import math
 import re
 import time
 
-from . import absclient, audible, audnexus, config, db, discover
+from . import absclient, audible, audnexus, config, db, discover, importlists
 
 log = logging.getLogger("stackarr.recommend")
 
@@ -86,7 +87,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
     # cold-start: thin/no history -> deterministic popular/curated fallback
     if len(seeds) < 2:
         log.info("user %s cold-start (%d seeds) -> discover fallback", user_id, len(seeds))
-        cands = {b["asin"]: {"cand": b, "score": b.get("rating") or 3, "lane": "discover",
+        cands = {b["asin"]: {"cand": b, "score": b.get("rating") or 3, "lane": "discover", "extra": "",
                              "reason": "Popular right now — listen to a few books and your picks get personal"}
                  for b in discover.popular() if b.get("asin")}
         return _finalize(user_id, cands, known, neg, max_new)
@@ -97,7 +98,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
     narrators_seen: dict[str, float] = {}
     genres_seen: dict[str, float] = {}
 
-    def consider(b: dict, base: float, lane: str, reason: str):
+    def consider(b: dict, base: float, lane: str, reason: str, extra: str = "", floor: bool = True):
         asin = b.get("asin")
         if not asin or _key(b["title"], b["author"]) in known:
             return
@@ -105,7 +106,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
             return                                          # skip dramatized/GraphicAudio variants
         if target_lang != "any" and (b.get("language") or "english").lower() != target_lang:
             return                                          # skip non-target-language editions
-        if (b.get("rating") or 5) < config.SUGGEST_RATING_FLOOR:
+        if floor and (b.get("rating") or 5) < config.SUGGEST_RATING_FLOOR:
             return
         # negative signals -> hard exclude
         first_author = (b["author"] or "").split(",")[0].lower()
@@ -124,7 +125,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
         if cur:
             cur["score"] += score                           # frequency across seeds compounds
         else:
-            cands[asin] = {"cand": b, "score": score, "lane": lane, "reason": reason}
+            cands[asin] = {"cand": b, "score": score, "lane": lane, "reason": reason, "extra": extra}
 
     for rank, seed in enumerate(seeds[:15]):
         meta = seed_lib.get(seed["item_id"]) or absclient.item_detail(seed["item_id"])
@@ -172,45 +173,91 @@ def run(user_id: int, max_new: int | None = None) -> int:
             if nm.lower() in (b.get("narrator") or "").lower():
                 consider(b, config.W_NARRATOR * wt, "narrator", f"Narrated by {nm}, whom you listen to often")
 
+    top_genres = [g for g, _ in sorted(genres_seen.items(), key=lambda x: x[1], reverse=True)[:2]]
+    today = str(datetime.date.today())
+
     # genre lane -> "More in your favourite genres"
-    for g, wt in sorted(genres_seen.items(), key=lambda x: x[1], reverse=True)[:2]:
+    for g in top_genres:
         for b in discover.genre_new([g], num_per=8)[:10]:
             consider(b, config.W_RATING * 1.2, "genre", f"Popular in {g}, a genre you enjoy")
+
+    # hidden gems -> well-rated but not mega-popular
+    for g in top_genres:
+        for b in audible.search(g, num=25):
+            if (b.get("rating") or 0) >= 4.4 and 20 <= b.get("num_ratings", 0) <= 4000:
+                consider(b, config.W_RATING, "hidden", f"A hidden gem in {g} — highly rated, lesser known")
+
+    # award winners in your genres
+    for g in top_genres:
+        for b in audible.search(f"{g} award winning", num=8):
+            consider(b, config.W_RATING, "awards", f"Award-winning {g.lower()}")
+
+    # short / epic listens
+    for g in top_genres[:1]:
+        for b in audible.search(g, num=25):
+            h = b.get("runtime_hours") or 0
+            if 0 < h <= 6:
+                consider(b, config.W_RATING * 0.8, "short", f"A short listen ({h}h) in {g}")
+            elif h >= 20:
+                consider(b, config.W_RATING * 0.8, "epic", f"An epic listen ({h:.0f}h) in {g}")
+
+    # new & upcoming from authors you love (incl. not-yet-released)
+    for a in list(read_authors)[:8]:
+        for b in audible.by_author(a, num=8):
+            rd = b.get("release_date") or ""
+            if rd and rd > today:
+                consider(b, config.W_AUTHOR_BACKLIST, "upcoming",
+                         f"Coming {rd} from {(b['author'] or a).split(',')[0]}", extra=rd, floor=False)
+
+    # from your reading list (Goodreads / Hardcover "want to read")
+    for it in importlists.all_for_user():
+        hit = audible.search(f"{it['title']} {it.get('author','')}", num=1)
+        if hit:
+            consider(hit[0], config.W_RATING * 1.5, "importlist",
+                     "On your reading list" + (f" — {it['author']}" if it.get("author") else ""))
 
     return _finalize(user_id, cands, known, neg, max_new)
 
 
 def _finalize(user_id: int, cands: dict, known: set, neg: dict, max_new: int) -> int:
-    # edition dedup by (title, author): keep highest score
+    """Edition-dedup, then keep the top N PER LANE (author-diverse) so every
+    category is represented rather than one lane crowding out the rest."""
+    from collections import defaultdict
     best_by_key: dict[str, dict] = {}
     for entry in cands.values():
         b = entry["cand"]
         k = _key(b["title"], b["author"])
         if k not in best_by_key or entry["score"] > best_by_key[k]["score"]:
             best_by_key[k] = entry
-    ranked = sorted(best_by_key.values(), key=lambda x: x["score"], reverse=True)
 
-    # diversity: cap per author
-    per_author: dict[str, int] = {}
+    by_lane = defaultdict(list)
+    for entry in best_by_key.values():
+        by_lane[entry["lane"]].append(entry)
+
+    per_lane = config.SUGGEST_PER_LANE
     added = 0
     with db.conn() as c:
-        for entry in ranked:
-            if added >= max_new:
-                break
-            b = entry["cand"]
-            a = (b["author"] or "").split(",")[0].lower()
-            if per_author.get(a, 0) >= config.SUGGEST_MAX_PER_AUTHOR:
-                continue
-            cur = c.execute("SELECT changes()")
-            c.execute(
-                "INSERT OR IGNORE INTO suggestions "
-                "(user_id, asin, title, author, narrator, series, cover, reason, lane, score) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (user_id, b["asin"], b["title"], b.get("author", ""), b.get("narrator", ""),
-                 b.get("series", ""), b.get("cover", ""), entry["reason"], entry["lane"],
-                 round(entry["score"], 2)))
-            if c.execute("SELECT changes()").fetchone()[0]:
-                per_author[a] = per_author.get(a, 0) + 1
-                added += 1
-    log.info("user %s: %d candidates -> %d new suggestions", user_id, len(cands), added)
+        for lane, entries in by_lane.items():
+            entries.sort(key=lambda x: x["score"], reverse=True)
+            per_author: dict[str, int] = {}
+            taken = 0
+            for entry in entries:
+                if taken >= per_lane:
+                    break
+                b = entry["cand"]
+                a = (b["author"] or "").split(",")[0].lower()
+                if per_author.get(a, 0) >= config.SUGGEST_MAX_PER_AUTHOR:
+                    continue
+                c.execute(
+                    "INSERT OR IGNORE INTO suggestions "
+                    "(user_id, asin, title, author, narrator, series, cover, reason, lane, score, extra) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (user_id, b["asin"], b["title"], b.get("author", ""), b.get("narrator", ""),
+                     b.get("series", ""), b.get("cover", ""), entry["reason"], entry["lane"],
+                     round(entry["score"], 2), entry.get("extra", "")))
+                if c.execute("SELECT changes()").fetchone()[0]:
+                    per_author[a] = per_author.get(a, 0) + 1
+                    taken += 1
+                    added += 1
+    log.info("user %s: %d candidates -> %d new across %d lanes", user_id, len(cands), added, len(by_lane))
     return added
