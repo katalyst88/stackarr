@@ -4,7 +4,7 @@ import os
 
 # Pre-public-release. The -pre suffix signals "not yet tested for public use";
 # bump to 1.0.0 only after real-world testing.
-VERSION = "0.1.18-pre"
+VERSION = "0.1.19-pre"
 RELEASE_STAGE = "pre-release · untested"
 
 
