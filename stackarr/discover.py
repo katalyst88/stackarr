@@ -19,7 +19,7 @@ def genre_new(genres: list[str], num_per: int = 6) -> list[dict]:
                 continue
             if (b.get("rating") or 0) < config.SUGGEST_RATING_FLOOR:
                 continue
-            if (b.get("language") or "english") != "english":
+            if (b.get("language") or "english").lower() != config.TARGET_LANGUAGE:
                 continue
             seen.add(b["asin"])
             out.append(b)
@@ -41,7 +41,7 @@ def page(n: int, genres: list[str] | None = None) -> list[dict]:
     for b in audible.search(genre, num=18, page=audpage):
         if not b.get("asin") or (b.get("rating") or 0) < config.SUGGEST_RATING_FLOOR:
             continue
-        if (b.get("language") or "english") != config.TARGET_LANGUAGE:
+        if (b.get("language") or "english").lower() != config.TARGET_LANGUAGE:
             continue
         b["genre"] = genre
         out.append(b)
