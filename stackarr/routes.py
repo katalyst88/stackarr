@@ -381,17 +381,25 @@ def book_page(asin):
     # audiobook ASINs go to Audible + Audnexus as before.
     if asin.startswith(("gb:", "ol:")):
         from . import ebookmeta
-        b = ebookmeta.by_id(asin) or {"title": "Unknown", "author": "", "format": "ebook"}
+        b = ebookmeta.by_id(asin) or {}
         b["format"] = "ebook"
         b["asin"] = asin            # keep the gb:/ol: id as the page identity for actions
     else:
-        b = audible.by_asin(asin) or {"asin": asin, "title": "Unknown", "author": ""}
+        b = audible.by_asin(asin) or {}
+        b.setdefault("asin", asin)
         b.setdefault("format", "audiobook")
         ax = audnexus.book(asin) or {}
         if ax.get("genres"):
             b["genres"] = ax["genres"]
         if ax.get("series") and not b.get("series"):
             b["series"], b["sequence"] = ax["series"], ax.get("sequence")
+    # Catalogue lookups can transiently fail (rate-limit / timeout). Fall back to
+    # what Stackarr already knows about this book so the page never shows a bare
+    # "Unknown" — we usually have its title/author/cover cached from a suggestion.
+    if not (b.get("title") or "").strip():
+        cached = _cached_book(asin)
+        b.update({k: v for k, v in cached.items() if v and not b.get(k)})
+    b.setdefault("title", "Unknown")
     b["state"] = _state_for(asin, b.get("title", ""), b.get("author", ""))
     u = auth.current_user()
     key = db.rating_key(asin if not asin.startswith(("gb:", "ol:")) else "",
@@ -498,6 +506,25 @@ def _owned(c, asin, title, author) -> bool:
     return bool(c.execute(
         "SELECT 1 FROM library WHERE gone_at IS NULL AND lower(title)=? AND lower(author) LIKE ?",
         ((title or "").strip().lower(), f"%{a}%")).fetchone())
+
+
+def _cached_book(asin) -> dict:
+    """Best-effort title/author/cover for a book Stackarr has seen, from the
+    suggestions / requests / library tables — the fallback when a live catalogue
+    lookup fails so the detail page degrades gracefully instead of 'Unknown'."""
+    if not asin:
+        return {}
+    with db.conn() as c:
+        for q in ("SELECT title, author, cover FROM suggestions WHERE asin=? ORDER BY id DESC LIMIT 1",
+                  "SELECT title, author, cover FROM requests WHERE asin=? ORDER BY id DESC LIMIT 1"):
+            row = c.execute(q, (asin,)).fetchone()
+            if row and (row["title"] or "").strip():
+                return {"title": row["title"], "author": row["author"], "cover": row["cover"]}
+        row = c.execute("SELECT title, author FROM library WHERE asin=? AND asin<>'' LIMIT 1",
+                        (asin,)).fetchone()
+        if row:
+            return {"title": row["title"], "author": row["author"]}
+    return {}
 
 
 def _state_for(asin, title, author):
