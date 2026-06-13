@@ -67,7 +67,7 @@ def email_configured() -> bool:
 
 
 def email_enabled() -> bool:
-    return email_configured() and db.get_meta("email_enabled", "1") == "1"
+    return email_configured() and db.get_meta("email_enabled", "0") == "1"
 
 
 def current_theme() -> str:
@@ -144,7 +144,7 @@ def _apprise(title: str, body: str):
 
 def _discord(text: str):
     hook = db.setting("discord_webhook", config.DISCORD_WEBHOOK)
-    if not hook or db.get_meta("discord_enabled", "1") != "1":
+    if not hook or db.get_meta("discord_enabled", "0") != "1":
         return
     try:
         requests.post(hook, json={"content": text}, timeout=10)

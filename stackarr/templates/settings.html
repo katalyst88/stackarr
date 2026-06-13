@@ -5,7 +5,8 @@
   <nav class="settings-nav">
     <button class="active" onclick="Stackarr.settingsCat('general', this)">General</button>
     <button onclick="Stackarr.settingsCat('suggest', this)">Suggestions</button>
-    <button onclick="Stackarr.settingsCat('library', this)">My reading</button>
+    <button onclick="Stackarr.settingsCat('reading', this)">My reading</button>
+    {% if is_admin %}<button onclick="Stackarr.settingsCat('connections', this)">Connections</button>{% endif %}
     <button onclick="Stackarr.settingsCat('notify', this)">Notifications</button>
     {% if is_admin %}<button onclick="Stackarr.settingsCat('logs', this)">Logs</button>{% endif %}
     <button onclick="Stackarr.settingsCat('about', this)">About</button>
@@ -15,7 +16,7 @@
     <div class="settings-cat active" id="cat-general">
       <div class="panel"><h3>Appearance</h3>
         <label class="row"><span>Light theme</span>
-          <input type="checkbox" class="switch" onchange="Stackarr.toggleTheme()" id="ui-theme"></label>
+          <input type="checkbox" class="switch" id="ui-theme" onchange="Stackarr.toggleTheme()"></label>
         <p class="muted">Theme is remembered on this device.</p>
       </div>
     </div>
@@ -23,17 +24,17 @@
     <div class="settings-cat" id="cat-suggest">
       <div class="panel"><h3>Recommendations</h3>
         <label class="row"><span>Refresh suggestions every (hours)</span>
-          <input type="number" min="1" id="interval" value="{{ interval_hours }}"
-                 onchange="Stackarr.setSetting({suggest_interval_hours: this.value})"></label>
+          <input type="number" min="1" data-setting="suggest_interval_hours" value="{{ interval_hours }}"></label>
         <label class="row"><span>Language</span>
-          <select id="language" onchange="Stackarr.setSetting({language: this.value})">
+          <select data-setting="language">
             {% for l in languages %}<option value="{{ l }}" {{ 'selected' if l == language }}>{{ l|capitalize }}</option>{% endfor %}
           </select></label>
         <p class="muted">Suggestions run on first login, then on this interval. Language filters which editions are suggested.</p>
+        <button class="btn" onclick="Stackarr.saveCategory('suggest', this)">Save</button>
       </div>
     </div>
 
-    <div class="settings-cat" id="cat-library">
+    <div class="settings-cat" id="cat-reading">
       <div class="panel"><h3>I've already read…</h3>
         <p class="muted">Tell Stackarr a book you've read so it shapes your suggestions — no download.</p>
         <div class="inline-form">
@@ -42,7 +43,45 @@
           <button class="btn small" onclick="Stackarr.markRead(this)">Add</button>
         </div>
       </div>
+      <div class="panel"><h3>Import your reading list</h3>
+        <p class="muted">Pull your "Want to Read" shelf in as suggestions.</p>
+        <label class="row"><span>Goodreads shelf RSS</span>
+          <input data-setting="goodreads_rss" value="{{ reading.goodreads_rss }}" placeholder="https://www.goodreads.com/review/list_rss/…"></label>
+        <p class="muted">How to find it: Goodreads → <b>My Books</b> → open your <b>to-read</b> shelf → scroll to the bottom →
+          right-click the orange <b>RSS</b> icon → Copy link. Paste it here.</p>
+        <label class="row"><span>Hardcover API token</span>
+          <input data-setting="hardcover_token" value="{{ reading.hardcover_token }}" placeholder="Bearer …"></label>
+        <p class="muted">Hardcover → Settings → API → copy your token.</p>
+        <button class="btn" onclick="Stackarr.saveCategory('reading', this)">Save</button>
+      </div>
     </div>
+
+    {% if is_admin %}
+    <div class="settings-cat" id="cat-connections">
+      <div class="panel"><h3>Audiobookshelf</h3>
+        <label class="row"><span>URL</span><input data-setting="abs_url" value="{{ conn.abs_url }}"></label>
+        <label class="row"><span>Admin API token</span><input type="password" data-setting="abs_admin_token" value="{{ conn.abs_admin_token }}"></label>
+        <div class="conn-actions"><button class="btn small ghost" onclick="Stackarr.testConn('abs', this)">Test</button>
+          <span class="conn-result" id="test-abs"></span></div>
+      </div>
+      <div class="panel"><h3>Chaptarr</h3>
+        <label class="row"><span>URL</span><input data-setting="chaptarr_url" value="{{ conn.chaptarr_url }}"></label>
+        <label class="row"><span>API key</span><input type="password" data-setting="chaptarr_api_key" value="{{ conn.chaptarr_api_key }}"></label>
+        <label class="row"><span>Root folder</span><input data-setting="chaptarr_root_folder" value="{{ conn.chaptarr_root_folder }}"></label>
+        <label class="row"><span>Quality profile id</span><input type="number" data-setting="chaptarr_quality_profile_id" value="{{ conn.chaptarr_quality_profile_id }}"></label>
+        <label class="row"><span>Metadata profile id</span><input type="number" data-setting="chaptarr_metadata_profile_id" value="{{ conn.chaptarr_metadata_profile_id }}"></label>
+        <div class="conn-actions"><button class="btn small ghost" onclick="Stackarr.testConn('chaptarr', this)">Test</button>
+          <span class="conn-result" id="test-chaptarr"></span></div>
+      </div>
+      <div class="panel"><h3>Prowlarr <span class="subtle">(optional)</span></h3>
+        <label class="row"><span>URL</span><input data-setting="prowlarr_url" value="{{ conn.prowlarr_url }}"></label>
+        <label class="row"><span>API key</span><input type="password" data-setting="prowlarr_api_key" value="{{ conn.prowlarr_api_key }}"></label>
+        <div class="conn-actions"><button class="btn small ghost" onclick="Stackarr.testConn('prowlarr', this)">Test</button>
+          <span class="conn-result" id="test-prowlarr"></span></div>
+      </div>
+      <button class="btn" onclick="Stackarr.saveCategory('connections', this)">Save connections</button>
+    </div>
+    {% endif %}
 
     <div class="settings-cat" id="cat-notify">
       <div class="sub-tabs">
@@ -53,16 +92,23 @@
       <div class="sub-panel active" data-group="notify" data-panel="email">
         <div class="panel"><h3>SMTP server</h3>
           <p class="muted">Configure your own mail server here — no separate setup needed.</p>
-          <label class="row"><span>Host</span><input id="smtp_host" value="{{ smtp.host }}" onchange="Stackarr.setSetting({smtp_host:this.value})"></label>
-          <label class="row"><span>Port</span><input type="number" id="smtp_port" value="{{ smtp.port }}" onchange="Stackarr.setSetting({smtp_port:this.value})"></label>
-          <label class="row"><span>Username</span><input id="smtp_user" value="{{ smtp.user }}" onchange="Stackarr.setSetting({smtp_user:this.value})"></label>
-          <label class="row"><span>Password</span><input type="password" id="smtp_pass" value="{{ smtp.pw }}" onchange="Stackarr.setSetting({smtp_pass:this.value})"></label>
-          <label class="row"><span>From</span><input id="smtp_from" value="{{ smtp['from'] }}" onchange="Stackarr.setSetting({smtp_from:this.value})"></label>
-          <label class="row"><span>Send digests to</span><input id="smtp_to" value="{{ smtp.to }}" onchange="Stackarr.setSetting({smtp_to:this.value})"></label>
+          <label class="row"><span>Host</span><input data-setting="smtp_host" value="{{ smtp.host }}"></label>
+          <label class="row"><span>Port</span><input type="number" data-setting="smtp_port" value="{{ smtp.port }}"></label>
+          <label class="row"><span>Username</span><input data-setting="smtp_user" value="{{ smtp.user }}"></label>
+          <label class="row"><span>Password</span><input type="password" data-setting="smtp_pass" value="{{ smtp.pw }}"></label>
+          <label class="row"><span>From</span><input data-setting="smtp_from" value="{{ smtp['from'] }}"></label>
+          <label class="row"><span>Send digests to</span><input data-setting="smtp_to" value="{{ smtp.to }}"></label>
+          <button class="btn small" onclick="Stackarr.saveCategory('notify', this)">Save</button>
         </div>
         <div class="panel"><h3>Email digests</h3>
           <label class="row"><span>Send email digests</span>
             <input type="checkbox" class="switch" id="email-enabled" {{ 'checked' if email_enabled }} onchange="Stackarr.setSetting({email_enabled: this.checked})"></label>
+          <label class="row"><span>How often</span>
+            <select onchange="Stackarr.setSetting({email_frequency: this.value})">
+              <option value="immediate" {{ 'selected' if email_frequency=='immediate' }}>With each new batch</option>
+              <option value="daily" {{ 'selected' if email_frequency=='daily' }}>At most daily</option>
+              <option value="weekly" {{ 'selected' if email_frequency=='weekly' }}>At most weekly</option>
+            </select></label>
           <p class="muted">Theme</p>
           <div class="theme-tabs">
             {% for t in themes %}<button class="theme-tab {{ 'active' if t == email_theme }}" onclick="Stackarr.pickEmailTheme('{{ t }}', this)">{{ t|capitalize }}</button>{% endfor %}
@@ -72,11 +118,10 @@
       </div>
       <div class="sub-panel" data-group="notify" data-panel="discord">
         <div class="panel"><h3>Discord</h3>
-          {% if not discord_configured %}<p class="muted">No Discord webhook configured. Set DISCORD_WEBHOOK in your environment.</p>
-          {% else %}
+          <label class="row"><span>Webhook URL</span><input type="password" data-setting="discord_webhook" value="{{ discord_webhook }}"></label>
           <label class="row"><span>Post digests to Discord</span>
             <input type="checkbox" class="switch" id="discord-enabled" {{ 'checked' if discord_enabled }} onchange="Stackarr.setSetting({discord_enabled: this.checked})"></label>
-          {% endif %}
+          <button class="btn small" onclick="Stackarr.saveCategory('notify', this)">Save</button>
         </div>
       </div>
       <div class="sub-panel" data-group="notify" data-panel="apprise">

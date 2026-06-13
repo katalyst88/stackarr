@@ -145,11 +145,12 @@ def settings_page():
     g = db.setting
     return render_template("settings.html",
                            email_configured=notify.email_configured(),
-                           email_enabled=db.get_meta("email_enabled", "1") == "1",
+                           email_enabled=db.get_meta("email_enabled", "0") == "1",
                            email_theme=notify.current_theme(),
                            email_frequency=db.get_meta("email_frequency", "immediate"),
                            discord_configured=bool(db.setting("discord_webhook", config.DISCORD_WEBHOOK)),
-                           discord_enabled=db.get_meta("discord_enabled", "1") == "1",
+                           discord_webhook=db.setting("discord_webhook", config.DISCORD_WEBHOOK),
+                           discord_enabled=db.get_meta("discord_enabled", "0") == "1",
                            themes=list(notify.THEMES),
                            interval_hours=db.get_meta("suggest_interval_hours", str(config.SUGGEST_INTERVAL_HOURS)),
                            language=db.get_meta("language", config.TARGET_LANGUAGE),
@@ -386,7 +387,7 @@ SETTING_KEYS = {
     "abs_url", "abs_admin_token",
     "chaptarr_url", "chaptarr_api_key", "chaptarr_root_folder",
     "chaptarr_quality_profile_id", "chaptarr_metadata_profile_id",
-    "prowlarr_url", "prowlarr_api_key", "goodreads_rss", "hardcover_token",
+    "prowlarr_url", "prowlarr_api_key", "goodreads_rss", "hardcover_token", "discord_webhook",
 }
 BOOL_KEYS = {"email_enabled", "discord_enabled"}
 

@@ -159,6 +159,28 @@ const Stackarr = (() => {
     async removeRequest(id) { await api(`/api/request/${id}`, { method: "DELETE" }); document.querySelector(`.req-row[data-id="${id}"]`)?.remove(); },
 
     async setSetting(obj) { await api("/api/settings", { method: "POST", body: JSON.stringify(obj) }); toast("Saved."); },
+    _gather(catId) {
+      const obj = {};
+      document.querySelectorAll(`#cat-${catId} [data-setting]`).forEach(el => {
+        obj[el.dataset.setting] = el.type === "checkbox" ? el.checked : el.value;
+      });
+      return obj;
+    },
+    async saveCategory(catId, btn) {
+      if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+      await api("/api/settings", { method: "POST", body: JSON.stringify(this._gather(catId)) });
+      if (btn) { btn.disabled = false; btn.textContent = btn.textContent.replace("Saving…", "Save"); }
+      toast("Settings saved.");
+    },
+    async testConn(service, btn) {
+      const out = document.getElementById("test-" + service);
+      if (out) { out.textContent = "Testing…"; out.className = "conn-result"; }
+      btn.disabled = true;
+      // save the connection fields first so the test uses what's on screen
+      const res = await api("/api/test/" + service, { method: "POST", body: JSON.stringify(this._gather("connections")) });
+      btn.disabled = false;
+      if (out && res) { out.textContent = (res.ok ? "✓ " : "✗ ") + (res.detail || ""); out.className = "conn-result " + (res.ok ? "ok" : "err"); }
+    },
     pickEmailTheme(theme, btn) {
       document.querySelectorAll(".theme-tab").forEach(t => t.classList.remove("active")); btn.classList.add("active");
       const f = document.getElementById("email-preview"); if (f) f.src = B() + "/api/email/preview/" + theme;
