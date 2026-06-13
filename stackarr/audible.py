@@ -2,12 +2,19 @@
 search, product-by-ASIN, and the /sims "listeners also enjoyed" endpoint
 that drives a chunk of the recommendations."""
 import logging
+import re
 
 import requests
 
 from . import config
 
 log = logging.getLogger("stackarr.audible")
+
+
+def _hi_res(url: str) -> str:
+    """Force a larger render from Amazon's image CDN by bumping the size
+    token (e.g. ._SL500_. -> ._SL1500_.), so covers aren't blurry on big cards."""
+    return re.sub(r"\._S[XYL]\d+_\.", "._SL1500_.", url) if url else url
 
 GROUPS = "contributors,media,product_attrs,product_desc,series,category_ladders,rating"
 
@@ -45,7 +52,7 @@ def normalize(p: dict) -> dict:
     images = p.get("product_images") or {}
     for size in ("1024", "900", "500", "256"):          # prefer the largest available
         if images.get(size):
-            img = images[size]
+            img = _hi_res(images[size])
             break
     series, seq = "", None
     for s in p.get("series") or []:

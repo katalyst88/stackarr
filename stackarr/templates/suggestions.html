@@ -17,30 +17,9 @@
   <p class="shelf-sub subtle">Reading your history and finding your next listen</p>
 </div>
 
-<div id="sugg-content" {% if not lanes and not in_progress %}hidden{% endif %}>
+<div id="sugg-content" {% if not lanes %}hidden{% endif %}>
   <div class="empty" id="empty-state" hidden><p>No new picks right now. As you finish more books, fresh suggestions
     appear — or add what you've already read on the <a href="{{ url_for('main.settings_page') }}">Settings</a> page.</p></div>
-
-  {% if in_progress %}
-  <section class="section">
-    <div class="section-head"><h3>Finish what you started</h3></div>
-    <div class="slider-wrap">
-      <button class="slider-arrow left" onclick="Stackarr.slide(this,-1)">‹</button>
-      <div class="slider">
-        {% for s in in_progress %}
-        <a class="media-card" href="{{ abs_base }}/item/{{ s.item_id }}" target="_blank" rel="noopener">
-          <div class="media-poster"><img src="{{ url_for('static', filename='icon.svg') }}" alt="">
-            <span class="corner-badge handed">{{ s.progress }}%</span>
-            <div class="media-overlay"><div class="ov-reason">Resume in Audiobookshelf</div></div>
-          </div>
-          <div class="media-foot"><div class="media-title">{{ s.title }}</div><div class="media-author">{{ s.author }}</div></div>
-        </a>
-        {% endfor %}
-      </div>
-      <button class="slider-arrow right" onclick="Stackarr.slide(this,1)">›</button>
-    </div>
-  </section>
-  {% endif %}
 
   {% for lane, items in lanes.items() %}
   <section class="section">
@@ -76,4 +55,4 @@
   {% endfor %}
 </div>
 {% endblock %}
-{% block scripts %}<script>Stackarr.initSuggestions({{ 'true' if not lanes and not in_progress else 'false' }});</script>{% endblock %}
+{% block scripts %}<script>Stackarr.initSuggestions({{ 'true' if not lanes else 'false' }});</script>{% endblock %}

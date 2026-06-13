@@ -60,23 +60,7 @@ def suggestions_page():
     lane_order = ["series", "author", "enjoyed", "discover_author", "narrator", "genre",
                   "hidden", "awards", "short", "epic", "upcoming", "importlist", "foryou", "discover"]
     lanes = {k: lanes[k] for k in lane_order if k in lanes}
-
-    # "Finish what you started": in-progress library books (resume in ABS)
-    in_progress = []
-    try:
-        hist = absclient.listening_history(u["abs_token"])
-        with db.conn() as c:
-            libmeta = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author FROM library")}
-        for h in hist:
-            if not h["finished"] and 0.02 < h["progress"] < 0.95:
-                m = libmeta.get(h["item_id"])
-                if m:
-                    in_progress.append({**m, "progress": round(h["progress"] * 100)})
-        in_progress = in_progress[:12]
-    except Exception:
-        pass
-    return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles,
-                           in_progress=in_progress, abs_base=absclient.abs_url())
+    return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles)
 
 
 @bp.route("/discover")
@@ -106,18 +90,39 @@ def requests_page():
 def insights_page():
     u = auth.current_user()
     hist = absclient.listening_history(u["abs_token"])
+    stats = absclient.listening_stats(u["abs_token"])
     with db.conn() as c:
         lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author FROM library")}
-    authors, finished = {}, 0
+        ratings = [r["stars"] for r in c.execute("SELECT stars FROM ratings WHERE user_id=?", (u["id"],))]
+        req_total = c.execute("SELECT COUNT(*) n FROM requests WHERE user_id=?", (u["id"],)).fetchone()["n"]
+        req_avail = c.execute("SELECT COUNT(*) n FROM requests WHERE user_id=? AND status='available'", (u["id"],)).fetchone()["n"]
+    authors, finished, in_prog = {}, 0, 0
     for h in hist:
         if h["finished"]:
             finished += 1
+        elif h["progress"] > 0.02:
+            in_prog += 1
         m = lib.get(h["item_id"])
         if m and m["author"]:
-            authors[m["author"].split(",")[0]] = authors.get(m["author"].split(",")[0], 0) + 1
+            a = m["author"].split(",")[0]
+            authors[a] = authors.get(a, 0) + 1
+    hours = round(stats["total_seconds"] / 3600)
+    facts = []
+    if hours:
+        facts.append(("⏳", f"{hours:,} hours", "listened all-time" +
+                      (f" — about {round(hours/24):,} full days" if hours >= 48 else "")))
+    if stats["days_listened"]:
+        facts.append(("📅", f"{stats['days_listened']:,} days", "with listening activity"))
+    if top := (sorted(authors.items(), key=lambda x: x[1], reverse=True)[:1] or [None])[0]:
+        facts.append(("✍️", top[0], f"your most-listened author ({top[1]} books)"))
+    if ratings:
+        facts.append(("⭐", f"{round(sum(ratings)/len(ratings),1)} avg", f"across {len(ratings)} books you've rated"))
+    if req_avail:
+        facts.append(("📚", f"{req_avail}", "books added to your library via Stackarr"))
     top_authors = sorted(authors.items(), key=lambda x: x[1], reverse=True)[:10]
-    return render_template("insights.html", total=len(hist), finished=finished,
-                           top_authors=top_authors)
+    return render_template("insights.html", total=len(hist), finished=finished, in_progress=in_prog,
+                           hours=hours, req_total=req_total, req_avail=req_avail,
+                           facts=facts, top_authors=top_authors)
 
 
 @bp.route("/book/<asin>")

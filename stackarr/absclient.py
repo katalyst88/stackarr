@@ -67,6 +67,18 @@ def listening_history(token: str) -> list[dict]:
     return out
 
 
+def listening_stats(token: str) -> dict:
+    """Totals from ABS for the fun-facts insights page."""
+    try:
+        d = _user_get(token, "/api/me/listening-stats")
+        return {"total_seconds": d.get("totalTime", 0),
+                "days_listened": len(d.get("days", {}) or {}),
+                "items_count": len(d.get("items", {}) or {})}
+    except Exception as e:
+        log.warning("listening_stats failed: %s", e)
+        return {"total_seconds": 0, "days_listened": 0, "items_count": 0}
+
+
 def libraries() -> list[dict]:
     libs = _user_get(admin_token(), "/api/libraries").get("libraries", [])
     libs = [l for l in libs if l.get("mediaType") == "book"]
