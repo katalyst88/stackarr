@@ -105,6 +105,28 @@
         <div class="conn-actions"><button class="btn small ghost" onclick="Stackarr.testConn('chaptarr', this)">Test</button>
           <span class="conn-result" id="test-chaptarr"></span></div>
       </div>
+
+      {% if show_ebook %}
+      <div class="panel"><h3>Kavita <span class="format-chip ebook">eBooks</span></h3>
+        <p class="muted">Your ebook library + reliable per-user reading progress. In Kavita: your account →
+          <b>Settings → Account → API Key</b>, and copy your server URL.</p>
+        <label class="row"><span>URL</span><input data-setting="kavita_url" value="{{ conn.kavita_url }}" placeholder="http://kavita:5000"></label>
+        <label class="row"><span>API key</span><input type="password" data-setting="kavita_api_key" value="{{ conn.kavita_api_key }}"></label>
+        <div class="conn-actions"><button class="btn small ghost" onclick="Stackarr.testConn('kavita', this)">Test</button>
+          <span class="conn-result" id="test-kavita"></span></div>
+      </div>
+      <div class="panel"><h3>Calibre-Web <span class="format-chip ebook">eBooks</span></h3>
+        <p class="muted">Your ebook library via Calibre-Web's OPDS feed (its built-in user/password).</p>
+        <label class="row"><span>URL</span><input data-setting="calibreweb_url" value="{{ conn.calibreweb_url }}" placeholder="http://calibre-web:8083"></label>
+        <label class="row"><span>Username</span><input data-setting="calibreweb_user" value="{{ conn.calibreweb_user }}"></label>
+        <label class="row"><span>Password</span><input type="password" data-setting="calibreweb_pass" value="{{ conn.calibreweb_pass }}"></label>
+        <p class="warn-note">⚠️ Calibre-Web only exposes a basic read/unread flag for its one configured account —
+          not true per-user reading progress. Stackarr leans on Kavita or Audiobookshelf for what you've actually finished.</p>
+        <div class="conn-actions"><button class="btn small ghost" onclick="Stackarr.testConn('calibreweb', this)">Test</button>
+          <span class="conn-result" id="test-calibreweb"></span></div>
+      </div>
+      {% endif %}
+
       <button class="btn" onclick="Stackarr.saveCategory('connections', this)">Save connections</button>
     </div>
     {% endif %}

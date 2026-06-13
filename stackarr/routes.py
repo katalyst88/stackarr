@@ -451,7 +451,12 @@ def settings_page():
                                  "chaptarr_api_key": g("chaptarr_api_key", config.CHAPTARR_API_KEY),
                                  "chaptarr_root_folder": g("chaptarr_root_folder", config.CHAPTARR_ROOT_FOLDER),
                                  "chaptarr_quality_profile_id": g("chaptarr_quality_profile_id", str(config.CHAPTARR_QUALITY_PROFILE_ID)),
-                                 "chaptarr_metadata_profile_id": g("chaptarr_metadata_profile_id", str(config.CHAPTARR_METADATA_PROFILE_ID))},
+                                 "chaptarr_metadata_profile_id": g("chaptarr_metadata_profile_id", str(config.CHAPTARR_METADATA_PROFILE_ID)),
+                                 "kavita_url": g("kavita_url", config.KAVITA_URL),
+                                 "kavita_api_key": g("kavita_api_key", config.KAVITA_API_KEY),
+                                 "calibreweb_url": g("calibreweb_url", config.CALIBREWEB_URL),
+                                 "calibreweb_user": g("calibreweb_user", config.CALIBREWEB_USER),
+                                 "calibreweb_pass": g("calibreweb_pass", config.CALIBREWEB_PASS)},
                            reading={"goodreads_rss": g("goodreads_rss", config.GOODREADS_RSS),
                                     "hardcover_token": g("hardcover_token", config.HARDCOVER_TOKEN)},
                            hide_rated_history=db.get_meta("hide_rated_history", "0") == "1",
@@ -759,6 +764,8 @@ SETTING_KEYS = {
     "chaptarr_quality_profile_id", "chaptarr_metadata_profile_id",
     "goodreads_rss", "hardcover_token", "discord_webhook", "custom_webhook",
     "auto_add_level", "formats",
+    "kavita_url", "kavita_api_key",
+    "calibreweb_url", "calibreweb_user", "calibreweb_pass",
 }
 BOOL_KEYS = {"email_enabled", "discord_enabled", "hide_rated_history", "notify_avail_enabled"}
 
@@ -784,14 +791,16 @@ def api_test(service):
         if k in SETTING_KEYS:
             db.set_meta(k, str(v).strip())
     try:
-        if service == "abs":
-            libs = absclient.libraries()
-            return jsonify({"ok": True, "detail": f"Connected — {len(libs)} book librar{'y' if len(libs)==1 else 'ies'}"})
         if service == "chaptarr":
             import requests as rq
             r = rq.get(f"{chaptarr.url()}/api/v1/system/status",
                        headers={"X-Api-Key": chaptarr.api_key()}, timeout=15)
             return jsonify({"ok": r.ok, "detail": "Connected" if r.ok else f"HTTP {r.status_code}"})
+        # every library source backend (abs / kavita / calibreweb) self-tests
+        from . import backends
+        b = backends.by_id(service)
+        if b is not None:
+            return jsonify(b.test())
     except Exception as e:
         return jsonify({"ok": False, "detail": str(e)})
     return jsonify({"ok": False, "detail": "unknown service"}), 404

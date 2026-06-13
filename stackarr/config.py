@@ -47,6 +47,16 @@ ADMIN_USERS = _list("STACKARR_ADMINS")
 # Limit which ABS libraries count as "owned"/seed history; empty = all book libs.
 ABS_LIBRARY_IDS = _list("ABS_LIBRARY_IDS")
 
+# --- ebook library sources (optional; connected in Settings, not login) ------
+# Kavita: reliable per-user reading progress via an API key (Settings ->
+# Account -> API Key in Kavita). Calibre-Web: library + reader, but its
+# reading-progress isn't reliably exposed, so Stackarr warns about that.
+KAVITA_URL = os.environ.get("KAVITA_URL", "").rstrip("/")
+KAVITA_API_KEY = os.environ.get("KAVITA_API_KEY", "")
+CALIBREWEB_URL = os.environ.get("CALIBREWEB_URL", "").rstrip("/")
+CALIBREWEB_USER = os.environ.get("CALIBREWEB_USER", "")
+CALIBREWEB_PASS = os.environ.get("CALIBREWEB_PASS", "")
+
 # --- Chaptarr (downstream: approved picks are handed here to grab) -----------
 CHAPTARR_URL = os.environ.get("CHAPTARR_URL", "").rstrip("/")
 CHAPTARR_API_KEY = os.environ.get("CHAPTARR_API_KEY", "")
