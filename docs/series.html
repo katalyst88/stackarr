@@ -21,6 +21,10 @@
     <svg viewBox="0 0 24 24"><path d="M12 2 3 7v10l9 5 9-5V7zm0 2.2 6.5 3.6L12 11.4 5.5 7.8zM5 9.3l6 3.3v6.8l-6-3.3zm14 0v6.8l-6 3.3v-6.8z"/></svg><span>Suggestions</span></a>
   <a href="series.html" class="navlink active">
     <svg viewBox="0 0 24 24"><path d="M4 4h4v16H4zm6 0h4v16h-4zm7 0 3.8 1 .2 15-4-1z"/></svg><span>Up Next</span></a>
+  <a href="/shelves" class="navlink ">
+    <svg viewBox="0 0 24 24"><path d="M3 3h7v18H3zm9 0h3v18h-3zm5.5.3 3 .5L21 21l-3-.5z"/></svg><span>My shelves</span></a>
+  <a href="/upcoming" class="navlink ">
+    <svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zm12 7v10H5V9zm-7 2v3H9v-3z"/></svg><span>Upcoming</span></a>
   <a href="requests.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm-1 13-3-2-3 2V4h6z"/></svg><span>Requests</span></a>
   <a href="history.html" class="navlink ">
@@ -47,26 +51,31 @@
       <div class="search-suggest" id="search-suggest"></div>
     </form>
     <div class="topbar-spacer"></div>
+    <button class="icon-btn" onclick="Stackarr.surprise()" title="Surprise me — one pick">🎲</button>
     <button class="icon-btn" onclick="Stackarr.toggleTheme()" title="Light / dark">◑</button>
   </header>
   <main>
 <div class="page-head">
   <h2 class="page-title">Up Next
     <span class="subtle">11 series in your library · 6 with a next book ready</span></h2>
+  <div class="page-head-actions"></div>
 </div>
 
 
 
-<div class="series-list">
+<div class="series-list fmt-group">
   
-  <div class="series-card">
+  <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">Red Rising</div>
       <div class="series-meta">4 books in your library
         · you're up to #4</div>
+      
+      <div class="series-progress" title="4 of the first 4"><span style="width: 100%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Light Bringer">#1 Light Bringer</span><span class="series-chip" title="Dark Age (1 of 3) [Dramatized Adaptation]">#2 Dark Age (1 of 3) [Dramatized Adaptation]</span><span class="series-chip" title="Dark Age (2 of 3) [Dramatized Adaptation]">#3 Dark Age (2 of 3) [Dramatized Adaptation]</span><span class="series-chip" title="Dark Age (3 of 3) [Dramatized Adaptation]">#4 Dark Age (3 of 3) [Dramatized Adaptation]</span>
       </div>
+      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Red Rising', 'Pierce Brown', this)">＋ Get full series</button>
     </div>
     <div class="series-next">
       
@@ -84,30 +93,36 @@
     </div>
   </div>
   
-  <div class="series-card">
+  <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">The Cosmere</div>
       <div class="series-meta">4 books in your library
         · you're up to #4</div>
+      
+      <div class="series-progress" title="4 of the first 4"><span style="width: 100%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Rhythm of War">#1 Rhythm of War</span><span class="series-chip" title="Warbreaker (2 of 3) [Dramatized Adaptation]">#2 Warbreaker (2 of 3) [Dramatized Adaptation]</span><span class="series-chip" title="Warbreaker: Tenth Anniversary Edition (Part 1 of 2) (Dramatized Adaptation)">#3 Warbreaker: Tenth Anniversary Edition (Part 1 of 2) (Dramatized Adaptation)</span><span class="series-chip" title="Warbreaker: Tenth Anniversary Edition (2 of 2) [Dramatized Adaptation]">#4 Warbreaker: Tenth Anniversary Edition (2 of 2) [Dramatized Adaptation]</span>
       </div>
+      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('The Cosmere', 'Brandon Sanderson', this)">＋ Get full series</button>
     </div>
     <div class="series-next">
       
-      <div class="series-next-info"><div class="series-next-label muted">You're all caught up</div></div>
+      <div class="series-next-info"><div class="series-next-label muted">All books available</div></div>
       
     </div>
   </div>
   
-  <div class="series-card">
+  <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">Secret Projects</div>
       <div class="series-meta">3 books in your library
         · you're up to #3</div>
+      
+      <div class="series-progress" title="3 of the first 3"><span style="width: 100%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Isles of the Emberdark">#1 Isles of the Emberdark</span><span class="series-chip" title="Yumi and the Nightmare Painter">#2 Yumi and the Nightmare Painter</span><span class="series-chip" title="Yumi and the Nightmare Painter (Dramatized Adaptation)">#3 Yumi and the Nightmare Painter (Dramatized Adaptation)</span>
       </div>
+      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Secret Projects', 'Brandon Sanderson', this)">＋ Get full series</button>
     </div>
     <div class="series-next">
       
@@ -125,30 +140,36 @@
     </div>
   </div>
   
-  <div class="series-card">
+  <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">The Wheel of Time</div>
       <div class="series-meta">3 books in your library
         · you're up to #3</div>
+      
+      <div class="series-progress" title="3 of the first 3"><span style="width: 100%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="The Dragon Reborn">#1 The Dragon Reborn</span><span class="series-chip" title="The Shadow Rising">#2 The Shadow Rising</span><span class="series-chip" title="Origins of The Wheel of Time">#3 Origins of The Wheel of Time</span>
       </div>
+      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('The Wheel of Time', 'Robert Jordan', this)">＋ Get full series</button>
     </div>
     <div class="series-next">
       
-      <div class="series-next-info"><div class="series-next-label muted">You're all caught up</div></div>
+      <div class="series-next-info"><div class="series-next-label muted">All books available</div></div>
       
     </div>
   </div>
   
-  <div class="series-card">
+  <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">Liveship Traders</div>
       <div class="series-meta">3 books in your library
         · you're up to #3</div>
+      
+      <div class="series-progress" title="3 of the first 3"><span style="width: 100%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Ship of Destiny">#1 Ship of Destiny</span><span class="series-chip" title="Ship of Magic">#2 Ship of Magic</span><span class="series-chip" title="The Mad Ship">#3 The Mad Ship</span>
       </div>
+      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Liveship Traders', 'Robin Hobb', this)">＋ Get full series</button>
     </div>
     <div class="series-next">
       
@@ -166,30 +187,36 @@
     </div>
   </div>
   
-  <div class="series-card">
+  <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">Farseer Trilogy</div>
       <div class="series-meta">3 books in your library
         · you're up to #3</div>
+      
+      <div class="series-progress" title="3 of the first 3"><span style="width: 100%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Assassin’s Quest">#1 Assassin’s Quest</span><span class="series-chip" title="Assassin’s Apprentice">#2 Assassin’s Apprentice</span><span class="series-chip" title="Royal Assassin">#3 Royal Assassin</span>
       </div>
+      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Farseer Trilogy', 'Robin Hobb', this)">＋ Get full series</button>
     </div>
     <div class="series-next">
       
-      <div class="series-next-info"><div class="series-next-label muted">You're all caught up</div></div>
+      <div class="series-next-info"><div class="series-next-label muted">All books available</div></div>
       
     </div>
   </div>
   
-  <div class="series-card">
+  <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">Cradle</div>
       <div class="series-meta">2 books in your library
         · you're up to #2</div>
+      
+      <div class="series-progress" title="2 of the first 2"><span style="width: 100%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Waybound">#1 Waybound</span><span class="series-chip" title="Threshold">#2 Threshold</span>
       </div>
+      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Cradle', 'Will Wight', this)">＋ Get full series</button>
     </div>
     <div class="series-next">
       
@@ -207,30 +234,36 @@
     </div>
   </div>
   
-  <div class="series-card">
+  <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">The Expanse</div>
       <div class="series-meta">2 books in your library
         · you're up to #2</div>
+      
+      <div class="series-progress" title="2 of the first 2"><span style="width: 100%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Leviathan Wakes">#1 Leviathan Wakes</span><span class="series-chip" title="Leviathan Wakes">#2 Leviathan Wakes</span>
       </div>
+      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('The Expanse', 'James S. A. Corey', this)">＋ Get full series</button>
     </div>
     <div class="series-next">
       
-      <div class="series-next-info"><div class="series-next-label muted">You're all caught up</div></div>
+      <div class="series-next-info"><div class="series-next-label muted">All books available</div></div>
       
     </div>
   </div>
   
-  <div class="series-card">
+  <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">Inkbound</div>
       <div class="series-meta">2 books in your library
         · you're up to #2</div>
+      
+      <div class="series-progress" title="2 of the first 2"><span style="width: 100%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Inked in Onyx">#1 Inked in Onyx</span><span class="series-chip" title="Inked in Emeralds">#2 Inked in Emeralds</span>
       </div>
+      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Inkbound', 'Shannon Mayer', this)">＋ Get full series</button>
     </div>
     <div class="series-next">
       
@@ -248,30 +281,36 @@
     </div>
   </div>
   
-  <div class="series-card">
+  <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">Elantris</div>
       <div class="series-meta">2 books in your library
         · you're up to #2</div>
+      
+      <div class="series-progress" title="2 of the first 2"><span style="width: 100%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Elantris: Tenth Anniversary Author&#39;s Definitive Edition (Part 1 of 2) (Dramatized Adaptation)">#1 Elantris: Tenth Anniversary Author&#39;s Definitive Edition (Part 1 of 2) (Dramatized Adaptation)</span><span class="series-chip" title="Elantris: Tenth Anniversary Author&#39;s Definitive Edition (Part 2 of 2) (Dramatized Adaptation)">#2 Elantris: Tenth Anniversary Author&#39;s Definitive Edition (Part 2 of 2) (Dramatized Adaptation)</span>
       </div>
+      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Elantris', 'Brandon Sanderson', this)">＋ Get full series</button>
     </div>
     <div class="series-next">
       
-      <div class="series-next-info"><div class="series-next-label muted">You're all caught up</div></div>
+      <div class="series-next-info"><div class="series-next-label muted">All books available</div></div>
       
     </div>
   </div>
   
-  <div class="series-card">
+  <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">Soloing the System</div>
       <div class="series-meta">2 books in your library
         · you're up to #2</div>
+      
+      <div class="series-progress" title="2 of the first 2"><span style="width: 100%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Soloing the System: Book 3">#1 Soloing the System: Book 3</span><span class="series-chip" title="Soloing the System: Book 2">#2 Soloing the System: Book 2</span>
       </div>
+      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Soloing the System', 'Arland Grace', this)">＋ Get full series</button>
     </div>
     <div class="series-next">
       

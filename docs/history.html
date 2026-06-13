@@ -21,6 +21,10 @@
     <svg viewBox="0 0 24 24"><path d="M12 2 3 7v10l9 5 9-5V7zm0 2.2 6.5 3.6L12 11.4 5.5 7.8zM5 9.3l6 3.3v6.8l-6-3.3zm14 0v6.8l-6 3.3v-6.8z"/></svg><span>Suggestions</span></a>
   <a href="series.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M4 4h4v16H4zm6 0h4v16h-4zm7 0 3.8 1 .2 15-4-1z"/></svg><span>Up Next</span></a>
+  <a href="/shelves" class="navlink ">
+    <svg viewBox="0 0 24 24"><path d="M3 3h7v18H3zm9 0h3v18h-3zm5.5.3 3 .5L21 21l-3-.5z"/></svg><span>My shelves</span></a>
+  <a href="/upcoming" class="navlink ">
+    <svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zm12 7v10H5V9zm-7 2v3H9v-3z"/></svg><span>Upcoming</span></a>
   <a href="requests.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm-1 13-3-2-3 2V4h6z"/></svg><span>Requests</span></a>
   <a href="history.html" class="navlink active">
@@ -47,19 +51,21 @@
       <div class="search-suggest" id="search-suggest"></div>
     </form>
     <div class="topbar-spacer"></div>
+    <button class="icon-btn" onclick="Stackarr.surprise()" title="Surprise me — one pick">🎲</button>
     <button class="icon-btn" onclick="Stackarr.toggleTheme()" title="Light / dark">◑</button>
   </header>
   <main>
 <div class="page-head">
   <h2 class="page-title">History &amp; ratings
     <span class="subtle">24 books · 24 rated</span></h2>
+  <div class="page-head-actions"></div>
 </div>
 
 
 
-<div class="rate-list" id="rate-list">
+<div class="rate-list fmt-group" id="rate-list">
   
-  <div class="rate-item rated" data-asin="B0GDPWQSR3" data-rated="1">
+  <div class="rate-item rated" data-asin="B0GDPWQSR3" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0GDPWQSR3.html">
       <img src="https://m.media-amazon.com/images/I/51Zmlg8PwUL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -85,7 +91,7 @@
             onclick="Stackarr.removeFromHistory('B0GDPWQSR3', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0C28WLQP1" data-rated="1">
+  <div class="rate-item rated" data-asin="B0C28WLQP1" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0C28WLQP1.html">
       <img src="https://m.media-amazon.com/images/I/51uxvAxiknL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -111,7 +117,7 @@
             onclick="Stackarr.removeFromHistory('B0C28WLQP1', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0BXQN4QB9" data-rated="1">
+  <div class="rate-item rated" data-asin="B0BXQN4QB9" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0BXQN4QB9.html">
       <img src="https://m.media-amazon.com/images/I/51B6o7XqIOL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -137,7 +143,7 @@
             onclick="Stackarr.removeFromHistory('B0BXQN4QB9', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B073H9PF2D" data-rated="1">
+  <div class="rate-item rated" data-asin="B073H9PF2D" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B073H9PF2D.html">
       <img src="https://m.media-amazon.com/images/I/51RE2p8RLML._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -163,7 +169,7 @@
             onclick="Stackarr.removeFromHistory('B073H9PF2D', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="1526622416" data-rated="1">
+  <div class="rate-item rated" data-asin="1526622416" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-1526622416.html">
       <img src="https://m.media-amazon.com/images/I/51Z6MGqy1eL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -189,7 +195,7 @@
             onclick="Stackarr.removeFromHistory('1526622416', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0F4RQQC4N" data-rated="1">
+  <div class="rate-item rated" data-asin="B0F4RQQC4N" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0F4RQQC4N.html">
       <img src="https://m.media-amazon.com/images/I/61cDYHWgzBL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -215,7 +221,7 @@
             onclick="Stackarr.removeFromHistory('B0F4RQQC4N', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0B7KHQL2C" data-rated="1">
+  <div class="rate-item rated" data-asin="B0B7KHQL2C" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0B7KHQL2C.html">
       <img src="https://m.media-amazon.com/images/I/51-lRe3OTzL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -241,7 +247,7 @@
             onclick="Stackarr.removeFromHistory('B0B7KHQL2C', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0D18CT2VY" data-rated="1">
+  <div class="rate-item rated" data-asin="B0D18CT2VY" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0D18CT2VY.html">
       <img src="https://m.media-amazon.com/images/I/51hQngaas5L._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -267,7 +273,7 @@
             onclick="Stackarr.removeFromHistory('B0D18CT2VY', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0FQPMSN8D" data-rated="1">
+  <div class="rate-item rated" data-asin="B0FQPMSN8D" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0FQPMSN8D.html">
       <img src="https://m.media-amazon.com/images/I/51zdA5mta3L._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -293,7 +299,7 @@
             onclick="Stackarr.removeFromHistory('B0FQPMSN8D', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0GJ6MQLKJ" data-rated="1">
+  <div class="rate-item rated" data-asin="B0GJ6MQLKJ" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0GJ6MQLKJ.html">
       <img src="https://m.media-amazon.com/images/I/41GgXuhAAwL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -319,7 +325,7 @@
             onclick="Stackarr.removeFromHistory('B0GJ6MQLKJ', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0DN34J845" data-rated="1">
+  <div class="rate-item rated" data-asin="B0DN34J845" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0DN34J845.html">
       <img src="https://m.media-amazon.com/images/I/51jrvs9ZuiL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -345,7 +351,7 @@
             onclick="Stackarr.removeFromHistory('B0DN34J845', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0D94V4ZVT" data-rated="1">
+  <div class="rate-item rated" data-asin="B0D94V4ZVT" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0D94V4ZVT.html">
       <img src="https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -371,7 +377,7 @@
             onclick="Stackarr.removeFromHistory('B0D94V4ZVT', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B007FGEACG" data-rated="1">
+  <div class="rate-item rated" data-asin="B007FGEACG" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B007FGEACG.html">
       <img src="https://m.media-amazon.com/images/I/61Ywd1BZE1L._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -397,7 +403,7 @@
             onclick="Stackarr.removeFromHistory('B007FGEACG', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0DT7HY6R7" data-rated="1">
+  <div class="rate-item rated" data-asin="B0DT7HY6R7" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0DT7HY6R7.html">
       <img src="https://m.media-amazon.com/images/I/51Co28za4BL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -423,7 +429,7 @@
             onclick="Stackarr.removeFromHistory('B0DT7HY6R7', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0B4Z29V3K" data-rated="1">
+  <div class="rate-item rated" data-asin="B0B4Z29V3K" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0B4Z29V3K.html">
       <img src="https://m.media-amazon.com/images/I/41SUHkpR4CL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -449,7 +455,7 @@
             onclick="Stackarr.removeFromHistory('B0B4Z29V3K', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B09GTJSDVV" data-rated="1">
+  <div class="rate-item rated" data-asin="B09GTJSDVV" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B09GTJSDVV.html">
       <img src="https://m.media-amazon.com/images/I/413WHh0F4rL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -475,7 +481,7 @@
             onclick="Stackarr.removeFromHistory('B09GTJSDVV', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0G4XKY2VL" data-rated="1">
+  <div class="rate-item rated" data-asin="B0G4XKY2VL" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0G4XKY2VL.html">
       <img src="https://m.media-amazon.com/images/I/51dqLOq1yHL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -501,7 +507,7 @@
             onclick="Stackarr.removeFromHistory('B0G4XKY2VL', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0GNTGPLSN" data-rated="1">
+  <div class="rate-item rated" data-asin="B0GNTGPLSN" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0GNTGPLSN.html">
       <img src="https://m.media-amazon.com/images/I/51J1FF-7dJL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -527,7 +533,7 @@
             onclick="Stackarr.removeFromHistory('B0GNTGPLSN', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B00P9XDQFY" data-rated="1">
+  <div class="rate-item rated" data-asin="B00P9XDQFY" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B00P9XDQFY.html">
       <img src="https://m.media-amazon.com/images/I/51Y8QPmaGoL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -553,7 +559,7 @@
             onclick="Stackarr.removeFromHistory('B00P9XDQFY', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0CQDHTSFJ" data-rated="1">
+  <div class="rate-item rated" data-asin="B0CQDHTSFJ" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0CQDHTSFJ.html">
       <img src="https://m.media-amazon.com/images/I/51ZFAWrapyL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -579,7 +585,7 @@
             onclick="Stackarr.removeFromHistory('B0CQDHTSFJ', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0GWFFD67Z" data-rated="1">
+  <div class="rate-item rated" data-asin="B0GWFFD67Z" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0GWFFD67Z.html">
       <img src="https://m.media-amazon.com/images/I/61+LWDMEtkL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -605,7 +611,7 @@
             onclick="Stackarr.removeFromHistory('B0GWFFD67Z', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0FQ649GLT" data-rated="1">
+  <div class="rate-item rated" data-asin="B0FQ649GLT" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0FQ649GLT.html">
       <img src="https://m.media-amazon.com/images/I/511+hj71nFL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -631,7 +637,7 @@
             onclick="Stackarr.removeFromHistory('B0FQ649GLT', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="1473231051" data-rated="1">
+  <div class="rate-item rated" data-asin="1473231051" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-1473231051.html">
       <img src="https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">
@@ -657,7 +663,7 @@
             onclick="Stackarr.removeFromHistory('1473231051', this)" aria-label="Remove from history">✕</button>
   </div>
   
-  <div class="rate-item rated" data-asin="B0DJN1BCLS" data-rated="1">
+  <div class="rate-item rated" data-asin="B0DJN1BCLS" data-format="audiobook" data-rated="1">
     <a class="rate-cover" href="book-B0DJN1BCLS.html">
       <img src="https://m.media-amazon.com/images/I/51nidelfhPL._SL1500_.jpg" loading="lazy" alt=""
            onerror="this.src='static/icon.svg'">

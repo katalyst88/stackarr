@@ -21,6 +21,10 @@
     <svg viewBox="0 0 24 24"><path d="M12 2 3 7v10l9 5 9-5V7zm0 2.2 6.5 3.6L12 11.4 5.5 7.8zM5 9.3l6 3.3v6.8l-6-3.3zm14 0v6.8l-6 3.3v-6.8z"/></svg><span>Suggestions</span></a>
   <a href="series.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M4 4h4v16H4zm6 0h4v16h-4zm7 0 3.8 1 .2 15-4-1z"/></svg><span>Up Next</span></a>
+  <a href="/shelves" class="navlink ">
+    <svg viewBox="0 0 24 24"><path d="M3 3h7v18H3zm9 0h3v18h-3zm5.5.3 3 .5L21 21l-3-.5z"/></svg><span>My shelves</span></a>
+  <a href="/upcoming" class="navlink ">
+    <svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zm12 7v10H5V9zm-7 2v3H9v-3z"/></svg><span>Upcoming</span></a>
   <a href="requests.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm-1 13-3-2-3 2V4h6z"/></svg><span>Requests</span></a>
   <a href="history.html" class="navlink ">
@@ -47,16 +51,20 @@
       <div class="search-suggest" id="search-suggest"></div>
     </form>
     <div class="topbar-spacer"></div>
+    <button class="icon-btn" onclick="Stackarr.surprise()" title="Surprise me — one pick">🎲</button>
     <button class="icon-btn" onclick="Stackarr.toggleTheme()" title="Light / dark">◑</button>
   </header>
   <main>
 <div class="page-head">
   <h2 class="page-title">Suggestions <span class="subtle">curated from your
-    listening history</span>
+    listening history</span></h2>
+  <div class="page-head-actions">
     
-  </h2>
-  <div><button class="btn small" onclick="Stackarr.scan()">Update Suggestions</button></div>
+    <button class="btn small" onclick="Stackarr.scan()">Update Suggestions</button>
+  </div>
 </div>
+
+
 
 
 
@@ -76,7 +84,7 @@
 
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <a class="section-link" href="requests.html"><h3>Recent requests</h3><span class="chev">›</span></a>
     
@@ -85,38 +93,44 @@
     <button class="slider-arrow left" onclick="Stackarr.slide(this,-1)" aria-label="scroll left">‹</button>
     <div class="slider">
     
-    <a class="media-card" href="book-B0GDPWQSR3.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51Zmlg8PwUL._SL1500_.jpg" loading="lazy" alt="">
+    <a class="media-card" data-format="audiobook" href="book-B0GDPWQSR3.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51Zmlg8PwUL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge available">Available</span></div>
       <div class="media-foot"><div class="media-title" title="The Four Agreements">The Four Agreements</div><div class="media-author">Don Miguel Ruiz, Janet Mills</div></div>
     </a>
     
-    <a class="media-card" href="book-B0C28WLQP1.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51uxvAxiknL._SL1500_.jpg" loading="lazy" alt="">
+    <a class="media-card" data-format="audiobook" href="book-B0C28WLQP1.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51uxvAxiknL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge queued">Requested</span></div>
       <div class="media-foot"><div class="media-title" title="Light Bringer">Light Bringer</div><div class="media-author">Pierce Brown</div></div>
     </a>
     
-    <a class="media-card" href="book-B0BXQN4QB9.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51B6o7XqIOL._SL1500_.jpg" loading="lazy" alt="">
+    <a class="media-card" data-format="audiobook" href="book-B0BXQN4QB9.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51B6o7XqIOL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge handed">Requested</span></div>
       <div class="media-foot"><div class="media-title" title="Waybound">Waybound</div><div class="media-author">Will Wight</div></div>
     </a>
     
-    <a class="media-card" href="book-B073H9PF2D.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51RE2p8RLML._SL1500_.jpg" loading="lazy" alt="">
+    <a class="media-card" data-format="audiobook" href="book-B073H9PF2D.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51RE2p8RLML._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge failed">Failed</span></div>
       <div class="media-foot"><div class="media-title" title="Leviathan Wakes">Leviathan Wakes</div><div class="media-author">James S. A. Corey</div></div>
     </a>
     
-    <a class="media-card" href="book-1526622416.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51Z6MGqy1eL._SL1500_.jpg" loading="lazy" alt="">
+    <a class="media-card" data-format="audiobook" href="book-1526622416.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51Z6MGqy1eL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge available">Available</span></div>
       <div class="media-foot"><div class="media-title" title="Piranesi">Piranesi</div><div class="media-author">Susanna Clarke</div></div>
     </a>
     
-    <a class="media-card" href="book-B0F4RQQC4N.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/61cDYHWgzBL._SL1500_.jpg" loading="lazy" alt="">
+    <a class="media-card" data-format="audiobook" href="book-B0F4RQQC4N.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/61cDYHWgzBL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge queued">Requested</span></div>
       <div class="media-foot"><div class="media-title" title="Isles of the Emberdark">Isles of the Emberdark</div><div class="media-author">Brandon Sanderson</div></div>
     </a>
@@ -130,7 +144,7 @@
 
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <h3>Recently added to your library</h3>
   </div>
@@ -138,56 +152,65 @@
     <button class="slider-arrow left" onclick="Stackarr.slide(this,-1)" aria-label="scroll left">‹</button>
     <div class="slider">
     
-    <a class="media-card" href="book-B073H9PF2D.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51RE2p8RLML._SL1500_.jpg" loading="lazy" alt="" onerror="this.src='static/icon.svg'">
+    <a class="media-card" data-format="audiobook" href="book-B073H9PF2D.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51RE2p8RLML._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge available">In library</span></div>
       <div class="media-foot"><div class="media-title" title="Leviathan Wakes">Leviathan Wakes</div><div class="media-author">James S. A. Corey</div></div>
     </a>
     
-    <a class="media-card" href="book-1526622416.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51Z6MGqy1eL._SL1500_.jpg" loading="lazy" alt="" onerror="this.src='static/icon.svg'">
+    <a class="media-card" data-format="audiobook" href="book-1526622416.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51Z6MGqy1eL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge available">In library</span></div>
       <div class="media-foot"><div class="media-title" title="Piranesi">Piranesi</div><div class="media-author">Susanna Clarke</div></div>
     </a>
     
-    <a class="media-card" href="book-B0F4RQQC4N.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/61cDYHWgzBL._SL1500_.jpg" loading="lazy" alt="" onerror="this.src='static/icon.svg'">
+    <a class="media-card" data-format="audiobook" href="book-B0F4RQQC4N.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/61cDYHWgzBL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge available">In library</span></div>
       <div class="media-foot"><div class="media-title" title="Isles of the Emberdark">Isles of the Emberdark</div><div class="media-author">Brandon Sanderson</div></div>
     </a>
     
-    <a class="media-card" href="book-B0B7KHQL2C.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51-lRe3OTzL._SL1500_.jpg" loading="lazy" alt="" onerror="this.src='static/icon.svg'">
+    <a class="media-card" data-format="audiobook" href="book-B0B7KHQL2C.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51-lRe3OTzL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge available">In library</span></div>
       <div class="media-foot"><div class="media-title" title="The Dragon Reborn">The Dragon Reborn</div><div class="media-author">Robert Jordan</div></div>
     </a>
     
-    <a class="media-card" href="book-B0D18CT2VY.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51hQngaas5L._SL1500_.jpg" loading="lazy" alt="" onerror="this.src='static/icon.svg'">
+    <a class="media-card" data-format="audiobook" href="book-B0D18CT2VY.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51hQngaas5L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge available">In library</span></div>
       <div class="media-foot"><div class="media-title" title="Yumi and the Nightmare Painter">Yumi and the Nightmare Painter</div><div class="media-author">Brandon Sanderson</div></div>
     </a>
     
-    <a class="media-card" href="book-B0FQPMSN8D.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51zdA5mta3L._SL1500_.jpg" loading="lazy" alt="" onerror="this.src='static/icon.svg'">
+    <a class="media-card" data-format="audiobook" href="book-B0FQPMSN8D.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51zdA5mta3L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge available">In library</span></div>
       <div class="media-foot"><div class="media-title" title="God&#39;s Junk Drawer">God&#39;s Junk Drawer</div><div class="media-author">Peter Clines</div></div>
     </a>
     
-    <a class="media-card" href="book-B0GJ6MQLKJ.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/41GgXuhAAwL._SL1500_.jpg" loading="lazy" alt="" onerror="this.src='static/icon.svg'">
+    <a class="media-card" data-format="audiobook" href="book-B0GJ6MQLKJ.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/41GgXuhAAwL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge available">In library</span></div>
       <div class="media-foot"><div class="media-title" title="Platform Decay">Platform Decay</div><div class="media-author">Martha Wells</div></div>
     </a>
     
-    <a class="media-card" href="book-B0DN34J845.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51jrvs9ZuiL._SL1500_.jpg" loading="lazy" alt="" onerror="this.src='static/icon.svg'">
+    <a class="media-card" data-format="audiobook" href="book-B0DN34J845.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51jrvs9ZuiL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge available">In library</span></div>
       <div class="media-foot"><div class="media-title" title="Threshold">Threshold</div><div class="media-author">Will Wight</div></div>
     </a>
     
-    <a class="media-card" href="book-B0D94V4ZVT.html">
-      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg" loading="lazy" alt="" onerror="this.src='static/icon.svg'">
+    <a class="media-card" data-format="audiobook" href="book-B0D94V4ZVT.html">
+      <div class="media-poster"><img src="https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
+        
         <span class="corner-badge available">In library</span></div>
       <div class="media-foot"><div class="media-title" title="The Shadow Rising">The Shadow Rising</div><div class="media-author">Robert Jordan</div></div>
     </a>
@@ -201,7 +224,7 @@
 
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <a class="section-link" href="lane-series.html"><h3>Continue your series</h3><span class="chev">›</span></a>
     
@@ -212,7 +235,7 @@
     
     <div class="media-card" data-id="1" data-format="audiobook">
       <a class="media-poster" href="book-B0GDPWQSR3.html">
-        <img src="https://m.media-amazon.com/images/I/51Zmlg8PwUL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51Zmlg8PwUL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge series">Series</span>
         <div class="media-overlay">
@@ -229,7 +252,7 @@
     
     <div class="media-card" data-id="2" data-format="audiobook">
       <a class="media-poster" href="book-B0C28WLQP1.html">
-        <img src="https://m.media-amazon.com/images/I/51uxvAxiknL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51uxvAxiknL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge series">Series</span>
         <div class="media-overlay">
@@ -246,7 +269,7 @@
     
     <div class="media-card" data-id="3" data-format="audiobook">
       <a class="media-poster" href="book-B0BXQN4QB9.html">
-        <img src="https://m.media-amazon.com/images/I/51B6o7XqIOL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51B6o7XqIOL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge series">Series</span>
         <div class="media-overlay">
@@ -263,7 +286,7 @@
     
     <div class="media-card" data-id="4" data-format="audiobook">
       <a class="media-poster" href="book-B073H9PF2D.html">
-        <img src="https://m.media-amazon.com/images/I/51RE2p8RLML._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51RE2p8RLML._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge series">Series</span>
         <div class="media-overlay">
@@ -280,7 +303,7 @@
     
     <div class="media-card" data-id="5" data-format="audiobook">
       <a class="media-poster" href="book-1526622416.html">
-        <img src="https://m.media-amazon.com/images/I/51Z6MGqy1eL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51Z6MGqy1eL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge series">Series</span>
         <div class="media-overlay">
@@ -297,7 +320,7 @@
     
     <div class="media-card" data-id="6" data-format="audiobook">
       <a class="media-poster" href="book-B0F4RQQC4N.html">
-        <img src="https://m.media-amazon.com/images/I/61cDYHWgzBL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/61cDYHWgzBL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge series">Series</span>
         <div class="media-overlay">
@@ -314,7 +337,7 @@
     
     <div class="media-card" data-id="7" data-format="audiobook">
       <a class="media-poster" href="book-B0B7KHQL2C.html">
-        <img src="https://m.media-amazon.com/images/I/51-lRe3OTzL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51-lRe3OTzL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge series">Series</span>
         <div class="media-overlay">
@@ -331,7 +354,7 @@
     
     <div class="media-card" data-id="8" data-format="audiobook">
       <a class="media-poster" href="book-B0D18CT2VY.html">
-        <img src="https://m.media-amazon.com/images/I/51hQngaas5L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51hQngaas5L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge series">Series</span>
         <div class="media-overlay">
@@ -348,7 +371,7 @@
     
     <div class="media-card" data-id="9" data-format="audiobook">
       <a class="media-poster" href="book-B0FQPMSN8D.html">
-        <img src="https://m.media-amazon.com/images/I/51zdA5mta3L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51zdA5mta3L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge series">Series</span>
         <div class="media-overlay">
@@ -370,7 +393,7 @@
 
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <h3>Browse by genre</h3>
   </div>
@@ -434,7 +457,7 @@
   
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <h3>Authors you might like</h3>
   </div>
@@ -506,7 +529,7 @@
   
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <a class="section-link" href="lane-author.html"><h3>More from authors you love</h3><span class="chev">›</span></a>
     
@@ -517,7 +540,7 @@
     
     <div class="media-card" data-id="10" data-format="audiobook">
       <a class="media-poster" href="book-B0GJ6MQLKJ.html">
-        <img src="https://m.media-amazon.com/images/I/41GgXuhAAwL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/41GgXuhAAwL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -534,7 +557,7 @@
     
     <div class="media-card" data-id="11" data-format="audiobook">
       <a class="media-poster" href="book-B0DN34J845.html">
-        <img src="https://m.media-amazon.com/images/I/51jrvs9ZuiL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51jrvs9ZuiL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge available">Available</span>
         
@@ -553,7 +576,7 @@
     
     <div class="media-card" data-id="12" data-format="audiobook">
       <a class="media-poster" href="book-B0D94V4ZVT.html">
-        <img src="https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -570,7 +593,7 @@
     
     <div class="media-card" data-id="13" data-format="audiobook">
       <a class="media-poster" href="book-B007FGEACG.html">
-        <img src="https://m.media-amazon.com/images/I/61Ywd1BZE1L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/61Ywd1BZE1L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -587,7 +610,7 @@
     
     <div class="media-card" data-id="14" data-format="audiobook">
       <a class="media-poster" href="book-B0DT7HY6R7.html">
-        <img src="https://m.media-amazon.com/images/I/51Co28za4BL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51Co28za4BL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -604,7 +627,7 @@
     
     <div class="media-card" data-id="15" data-format="audiobook">
       <a class="media-poster" href="book-B0B4Z29V3K.html">
-        <img src="https://m.media-amazon.com/images/I/41SUHkpR4CL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/41SUHkpR4CL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -621,7 +644,7 @@
     
     <div class="media-card" data-id="16" data-format="audiobook">
       <a class="media-poster" href="book-B09GTJSDVV.html">
-        <img src="https://m.media-amazon.com/images/I/413WHh0F4rL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/413WHh0F4rL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -638,7 +661,7 @@
     
     <div class="media-card" data-id="17" data-format="audiobook">
       <a class="media-poster" href="book-B0G4XKY2VL.html">
-        <img src="https://m.media-amazon.com/images/I/51dqLOq1yHL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51dqLOq1yHL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -655,7 +678,7 @@
     
     <div class="media-card" data-id="18" data-format="audiobook">
       <a class="media-poster" href="book-B0GNTGPLSN.html">
-        <img src="https://m.media-amazon.com/images/I/51J1FF-7dJL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51J1FF-7dJL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -679,7 +702,7 @@
   
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <a class="section-link" href="lane-enjoyed.html"><h3>Listeners also enjoyed</h3><span class="chev">›</span></a>
     
@@ -690,7 +713,7 @@
     
     <div class="media-card" data-id="19" data-format="audiobook">
       <a class="media-poster" href="book-B00P9XDQFY.html">
-        <img src="https://m.media-amazon.com/images/I/51Y8QPmaGoL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51Y8QPmaGoL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -707,7 +730,7 @@
     
     <div class="media-card" data-id="20" data-format="audiobook">
       <a class="media-poster" href="book-B0CQDHTSFJ.html">
-        <img src="https://m.media-amazon.com/images/I/51ZFAWrapyL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51ZFAWrapyL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -724,7 +747,7 @@
     
     <div class="media-card" data-id="21" data-format="audiobook">
       <a class="media-poster" href="book-B0GWFFD67Z.html">
-        <img src="https://m.media-amazon.com/images/I/61+LWDMEtkL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/61+LWDMEtkL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -741,7 +764,7 @@
     
     <div class="media-card" data-id="22" data-format="audiobook">
       <a class="media-poster" href="book-B0FQ649GLT.html">
-        <img src="https://m.media-amazon.com/images/I/511+hj71nFL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/511+hj71nFL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge available">Available</span>
         
@@ -760,7 +783,7 @@
     
     <div class="media-card" data-id="23" data-format="audiobook">
       <a class="media-poster" href="book-1473231051.html">
-        <img src="https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -777,7 +800,7 @@
     
     <div class="media-card" data-id="24" data-format="audiobook">
       <a class="media-poster" href="book-B0DJN1BCLS.html">
-        <img src="https://m.media-amazon.com/images/I/51nidelfhPL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51nidelfhPL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -794,7 +817,7 @@
     
     <div class="media-card" data-id="25" data-format="audiobook">
       <a class="media-poster" href="book-B0FF61W874.html">
-        <img src="https://m.media-amazon.com/images/I/51r7UjHEwEL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51r7UjHEwEL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -811,7 +834,7 @@
     
     <div class="media-card" data-id="26" data-format="audiobook">
       <a class="media-poster" href="book-B0GVKKFXJS.html">
-        <img src="https://m.media-amazon.com/images/I/51fizT1Tw5L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51fizT1Tw5L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -828,7 +851,7 @@
     
     <div class="media-card" data-id="27" data-format="audiobook">
       <a class="media-poster" href="book-B09YZ5YG5J.html">
-        <img src="https://m.media-amazon.com/images/I/61OOpu43gTL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/61OOpu43gTL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -852,7 +875,7 @@
   
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <a class="section-link" href="lane-narrator.html"><h3>Narrators you love</h3><span class="chev">›</span></a>
     
@@ -863,7 +886,7 @@
     
     <div class="media-card" data-id="28" data-format="audiobook">
       <a class="media-poster" href="book-B0FXHS4TLF.html">
-        <img src="https://m.media-amazon.com/images/I/51gn+4Lv49L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51gn+4Lv49L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -880,7 +903,7 @@
     
     <div class="media-card" data-id="29" data-format="audiobook">
       <a class="media-poster" href="book-B0BLHYFHGM.html">
-        <img src="https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -897,7 +920,7 @@
     
     <div class="media-card" data-id="30" data-format="audiobook">
       <a class="media-poster" href="book-B0F4ZRQT9C.html">
-        <img src="https://m.media-amazon.com/images/I/41GSTR-RBAL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/41GSTR-RBAL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -914,7 +937,7 @@
     
     <div class="media-card" data-id="31" data-format="audiobook">
       <a class="media-poster" href="book-B00VVVORN8.html">
-        <img src="https://m.media-amazon.com/images/I/51eaPLG2S2L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51eaPLG2S2L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -931,7 +954,7 @@
     
     <div class="media-card" data-id="32" data-format="audiobook">
       <a class="media-poster" href="book-1405543590.html">
-        <img src="https://m.media-amazon.com/images/I/514S9rlgKoL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/514S9rlgKoL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -948,7 +971,7 @@
     
     <div class="media-card" data-id="33" data-format="audiobook">
       <a class="media-poster" href="book-B0GSRWBDHJ.html">
-        <img src="https://m.media-amazon.com/images/I/51a9Dq15TAL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51a9Dq15TAL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge available">Available</span>
         
@@ -967,7 +990,7 @@
     
     <div class="media-card" data-id="34" data-format="audiobook">
       <a class="media-poster" href="book-B0FD44GK1K.html">
-        <img src="https://m.media-amazon.com/images/I/61uYFcYf8YL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/61uYFcYf8YL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -984,7 +1007,7 @@
     
     <div class="media-card" data-id="35" data-format="audiobook">
       <a class="media-poster" href="book-B0GSS9X2DC.html">
-        <img src="https://m.media-amazon.com/images/I/41fQbkRWh6L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/41fQbkRWh6L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1001,7 +1024,7 @@
     
     <div class="media-card" data-id="36" data-format="audiobook">
       <a class="media-poster" href="book-B0G61TLQC8.html">
-        <img src="https://m.media-amazon.com/images/I/51IYtJadG-L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51IYtJadG-L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1025,7 +1048,7 @@
   
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <a class="section-link" href="lane-genre.html"><h3>More in your favourite genres</h3><span class="chev">›</span></a>
     
@@ -1036,7 +1059,7 @@
     
     <div class="media-card" data-id="37" data-format="audiobook">
       <a class="media-poster" href="book-B0BG3BVBR8.html">
-        <img src="https://m.media-amazon.com/images/I/51VDmybgQUL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51VDmybgQUL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1053,7 +1076,7 @@
     
     <div class="media-card" data-id="38" data-format="audiobook">
       <a class="media-poster" href="book-B0FVWB67X5.html">
-        <img src="https://m.media-amazon.com/images/I/61-fVoZxGCL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/61-fVoZxGCL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1070,7 +1093,7 @@
     
     <div class="media-card" data-id="39" data-format="audiobook">
       <a class="media-poster" href="book-B0FXHPTZV7.html">
-        <img src="https://m.media-amazon.com/images/I/51B5c3tB3+L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51B5c3tB3+L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1087,7 +1110,7 @@
     
     <div class="media-card" data-id="40" data-format="audiobook">
       <a class="media-poster" href="book-B0G4SLBQ9V.html">
-        <img src="https://m.media-amazon.com/images/I/51ua0KbobGL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51ua0KbobGL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1104,7 +1127,7 @@
     
     <div class="media-card" data-id="41" data-format="audiobook">
       <a class="media-poster" href="book-B0F8KD5XQQ.html">
-        <img src="https://m.media-amazon.com/images/I/51k60Fo5GWL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51k60Fo5GWL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1121,7 +1144,7 @@
     
     <div class="media-card" data-id="42" data-format="audiobook">
       <a class="media-poster" href="book-164541793X.html">
-        <img src="https://m.media-amazon.com/images/I/51haoAB4hmL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51haoAB4hmL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1138,7 +1161,7 @@
     
     <div class="media-card" data-id="43" data-format="audiobook">
       <a class="media-poster" href="book-B0CTCZWQ28.html">
-        <img src="https://m.media-amazon.com/images/I/51duoMYK4IL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51duoMYK4IL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1155,7 +1178,7 @@
     
     <div class="media-card" data-id="44" data-format="audiobook">
       <a class="media-poster" href="book-B01BLUYRKQ.html">
-        <img src="https://m.media-amazon.com/images/I/61VySwhFOSL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/61VySwhFOSL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge available">Available</span>
         
@@ -1174,7 +1197,7 @@
     
     <div class="media-card" data-id="45" data-format="audiobook">
       <a class="media-poster" href="book-B0F5CPVMCS.html">
-        <img src="https://m.media-amazon.com/images/I/51mvjUT0cgL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51mvjUT0cgL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1198,7 +1221,7 @@
   
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <a class="section-link" href="lane-discover_author.html"><h3>New authors to discover</h3><span class="chev">›</span></a>
     
@@ -1209,7 +1232,7 @@
     
     <div class="media-card" data-id="46" data-format="audiobook">
       <a class="media-poster" href="book-B0F1DLYWH3.html">
-        <img src="https://m.media-amazon.com/images/I/51bDr6f5ggL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51bDr6f5ggL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1226,7 +1249,7 @@
     
     <div class="media-card" data-id="47" data-format="audiobook">
       <a class="media-poster" href="book-B0G5N1NGF5.html">
-        <img src="https://m.media-amazon.com/images/I/51LodtNt6fL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51LodtNt6fL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1243,7 +1266,7 @@
     
     <div class="media-card" data-id="48" data-format="audiobook">
       <a class="media-poster" href="book-B0F6FGW4NJ.html">
-        <img src="https://m.media-amazon.com/images/I/51RywPs0IOL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51RywPs0IOL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1260,7 +1283,7 @@
     
     <div class="media-card" data-id="49" data-format="audiobook">
       <a class="media-poster" href="book-B0GXX43KPH.html">
-        <img src="https://m.media-amazon.com/images/I/6113AN26W+L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/6113AN26W+L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1277,7 +1300,7 @@
     
     <div class="media-card" data-id="50" data-format="audiobook">
       <a class="media-poster" href="book-B0GS3QJXGK.html">
-        <img src="https://m.media-amazon.com/images/I/61v993gxwsL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/61v993gxwsL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1294,7 +1317,7 @@
     
     <div class="media-card" data-id="51" data-format="audiobook">
       <a class="media-poster" href="book-B0FML1MMPC.html">
-        <img src="https://m.media-amazon.com/images/I/519TV9+empL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/519TV9+empL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1311,7 +1334,7 @@
     
     <div class="media-card" data-id="52" data-format="audiobook">
       <a class="media-poster" href="book-B0C3MV82YN.html">
-        <img src="https://m.media-amazon.com/images/I/51bwbPub9sL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51bwbPub9sL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1328,7 +1351,7 @@
     
     <div class="media-card" data-id="53" data-format="audiobook">
       <a class="media-poster" href="book-B0FH5QFM25.html">
-        <img src="https://m.media-amazon.com/images/I/51vTTBnMwjL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51vTTBnMwjL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1345,7 +1368,7 @@
     
     <div class="media-card" data-id="54" data-format="audiobook">
       <a class="media-poster" href="book-B00A7BJAUI.html">
-        <img src="https://m.media-amazon.com/images/I/61hZ-ygyCSL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/61hZ-ygyCSL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1369,7 +1392,7 @@
   
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <a class="section-link" href="lane-hidden.html"><h3>Hidden gems</h3><span class="chev">›</span></a>
     
@@ -1380,7 +1403,7 @@
     
     <div class="media-card" data-id="55" data-format="audiobook">
       <a class="media-poster" href="book-B0FF5DH4FH.html">
-        <img src="https://m.media-amazon.com/images/I/51Jg-AQ2jlL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51Jg-AQ2jlL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge available">Available</span>
         
@@ -1399,7 +1422,7 @@
     
     <div class="media-card" data-id="56" data-format="audiobook">
       <a class="media-poster" href="book-B0G5T5714Q.html">
-        <img src="https://m.media-amazon.com/images/I/51hhS1ng6AL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51hhS1ng6AL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1416,7 +1439,7 @@
     
     <div class="media-card" data-id="57" data-format="audiobook">
       <a class="media-poster" href="book-B0FPTB1P9T.html">
-        <img src="https://m.media-amazon.com/images/I/51F3UqMl2GL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51F3UqMl2GL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1433,7 +1456,7 @@
     
     <div class="media-card" data-id="58" data-format="audiobook">
       <a class="media-poster" href="book-B0GJFKPJXY.html">
-        <img src="https://m.media-amazon.com/images/I/51VwOY4vLJL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51VwOY4vLJL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1450,7 +1473,7 @@
     
     <div class="media-card" data-id="59" data-format="audiobook">
       <a class="media-poster" href="book-B0G5S13R5V.html">
-        <img src="https://m.media-amazon.com/images/I/51rbwi2s26L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51rbwi2s26L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1467,7 +1490,7 @@
     
     <div class="media-card" data-id="60" data-format="audiobook">
       <a class="media-poster" href="book-B0F5D43ZMP.html">
-        <img src="https://m.media-amazon.com/images/I/51Ip8DK3K8L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51Ip8DK3K8L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1484,7 +1507,7 @@
     
     <div class="media-card" data-id="61" data-format="audiobook">
       <a class="media-poster" href="book-B0GPFKYB57.html">
-        <img src="https://m.media-amazon.com/images/I/51s4hS7IRLL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51s4hS7IRLL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1501,7 +1524,7 @@
     
     <div class="media-card" data-id="62" data-format="audiobook">
       <a class="media-poster" href="book-B0DK423PR1.html">
-        <img src="https://m.media-amazon.com/images/I/517LwQfIwhL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/517LwQfIwhL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1518,7 +1541,7 @@
     
     <div class="media-card" data-id="63" data-format="audiobook">
       <a class="media-poster" href="book-B0GQ1B5XGQ.html">
-        <img src="https://m.media-amazon.com/images/I/41b-AxDyIEL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/41b-AxDyIEL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1542,7 +1565,7 @@
   
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <a class="section-link" href="lane-awards.html"><h3>Award winners</h3><span class="chev">›</span></a>
     
@@ -1553,7 +1576,7 @@
     
     <div class="media-card" data-id="64" data-format="audiobook">
       <a class="media-poster" href="book-B0FY473MP5.html">
-        <img src="https://m.media-amazon.com/images/I/51YDcmOCEVL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51YDcmOCEVL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1570,7 +1593,7 @@
     
     <div class="media-card" data-id="65" data-format="audiobook">
       <a class="media-poster" href="book-B0GST2RSFP.html">
-        <img src="https://m.media-amazon.com/images/I/51oiNrWmrzL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51oiNrWmrzL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1587,7 +1610,7 @@
     
     <div class="media-card" data-id="66" data-format="audiobook">
       <a class="media-poster" href="book-B0G5SZQ514.html">
-        <img src="https://m.media-amazon.com/images/I/51JskkKTzPL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51JskkKTzPL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge available">Available</span>
         
@@ -1606,7 +1629,7 @@
     
     <div class="media-card" data-id="67" data-format="audiobook">
       <a class="media-poster" href="book-B0FK6XSCNM.html">
-        <img src="https://m.media-amazon.com/images/I/51cW-70PhFL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51cW-70PhFL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1623,7 +1646,7 @@
     
     <div class="media-card" data-id="68" data-format="audiobook">
       <a class="media-poster" href="book-B0FVJTD6ZD.html">
-        <img src="https://m.media-amazon.com/images/I/51mT8FW3HIL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51mT8FW3HIL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1640,7 +1663,7 @@
     
     <div class="media-card" data-id="69" data-format="audiobook">
       <a class="media-poster" href="book-B0G5SMXT5S.html">
-        <img src="https://m.media-amazon.com/images/I/51xcKNHBEvL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51xcKNHBEvL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1657,7 +1680,7 @@
     
     <div class="media-card" data-id="70" data-format="audiobook">
       <a class="media-poster" href="book-B0GMRM98ZR.html">
-        <img src="https://m.media-amazon.com/images/I/51V2-Jt1brL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51V2-Jt1brL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1674,7 +1697,7 @@
     
     <div class="media-card" data-id="71" data-format="audiobook">
       <a class="media-poster" href="book-1405543337.html">
-        <img src="https://m.media-amazon.com/images/I/51fYCBt+e-L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51fYCBt+e-L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1691,7 +1714,7 @@
     
     <div class="media-card" data-id="72" data-format="audiobook">
       <a class="media-poster" href="book-B0G6NS6VLG.html">
-        <img src="https://m.media-amazon.com/images/I/51EQo3LGhHL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51EQo3LGhHL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1715,7 +1738,7 @@
   
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <a class="section-link" href="lane-short.html"><h3>Short listens</h3><span class="chev">›</span></a>
     
@@ -1726,7 +1749,7 @@
     
     <div class="media-card" data-id="73" data-format="audiobook">
       <a class="media-poster" href="book-B0FSB5BHFV.html">
-        <img src="https://m.media-amazon.com/images/I/51DR-45yDcL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51DR-45yDcL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1743,7 +1766,7 @@
     
     <div class="media-card" data-id="74" data-format="audiobook">
       <a class="media-poster" href="book-B0FJPG9S61.html">
-        <img src="https://m.media-amazon.com/images/I/51WQ-zpQU9L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51WQ-zpQU9L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1760,7 +1783,7 @@
     
     <div class="media-card" data-id="75" data-format="audiobook">
       <a class="media-poster" href="book-B0GLSPW51F.html">
-        <img src="https://m.media-amazon.com/images/I/41vaSq-EC-L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/41vaSq-EC-L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1777,7 +1800,7 @@
     
     <div class="media-card" data-id="76" data-format="audiobook">
       <a class="media-poster" href="book-B0GZJP591X.html">
-        <img src="https://m.media-amazon.com/images/I/21imIq84tNL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/21imIq84tNL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1794,7 +1817,7 @@
     
     <div class="media-card" data-id="77" data-format="audiobook">
       <a class="media-poster" href="book-B0H2TDXKW2.html">
-        <img src="https://m.media-amazon.com/images/I/516h9I1Bp9L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/516h9I1Bp9L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge available">Available</span>
         
@@ -1813,7 +1836,7 @@
     
     <div class="media-card" data-id="78" data-format="audiobook">
       <a class="media-poster" href="book-B0H2TLWZR7.html">
-        <img src="https://m.media-amazon.com/images/I/51SL3A21RoL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51SL3A21RoL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1830,7 +1853,7 @@
     
     <div class="media-card" data-id="79" data-format="audiobook">
       <a class="media-poster" href="book-B0GS7CGR3Y.html">
-        <img src="https://m.media-amazon.com/images/I/51olQwPlH1L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51olQwPlH1L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1847,7 +1870,7 @@
     
     <div class="media-card" data-id="80" data-format="audiobook">
       <a class="media-poster" href="book-B0FRSSDB1X.html">
-        <img src="https://m.media-amazon.com/images/I/61zltREU6LL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/61zltREU6LL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1864,7 +1887,7 @@
     
     <div class="media-card" data-id="81" data-format="audiobook">
       <a class="media-poster" href="book-B0G5T58YV5.html">
-        <img src="https://m.media-amazon.com/images/I/51Ico-0IQoL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51Ico-0IQoL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1888,7 +1911,7 @@
   
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <a class="section-link" href="lane-epic.html"><h3>Epic listens</h3><span class="chev">›</span></a>
     
@@ -1899,7 +1922,7 @@
     
     <div class="media-card" data-id="82" data-format="audiobook">
       <a class="media-poster" href="book-B0G5T12K6W.html">
-        <img src="https://m.media-amazon.com/images/I/51VC-MLdawL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51VC-MLdawL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1916,7 +1939,7 @@
     
     <div class="media-card" data-id="83" data-format="audiobook">
       <a class="media-poster" href="book-B0GQZY4RXP.html">
-        <img src="https://m.media-amazon.com/images/I/51j5C3wdmVL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51j5C3wdmVL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1933,7 +1956,7 @@
     
     <div class="media-card" data-id="84" data-format="audiobook">
       <a class="media-poster" href="book-B0GQZNZ7BF.html">
-        <img src="https://m.media-amazon.com/images/I/41YpJvAeRoL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/41YpJvAeRoL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1950,7 +1973,7 @@
     
     <div class="media-card" data-id="85" data-format="audiobook">
       <a class="media-poster" href="book-B0H4WFDQX1.html">
-        <img src="https://m.media-amazon.com/images/I/51DqX9skQCL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51DqX9skQCL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1967,7 +1990,7 @@
     
     <div class="media-card" data-id="86" data-format="audiobook">
       <a class="media-poster" href="book-B0GYT1PT3K.html">
-        <img src="https://m.media-amazon.com/images/I/51JEVVnJGXL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51JEVVnJGXL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -1984,7 +2007,7 @@
     
     <div class="media-card" data-id="87" data-format="audiobook">
       <a class="media-poster" href="book-B0GHSY4Y5Z.html">
-        <img src="https://m.media-amazon.com/images/I/41FaUAyfwML._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/41FaUAyfwML._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -2001,7 +2024,7 @@
     
     <div class="media-card" data-id="88" data-format="audiobook">
       <a class="media-poster" href="book-B0FXDXR52V.html">
-        <img src="https://m.media-amazon.com/images/I/51Vtw9MszJL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51Vtw9MszJL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge available">Available</span>
         
@@ -2020,7 +2043,7 @@
     
     <div class="media-card" data-id="89" data-format="audiobook">
       <a class="media-poster" href="book-B0GGHNR35S.html">
-        <img src="https://m.media-amazon.com/images/I/31q0t1AE9LL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/31q0t1AE9LL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -2037,7 +2060,7 @@
     
     <div class="media-card" data-id="90" data-format="audiobook">
       <a class="media-poster" href="book-B0H11MBHWN.html">
-        <img src="https://m.media-amazon.com/images/I/41ROUxXXx2L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/41ROUxXXx2L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -2061,7 +2084,7 @@
   
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <a class="section-link" href="lane-popular.html"><h3>Popular right now</h3><span class="chev">›</span></a>
     
@@ -2072,7 +2095,7 @@
     
     <div class="media-card" data-id="91" data-format="audiobook">
       <a class="media-poster" href="book-B0GMY7DGCF.html">
-        <img src="https://m.media-amazon.com/images/I/51I8cFnT5bL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51I8cFnT5bL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -2089,7 +2112,7 @@
     
     <div class="media-card" data-id="92" data-format="audiobook">
       <a class="media-poster" href="book-B0GTN7WBFX.html">
-        <img src="https://m.media-amazon.com/images/I/51yZtMC1jrL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51yZtMC1jrL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -2106,7 +2129,7 @@
     
     <div class="media-card" data-id="93" data-format="audiobook">
       <a class="media-poster" href="book-B0GS513Q2W.html">
-        <img src="https://m.media-amazon.com/images/I/51uLq2O6OKL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51uLq2O6OKL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -2123,7 +2146,7 @@
     
     <div class="media-card" data-id="94" data-format="audiobook">
       <a class="media-poster" href="book-B0GHZNH4JL.html">
-        <img src="https://m.media-amazon.com/images/I/51TcTLhRDCL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51TcTLhRDCL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -2140,7 +2163,7 @@
     
     <div class="media-card" data-id="95" data-format="audiobook">
       <a class="media-poster" href="book-B0DT4GR2Q4.html">
-        <img src="https://m.media-amazon.com/images/I/51TJullGLUL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51TJullGLUL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -2157,7 +2180,7 @@
     
     <div class="media-card" data-id="96" data-format="audiobook">
       <a class="media-poster" href="book-B0H2JM8KLY.html">
-        <img src="https://m.media-amazon.com/images/I/51agLfeLgyL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51agLfeLgyL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -2174,7 +2197,7 @@
     
     <div class="media-card" data-id="97" data-format="audiobook">
       <a class="media-poster" href="book-B0FL2T5ZD8.html">
-        <img src="https://m.media-amazon.com/images/I/51oFteOVKeL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51oFteOVKeL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -2191,7 +2214,7 @@
     
     <div class="media-card" data-id="98" data-format="audiobook">
       <a class="media-poster" href="book-B0FYF5BKH3.html">
-        <img src="https://m.media-amazon.com/images/I/41Nl4-jGR9L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/41Nl4-jGR9L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         
         <div class="media-overlay">
@@ -2208,7 +2231,7 @@
     
     <div class="media-card" data-id="99" data-format="audiobook">
       <a class="media-poster" href="book-B0F4KY51BL.html">
-        <img src="https://m.media-amazon.com/images/I/51RxPMr3QkL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51RxPMr3QkL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge available">Available</span>
         
@@ -2234,7 +2257,7 @@
   
   
   
-<section class="section">
+<section class="section fmt-group">
   <div class="section-head">
     <a class="section-link" href="lane-upcoming.html"><h3>New &amp; upcoming</h3><span class="chev">›</span></a>
     
@@ -2245,7 +2268,7 @@
     
     <div class="media-card" data-id="100" data-format="audiobook">
       <a class="media-poster" href="book-B0G5B7R5XT.html">
-        <img src="https://m.media-amazon.com/images/I/51wf2oVcNIL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51wf2oVcNIL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge handed">Coming 2026</span>
         
@@ -2264,7 +2287,7 @@
     
     <div class="media-card" data-id="101" data-format="audiobook">
       <a class="media-poster" href="book-B0H4XBBV5T.html">
-        <img src="https://m.media-amazon.com/images/I/41IrEgv7jAL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/41IrEgv7jAL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge handed">Coming 2026</span>
         
@@ -2283,7 +2306,7 @@
     
     <div class="media-card" data-id="102" data-format="audiobook">
       <a class="media-poster" href="book-B0H37WS6R7.html">
-        <img src="https://m.media-amazon.com/images/I/41QjBy8mZ6L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/41QjBy8mZ6L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge handed">Coming 2026</span>
         
@@ -2302,7 +2325,7 @@
     
     <div class="media-card" data-id="103" data-format="audiobook">
       <a class="media-poster" href="book-B0GYFWJ2YT.html">
-        <img src="https://m.media-amazon.com/images/I/41fVu1rYhmL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/41fVu1rYhmL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge handed">Coming 2026</span>
         
@@ -2321,7 +2344,7 @@
     
     <div class="media-card" data-id="104" data-format="audiobook">
       <a class="media-poster" href="book-B0GYZST8R4.html">
-        <img src="https://m.media-amazon.com/images/I/51p8nhmXfYL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51p8nhmXfYL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge handed">Coming 2026</span>
         
@@ -2340,7 +2363,7 @@
     
     <div class="media-card" data-id="105" data-format="audiobook">
       <a class="media-poster" href="book-B0G2SWRKVM.html">
-        <img src="https://m.media-amazon.com/images/I/61h99LQ6D9L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/61h99LQ6D9L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge handed">Coming 2026</span>
         
@@ -2359,7 +2382,7 @@
     
     <div class="media-card" data-id="106" data-format="audiobook">
       <a class="media-poster" href="book-B0GZL6ZHVP.html">
-        <img src="https://m.media-amazon.com/images/I/51ivKfWN9FL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51ivKfWN9FL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge handed">Coming 2026</span>
         
@@ -2378,7 +2401,7 @@
     
     <div class="media-card" data-id="107" data-format="audiobook">
       <a class="media-poster" href="book-B0GTWQ9WWY.html">
-        <img src="https://m.media-amazon.com/images/I/51eRLAUg0GL._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/51eRLAUg0GL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge handed">Coming 2026</span>
         
@@ -2397,7 +2420,7 @@
     
     <div class="media-card" data-id="108" data-format="audiobook">
       <a class="media-poster" href="book-B0F4RJZHYF.html">
-        <img src="https://m.media-amazon.com/images/I/61Iqi369x2L._SL1500_.jpg" loading="lazy" alt="">
+        <img src="https://m.media-amazon.com/images/I/61Iqi369x2L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
         
         <span class="corner-badge handed">Coming 2026</span>
         

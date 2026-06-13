@@ -2,6 +2,38 @@
 
 All notable changes to Stackarr.
 
+## [1.6.0] - 2026-06-14
+
+### Recommendation quality (deterministic, no AI) — see [RECOMMENDATIONS.md](RECOMMENDATIONS.md)
+- **Mood/pace matching** — a taste profile (your picked vibes + the moods of what
+  you read, derived from catalogue subjects) scores every candidate by mood
+  overlap. New "Matches your mood" lane.
+- **Serendipity** — a bonus for well-rated, lesser-known books + an "Off the
+  beaten path" lane, to beat the "too obvious" problem.
+- **Adventurousness dial** (Settings) — Comfort ↔ Discovery.
+- **Smarter negatives** — a DNF nudges down the whole *mood*, not just the title.
+- **Mood-aware cold start** — a vibe picker shapes picks before any history.
+- **Format-isolated taste** by default (audiobook vs ebook), cross-format opt-in.
+  Light household collaborative boost.
+
+### Reading features
+- **My shelves** (Want / Reading / Read) + a **reading-goal ring**.
+- **Insights** rebuilt: format split, GitHub-style **activity heatmap**, goal
+  ring, **mood profile**.
+- **Author** and **narrator** pages (Follow an author → new-release radar);
+  **Upcoming** page; **Surprise me**; **series completion bars** on Up Next.
+- **Reviews** gain helpful-votes + spoiler tags; **mood tags** + **content
+  warnings** on book pages; **More / Less like this**; **get the other format**.
+- **Check libraries** re-scans ABS/Kavita/Calibre for books added outside
+  Chaptarr; requests skip Chaptarr if already owned.
+
+### UI
+- Format filter + per-card format **icons** across Suggestions / Up Next /
+  Requests / History / Shelves / Upcoming; mobile header + request-row redesign.
+
+## [1.5.1] - 2026-06-13
+- Removed the "Recently rated by readers" row from the home page.
+
 ## [1.5.0] - 2026-06-13
 
 ### Added

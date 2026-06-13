@@ -73,6 +73,10 @@ book/audiobook manager) does the searching, grabbing and importing.
 
 ## How recommendations work (no AI)
 
+> Full algorithm write-up: **[RECOMMENDATIONS.md](RECOMMENDATIONS.md)** — inputs,
+> lanes, scoring, mood matching, serendipity and the adventurousness dial.
+
+
 Your Audiobookshelf history (finished + in-progress) is the seed. For each seed
 Stackarr checks series order, author backlist, Audible's own "listeners also
 enjoyed" (`/sims`), narrators, and genres via the public **Audible** catalogue and

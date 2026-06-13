@@ -148,16 +148,31 @@ const Stackarr = (() => {
     },
     filterFormat(fmt, pill) {
       document.querySelectorAll("#fmt-filter .fmt-pill").forEach(p => p.classList.toggle("active", p === pill));
-      document.querySelectorAll(".media-card[data-format]").forEach(c => {
-        c.style.display = (fmt === "all" || c.dataset.format === fmt) ? "" : "none";
+      try { localStorage.setItem("stackarr-fmt", fmt); } catch (e) {}
+      // filter every format-tagged item on the page (cards, list rows, series cards…)
+      document.querySelectorAll("[data-format]").forEach(el => {
+        el.style.display = (fmt === "all" || el.dataset.format === fmt) ? "" : "none";
       });
-      // hide a whole lane row if every card in it is now filtered out
-      document.querySelectorAll(".section").forEach(sec => {
-        const cards = sec.querySelectorAll(".media-card[data-format]");
-        if (!cards.length) return;
-        const anyVisible = [...cards].some(c => c.style.display !== "none");
-        sec.style.display = anyVisible ? "" : "none";
+      // hide any group wrapper (lane section, etc.) left with no visible items
+      document.querySelectorAll(".fmt-group").forEach(g => {
+        const items = g.querySelectorAll("[data-format]");
+        if (!items.length) return;
+        g.style.display = [...items].some(i => i.style.display !== "none") ? "" : "none";
       });
+    },
+    initFormatFilter() {
+      // re-apply the last chosen format on load so it sticks across pages
+      const f = (() => { try { return localStorage.getItem("stackarr-fmt"); } catch (e) { return null; } })();
+      if (!f || f === "all") return;
+      const pill = document.querySelector(`#fmt-filter .fmt-pill[data-fmt="${f}"]`);
+      if (pill) this.filterFormat(f, pill);
+    },
+    async getSeries(name, author, btn) {
+      if (!author) { toast("No author found for this series."); return; }
+      if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+      const r = await api("/api/series/add", { method: "POST", body: JSON.stringify({ series: name, author }) });
+      toast(r.detail || (r.ok ? "Sent to Chaptarr." : "Couldn't add right now."));
+      if (btn) { btn.disabled = false; btn.textContent = r.ok ? "✓ Requested" : "＋ Get full series"; }
     },
     toggleTheme() {
       localStorage.setItem("stackarr-theme", localStorage.getItem("stackarr-theme") === "light" ? "dark" : "light");
@@ -227,11 +242,78 @@ const Stackarr = (() => {
       if (!stars) { toast("Pick a star rating first."); return; }
       const review = (document.getElementById("my-review-text")?.value || "").trim();
       if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+      const spoiler = !!(document.getElementById("my-review-spoiler") || {}).checked;
       await api("/api/rate", { method: "POST", body: JSON.stringify({
-        asin: sec.dataset.key, stars, review,
+        asin: sec.dataset.key, stars, review, spoiler,
         title: sec.dataset.title, author: sec.dataset.author, format: sec.dataset.format }) });
       if (btn) { btn.disabled = false; btn.textContent = "Save review"; }
       toast("Review saved — thanks for sharing.");
+    },
+    async setShelf(state, btn) {
+      const bar = btn.closest(".shelf-bar");
+      const on = btn.classList.contains("on");
+      const next = on ? "" : state;
+      bar.querySelectorAll(".shelf-btn").forEach(b => b.classList.toggle("on", b === btn && !on));
+      await api("/api/shelf", { method: "POST", body: JSON.stringify({
+        key: bar.dataset.key, state: next, title: bar.dataset.title,
+        author: bar.dataset.author, cover: bar.dataset.cover, format: bar.dataset.format }) });
+      toast(next ? `On your "${state}" shelf.` : "Removed from shelves.");
+    },
+    async getOtherFormat(book, btn) {
+      if (btn) { btn.disabled = true; }
+      const r = await api("/api/get-other-format", { method: "POST", body: JSON.stringify(book) });
+      toast(r.detail || (r.ok ? "Requested." : "Couldn't add."));
+      if (btn) { btn.disabled = false; }
+    },
+    async feedback(book, direction, btn) {
+      await api("/api/feedback", { method: "POST", body: JSON.stringify({
+        author: book.author, title: book.title, direction, format: book.format }) });
+      toast(direction === "more" ? "More like this — noted." : "Less like this — noted.");
+      if (btn) { btn.classList.add("on"); }
+    },
+    async voteReview(id, btn) {
+      const r = await api("/api/review/vote", { method: "POST", body: JSON.stringify({ rating_id: id }) });
+      const c = btn.querySelector(".vcount"); if (c) c.textContent = r.votes;
+      btn.classList.toggle("voted");
+    },
+    async checkLibraries(btn) {
+      if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
+      const r = await api("/api/requests/check", { method: "POST", body: "{}" });
+      toast(r.detail || "Checked.");
+      if (r.flipped) setTimeout(() => location.reload(), 600);
+      else if (btn) { btn.disabled = false; btn.textContent = "↻ Check libraries"; }
+    },
+    async follow(btn) {
+      const r = await api("/api/follow", { method: "POST", body: JSON.stringify({ author: btn.dataset.author }) });
+      btn.classList.toggle("on", r.following);
+      btn.textContent = r.following ? "✓ Following" : "＋ Follow";
+      toast(r.following ? "Following — you're on the radar." : "Unfollowed.");
+    },
+    async setAdventurousness(v) {
+      await api("/api/adventurousness", { method: "POST", body: JSON.stringify({ value: parseInt(v, 10) }) });
+      toast("Updated — your next refresh reflects it.");
+    },
+    async pickVibes(btn) {
+      const moods = [...document.querySelectorAll(".vibe-chip.on")].map(c => c.dataset.mood);
+      if (!moods.length) { toast("Pick a few vibes first."); return; }
+      await api("/api/vibes", { method: "POST", body: JSON.stringify({ moods }) });
+      document.getElementById("vibe-card")?.remove();
+      toast("Vibes saved — updating your picks…");
+      this.scan && this.scan();
+    },
+    toggleVibe(el) { el.classList.toggle("on"); },
+    async saveGoal(btn) {
+      const n = parseInt((document.getElementById("goal-input") || {}).value, 10) || 0;
+      await api("/api/goal", { method: "POST", body: JSON.stringify({ goal: n }) });
+      toast("Goal saved."); setTimeout(() => location.reload(), 400);
+    },
+    async surprise(fmt) {
+      const n = Math.floor(Date.now() / 60000);   // varies each minute
+      const q = new URLSearchParams({ n: String(n) });
+      if (fmt) q.set("format", fmt);
+      const r = await api("/api/surprise?" + q.toString());
+      if (r.ok && r.book && r.book.asin) location.href = (window.URL_BASE || "") + "/book/" + r.book.asin;
+      else toast("No pick right now — try Update Suggestions.");
     },
     _onboardRated(onb) {
       if (onb.dataset.done === "1") return;

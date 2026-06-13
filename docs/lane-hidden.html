@@ -21,6 +21,10 @@
     <svg viewBox="0 0 24 24"><path d="M12 2 3 7v10l9 5 9-5V7zm0 2.2 6.5 3.6L12 11.4 5.5 7.8zM5 9.3l6 3.3v6.8l-6-3.3zm14 0v6.8l-6 3.3v-6.8z"/></svg><span>Suggestions</span></a>
   <a href="series.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M4 4h4v16H4zm6 0h4v16h-4zm7 0 3.8 1 .2 15-4-1z"/></svg><span>Up Next</span></a>
+  <a href="/shelves" class="navlink ">
+    <svg viewBox="0 0 24 24"><path d="M3 3h7v18H3zm9 0h3v18h-3zm5.5.3 3 .5L21 21l-3-.5z"/></svg><span>My shelves</span></a>
+  <a href="/upcoming" class="navlink ">
+    <svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zm12 7v10H5V9zm-7 2v3H9v-3z"/></svg><span>Upcoming</span></a>
   <a href="requests.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm-1 13-3-2-3 2V4h6z"/></svg><span>Requests</span></a>
   <a href="history.html" class="navlink ">
@@ -47,17 +51,19 @@
       <div class="search-suggest" id="search-suggest"></div>
     </form>
     <div class="topbar-spacer"></div>
+    <button class="icon-btn" onclick="Stackarr.surprise()" title="Surprise me — one pick">🎲</button>
     <button class="icon-btn" onclick="Stackarr.toggleTheme()" title="Light / dark">◑</button>
   </header>
   <main>
 <button class="btn small ghost back-btn" onclick="history.back()">‹ Back</button>
-<div class="page-head"><h2 class="page-title">Hidden gems <span class="subtle">9 picks</span></h2></div>
+<div class="page-head"><h2 class="page-title">Hidden gems <span class="subtle">9 picks</span></h2>
+  <div class="page-head-actions"></div></div>
 
-<div class="grid">
+<div class="grid fmt-group">
   
   <div class="media-card" data-id="55" data-format="audiobook">
     <a class="media-poster" href="book-B0FF5DH4FH.html">
-      <img src="https://m.media-amazon.com/images/I/51Jg-AQ2jlL._SL1500_.jpg" loading="lazy" alt="">
+      <img src="https://m.media-amazon.com/images/I/51Jg-AQ2jlL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
       
       <span class="corner-badge available">Available</span>
       
@@ -76,7 +82,7 @@
   
   <div class="media-card" data-id="56" data-format="audiobook">
     <a class="media-poster" href="book-B0G5T5714Q.html">
-      <img src="https://m.media-amazon.com/images/I/51hhS1ng6AL._SL1500_.jpg" loading="lazy" alt="">
+      <img src="https://m.media-amazon.com/images/I/51hhS1ng6AL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
       
       
       <div class="media-overlay">
@@ -93,7 +99,7 @@
   
   <div class="media-card" data-id="57" data-format="audiobook">
     <a class="media-poster" href="book-B0FPTB1P9T.html">
-      <img src="https://m.media-amazon.com/images/I/51F3UqMl2GL._SL1500_.jpg" loading="lazy" alt="">
+      <img src="https://m.media-amazon.com/images/I/51F3UqMl2GL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
       
       
       <div class="media-overlay">
@@ -110,7 +116,7 @@
   
   <div class="media-card" data-id="58" data-format="audiobook">
     <a class="media-poster" href="book-B0GJFKPJXY.html">
-      <img src="https://m.media-amazon.com/images/I/51VwOY4vLJL._SL1500_.jpg" loading="lazy" alt="">
+      <img src="https://m.media-amazon.com/images/I/51VwOY4vLJL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
       
       
       <div class="media-overlay">
@@ -127,7 +133,7 @@
   
   <div class="media-card" data-id="59" data-format="audiobook">
     <a class="media-poster" href="book-B0G5S13R5V.html">
-      <img src="https://m.media-amazon.com/images/I/51rbwi2s26L._SL1500_.jpg" loading="lazy" alt="">
+      <img src="https://m.media-amazon.com/images/I/51rbwi2s26L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
       
       
       <div class="media-overlay">
@@ -144,7 +150,7 @@
   
   <div class="media-card" data-id="60" data-format="audiobook">
     <a class="media-poster" href="book-B0F5D43ZMP.html">
-      <img src="https://m.media-amazon.com/images/I/51Ip8DK3K8L._SL1500_.jpg" loading="lazy" alt="">
+      <img src="https://m.media-amazon.com/images/I/51Ip8DK3K8L._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
       
       
       <div class="media-overlay">
@@ -161,7 +167,7 @@
   
   <div class="media-card" data-id="61" data-format="audiobook">
     <a class="media-poster" href="book-B0GPFKYB57.html">
-      <img src="https://m.media-amazon.com/images/I/51s4hS7IRLL._SL1500_.jpg" loading="lazy" alt="">
+      <img src="https://m.media-amazon.com/images/I/51s4hS7IRLL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
       
       
       <div class="media-overlay">
@@ -178,7 +184,7 @@
   
   <div class="media-card" data-id="62" data-format="audiobook">
     <a class="media-poster" href="book-B0DK423PR1.html">
-      <img src="https://m.media-amazon.com/images/I/517LwQfIwhL._SL1500_.jpg" loading="lazy" alt="">
+      <img src="https://m.media-amazon.com/images/I/517LwQfIwhL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
       
       
       <div class="media-overlay">
@@ -195,7 +201,7 @@
   
   <div class="media-card" data-id="63" data-format="audiobook">
     <a class="media-poster" href="book-B0GQ1B5XGQ.html">
-      <img src="https://m.media-amazon.com/images/I/41b-AxDyIEL._SL1500_.jpg" loading="lazy" alt="">
+      <img src="https://m.media-amazon.com/images/I/41b-AxDyIEL._SL1500_.jpg" loading="lazy" alt="" onerror="this.onerror=null;this.src='static/icon.svg'">
       
       
       <div class="media-overlay">

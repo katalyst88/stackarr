@@ -21,6 +21,10 @@
     <svg viewBox="0 0 24 24"><path d="M12 2 3 7v10l9 5 9-5V7zm0 2.2 6.5 3.6L12 11.4 5.5 7.8zM5 9.3l6 3.3v6.8l-6-3.3zm14 0v6.8l-6 3.3v-6.8z"/></svg><span>Suggestions</span></a>
   <a href="series.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M4 4h4v16H4zm6 0h4v16h-4zm7 0 3.8 1 .2 15-4-1z"/></svg><span>Up Next</span></a>
+  <a href="/shelves" class="navlink ">
+    <svg viewBox="0 0 24 24"><path d="M3 3h7v18H3zm9 0h3v18h-3zm5.5.3 3 .5L21 21l-3-.5z"/></svg><span>My shelves</span></a>
+  <a href="/upcoming" class="navlink ">
+    <svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zm12 7v10H5V9zm-7 2v3H9v-3z"/></svg><span>Upcoming</span></a>
   <a href="requests.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm-1 13-3-2-3 2V4h6z"/></svg><span>Requests</span></a>
   <a href="history.html" class="navlink ">
@@ -47,6 +51,7 @@
       <div class="search-suggest" id="search-suggest"></div>
     </form>
     <div class="topbar-spacer"></div>
+    <button class="icon-btn" onclick="Stackarr.surprise()" title="Surprise me — one pick">🎲</button>
     <button class="icon-btn" onclick="Stackarr.toggleTheme()" title="Light / dark">◑</button>
   </header>
   <main>
@@ -60,8 +65,8 @@
     <h1 class="book-title">The Four Agreements</h1>
     <p class="book-subtitle">A Practical Guide to Personal Freedom</p>
     <p class="book-author">
-      <a class="author-link" href="author-don-miguel-ruiz.html">Don Miguel Ruiz</a>, <a class="author-link" href="author-janet-mills.html">Janet Mills</a>
-      <span class="subtle"> · narrated by Peter Coyote</span>
+      <a class="author-link" href="/author/Don%20Miguel%20Ruiz">Don Miguel Ruiz</a>, <a class="author-link" href="/author/Janet%20Mills">Janet Mills</a>
+      <span class="subtle"> · narrated by </span><a class="author-link" href="/narrator/Peter%20Coyote">Peter Coyote</a>
     </p>
     <div class="book-meta">
       
@@ -78,10 +83,29 @@
     </div>
     
     
+    
+
+    
+    <div class="shelf-bar" data-key="" data-title="The Four Agreements" data-author="Don Miguel Ruiz, Janet Mills" data-cover="https://m.media-amazon.com/images/I/51Zmlg8PwUL._SL1500_.jpg" data-format="unabridged">
+      <span class="muted">Shelf:</span>
+      
+      <button class="btn small ghost shelf-btn " data-state="want" onclick="Stackarr.setShelf('want', this)">Want to read</button>
+      
+      <button class="btn small ghost shelf-btn " data-state="reading" onclick="Stackarr.setShelf('reading', this)">Reading</button>
+      
+      <button class="btn small ghost shelf-btn " data-state="read" onclick="Stackarr.setShelf('read', this)">Read</button>
+      
+    </div>
+    
     <div class="book-actions">
       <button class="btn" onclick='Stackarr.bookRequest({"asin": "B0GDPWQSR3", "author": "Don Miguel Ruiz, Janet Mills", "cover": "https://m.media-amazon.com/images/I/51Zmlg8PwUL._SL1500_.jpg", "format": "unabridged", "genres": ["Relationships, Parenting \u0026 Personal Development", "Personal Development", "Personal Success", "Religion \u0026 Spirituality", "Spirituality"], "language": "English", "narrator": "Peter Coyote", "num_ratings": 5558, "publisher": "Penguin Audio", "rating": 4.8, "release_date": "2026-01-06", "req_detail": null, "runtime_hours": 3, "sequence": null, "series": null, "state": "new", "subtitle": "A Practical Guide to Personal Freedom", "summary": "", "title": "The Four Agreements"}, this)'>Request</button>
       <button class="btn ghost" onclick='Stackarr.bookMarkRead({"asin": "B0GDPWQSR3", "author": "Don Miguel Ruiz, Janet Mills", "cover": "https://m.media-amazon.com/images/I/51Zmlg8PwUL._SL1500_.jpg", "format": "unabridged", "genres": ["Relationships, Parenting \u0026 Personal Development", "Personal Development", "Personal Success", "Religion \u0026 Spirituality", "Spirituality"], "language": "English", "narrator": "Peter Coyote", "num_ratings": 5558, "publisher": "Penguin Audio", "rating": 4.8, "release_date": "2026-01-06", "req_detail": null, "runtime_hours": 3, "sequence": null, "series": null, "state": "new", "subtitle": "A Practical Guide to Personal Freedom", "summary": "", "title": "The Four Agreements"}, this)'>Already read</button>
       <button class="btn ghost" onclick='Stackarr.bookIgnore({"asin": "B0GDPWQSR3", "author": "Don Miguel Ruiz, Janet Mills", "cover": "https://m.media-amazon.com/images/I/51Zmlg8PwUL._SL1500_.jpg", "format": "unabridged", "genres": ["Relationships, Parenting \u0026 Personal Development", "Personal Development", "Personal Success", "Religion \u0026 Spirituality", "Spirituality"], "language": "English", "narrator": "Peter Coyote", "num_ratings": 5558, "publisher": "Penguin Audio", "rating": 4.8, "release_date": "2026-01-06", "req_detail": null, "runtime_hours": 3, "sequence": null, "series": null, "state": "new", "subtitle": "A Practical Guide to Personal Freedom", "summary": "", "title": "The Four Agreements"}, this)'>Ignore</button>
+      
+    </div>
+    <div class="feedback-row">
+      <button class="btn small ghost" onclick='Stackarr.feedback({"asin": "B0GDPWQSR3", "author": "Don Miguel Ruiz, Janet Mills", "cover": "https://m.media-amazon.com/images/I/51Zmlg8PwUL._SL1500_.jpg", "format": "unabridged", "genres": ["Relationships, Parenting \u0026 Personal Development", "Personal Development", "Personal Success", "Religion \u0026 Spirituality", "Spirituality"], "language": "English", "narrator": "Peter Coyote", "num_ratings": 5558, "publisher": "Penguin Audio", "rating": 4.8, "release_date": "2026-01-06", "req_detail": null, "runtime_hours": 3, "sequence": null, "series": null, "state": "new", "subtitle": "A Practical Guide to Personal Freedom", "summary": "", "title": "The Four Agreements"}, "more", this)'>👍 More like this</button>
+      <button class="btn small ghost" onclick='Stackarr.feedback({"asin": "B0GDPWQSR3", "author": "Don Miguel Ruiz, Janet Mills", "cover": "https://m.media-amazon.com/images/I/51Zmlg8PwUL._SL1500_.jpg", "format": "unabridged", "genres": ["Relationships, Parenting \u0026 Personal Development", "Personal Development", "Personal Success", "Religion \u0026 Spirituality", "Spirituality"], "language": "English", "narrator": "Peter Coyote", "num_ratings": 5558, "publisher": "Penguin Audio", "rating": 4.8, "release_date": "2026-01-06", "req_detail": null, "runtime_hours": 3, "sequence": null, "series": null, "state": "new", "subtitle": "A Practical Guide to Personal Freedom", "summary": "", "title": "The Four Agreements"}, "less", this)'>👎 Less like this</button>
     </div>
   </div>
 </div>
@@ -105,6 +129,7 @@
     </div>
     <textarea id="my-review-text" class="review-input" rows="3" maxlength="1500"
       placeholder="Write a short review to share with everyone (optional)…"></textarea>
+    <label class="spoiler-toggle"><input type="checkbox" id="my-review-spoiler"> Contains spoilers</label>
     <button class="btn small" onclick="Stackarr.submitReview(this)">Save review</button>
   </div>
   <p class="muted">No written reviews yet — be the first.</p>
