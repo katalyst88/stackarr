@@ -233,9 +233,11 @@ def run(user_id: int, max_new: int | None = None) -> int:
     return _finalize(user_id, cands, known, neg, max_new)
 
 
-def _finalize(user_id: int, cands: dict, known: set, neg: dict, max_new: int) -> int:
+def _finalize(user_id: int, cands: dict, known: set, neg: dict, max_new: int,
+              fmt: str = "audiobook") -> int:
     """Edition-dedup, then keep the top N PER LANE (author-diverse) so every
-    category is represented rather than one lane crowding out the rest."""
+    category is represented rather than one lane crowding out the rest.
+    `fmt` stamps the suggestion's media format (audiobook | ebook)."""
     from collections import defaultdict
     best_by_key: dict[str, dict] = {}
     for entry in cands.values():
@@ -264,11 +266,11 @@ def _finalize(user_id: int, cands: dict, known: set, neg: dict, max_new: int) ->
                     continue
                 c.execute(
                     "INSERT OR IGNORE INTO suggestions "
-                    "(user_id, asin, title, author, narrator, series, cover, reason, lane, score, extra) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    "(user_id, asin, title, author, narrator, series, cover, reason, lane, score, extra, format) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                     (user_id, b["asin"], b["title"], b.get("author", ""), b.get("narrator", ""),
                      b.get("series", ""), b.get("cover", ""), entry["reason"], entry["lane"],
-                     round(entry["score"], 2), entry.get("extra", "")))
+                     round(entry["score"], 2), entry.get("extra", ""), fmt))
                 if c.execute("SELECT changes()").fetchone()[0]:
                     per_author[a] = per_author.get(a, 0) + 1
                     taken += 1

@@ -14,7 +14,14 @@
 {% endmacro %}
 {% block content %}
 <div class="page-head">
-  <h2 class="page-title">Suggestions <span class="subtle">curated based on your listening history</span></h2>
+  <h2 class="page-title">Suggestions <span class="subtle">curated from your
+    {% if multi_format %}listening &amp; reading history{% elif show_ebook %}reading history{% else %}listening history{% endif %}</span>
+    {% if multi_format %}<span class="fmt-filter" id="fmt-filter">
+      <span class="fmt-pill active" data-fmt="all" onclick="Stackarr.filterFormat('all',this)">All</span>
+      <span class="fmt-pill" data-fmt="audiobook" onclick="Stackarr.filterFormat('audiobook',this)">Audiobooks</span>
+      <span class="fmt-pill" data-fmt="ebook" onclick="Stackarr.filterFormat('ebook',this)">eBooks</span>
+    </span>{% endif %}
+  </h2>
   <div><button class="btn small" onclick="Stackarr.scan()">Update Suggestions</button></div>
 </div>
 
@@ -86,9 +93,10 @@
   {% for lane, items in lanes.items() %}
   {% call lane_row(lane, items, lane_titles.get(lane, lane), url_for('main.lane_grid', lane=lane)) %}
     {% for s in items %}
-    <div class="media-card" data-id="{{ s.id }}">
+    <div class="media-card" data-id="{{ s.id }}" data-format="{{ s.format or 'audiobook' }}">
       <a class="media-poster" href="{{ url_for('main.book_page', asin=s.asin) }}">
         <img src="{{ (s.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
+        {% if multi_format %}<span class="fmt-badge {{ s.format or 'audiobook' }}">{{ 'eBook' if s.format == 'ebook' else 'Audio' }}</span>{% endif %}
         {% if s.available %}<span class="corner-badge available">Available</span>
         {% elif lane == 'upcoming' %}<span class="corner-badge handed">Coming {{ s.extra }}</span>
         {% elif lane == 'series' %}<span class="corner-badge series">Series</span>{% endif %}

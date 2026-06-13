@@ -64,6 +64,10 @@ CHAPTARR_API_KEY = os.environ.get("CHAPTARR_API_KEY", "")
 CHAPTARR_ROOT_FOLDER = os.environ.get("CHAPTARR_ROOT_FOLDER", "")
 CHAPTARR_QUALITY_PROFILE_ID = int(os.environ.get("CHAPTARR_QUALITY_PROFILE_ID", "2"))
 CHAPTARR_METADATA_PROFILE_ID = int(os.environ.get("CHAPTARR_METADATA_PROFILE_ID", "1"))
+# Ebook handoff uses its own Chaptarr profile pair (Chaptarr defaults:
+# E-Book quality=1, Ebook-Default metadata=2).
+CHAPTARR_EBOOK_QUALITY_PROFILE_ID = int(os.environ.get("CHAPTARR_EBOOK_QUALITY_PROFILE_ID", "1"))
+CHAPTARR_EBOOK_METADATA_PROFILE_ID = int(os.environ.get("CHAPTARR_EBOOK_METADATA_PROFILE_ID", "2"))
 
 # --- metadata sources (no API key needed; deterministic, no AI) -------------
 AUDIBLE_DOMAIN = os.environ.get("AUDIBLE_DOMAIN", "com")           # com, co.uk, com.au, de…

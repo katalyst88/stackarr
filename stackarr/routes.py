@@ -372,15 +372,24 @@ def taste_page():
                            readseed=readseed, removed=removed)
 
 
-@bp.route("/book/<asin>")
+@bp.route("/book/<path:asin>")
 @auth.login_required
 def book_page(asin):
-    b = audible.by_asin(asin) or {"asin": asin, "title": "Unknown", "author": ""}
-    ax = audnexus.book(asin) or {}
-    if ax.get("genres"):
-        b["genres"] = ax["genres"]
-    if ax.get("series") and not b.get("series"):
-        b["series"], b["sequence"] = ax["series"], ax.get("sequence")
+    # ebook ids are "gb:…"/"ol:…" and resolve via the ebook catalogue; real
+    # audiobook ASINs go to Audible + Audnexus as before.
+    if asin.startswith(("gb:", "ol:")):
+        from . import ebookmeta
+        b = ebookmeta.by_id(asin) or {"title": "Unknown", "author": "", "format": "ebook"}
+        b["format"] = "ebook"
+        b["asin"] = asin            # keep the gb:/ol: id as the page identity for actions
+    else:
+        b = audible.by_asin(asin) or {"asin": asin, "title": "Unknown", "author": ""}
+        b.setdefault("format", "audiobook")
+        ax = audnexus.book(asin) or {}
+        if ax.get("genres"):
+            b["genres"] = ax["genres"]
+        if ax.get("series") and not b.get("series"):
+            b["series"], b["sequence"] = ax["series"], ax.get("sequence")
     b["state"] = _state_for(asin, b.get("title", ""), b.get("author", ""))
     with db.conn() as c:
         req = c.execute("SELECT status, detail FROM requests WHERE asin=? AND asin<>'' ORDER BY id DESC LIMIT 1",
@@ -558,13 +567,14 @@ def api_search():
 
 
 def _hand_to_chaptarr(user_id, book, source):
-    res = chaptarr.add_and_search(book["title"], book.get("author", ""), book.get("asin", ""))
+    fmt = book.get("format") or "audiobook"
+    res = chaptarr.add_and_search(book["title"], book.get("author", ""), book.get("asin", ""), fmt=fmt)
     status = "handed" if res["ok"] else "failed"
     with db.conn() as c:
-        c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source) "
-                  "VALUES (?,?,?,?,?,?,?,?,?)",
+        c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
+                  "VALUES (?,?,?,?,?,?,?,?,?,?)",
                   (user_id, book.get("asin", ""), book["title"], book.get("author", ""),
-                   book.get("cover", ""), status, res.get("detail", ""), res.get("ref", ""), source))
+                   book.get("cover", ""), status, res.get("detail", ""), res.get("ref", ""), source, fmt))
     return res
 
 

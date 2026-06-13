@@ -146,6 +146,19 @@ const Stackarr = (() => {
       const s = btn.parentElement.querySelector(".slider");
       if (s) s.scrollBy({ left: dir * s.clientWidth * 0.82, behavior: "smooth" });
     },
+    filterFormat(fmt, pill) {
+      document.querySelectorAll("#fmt-filter .fmt-pill").forEach(p => p.classList.toggle("active", p === pill));
+      document.querySelectorAll(".media-card[data-format]").forEach(c => {
+        c.style.display = (fmt === "all" || c.dataset.format === fmt) ? "" : "none";
+      });
+      // hide a whole lane row if every card in it is now filtered out
+      document.querySelectorAll(".section").forEach(sec => {
+        const cards = sec.querySelectorAll(".media-card[data-format]");
+        if (!cards.length) return;
+        const anyVisible = [...cards].some(c => c.style.display !== "none");
+        sec.style.display = anyVisible ? "" : "none";
+      });
+    },
     toggleTheme() {
       localStorage.setItem("stackarr-theme", localStorage.getItem("stackarr-theme") === "light" ? "dark" : "light");
       applyTheme();

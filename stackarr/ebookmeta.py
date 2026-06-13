@@ -177,6 +177,16 @@ def ol_subject(subject: str, num: int = 12) -> list[dict]:
 
 
 # ---------------------------------------------------------------- unified API
+def _is_modern(b: dict, after: int = 1975) -> bool:
+    """Heuristic to drop public-domain classics from subject fallbacks: keep a
+    book only if it was first published after `after` (or has no year at all,
+    which modern self-/indie titles often do)."""
+    yr = (b.get("release_date") or "")[:4]
+    if not yr.isdigit():
+        return True
+    return int(yr) >= after
+
+
 def _dedup(books: list[dict]) -> list[dict]:
     seen, out = set(), []
     for b in books:
@@ -234,7 +244,10 @@ def similar(book: dict, num: int = 8) -> list[dict]:
     for cat in cats[:2]:
         out += gb_search(f'subject:"{cat}"', num)
         if len(out) < num:                       # GB throttled / sparse -> Open Library subjects
-            out += ol_subject(cat, num)
+            # OL subject feeds skew heavily to pre-1970 public-domain classics
+            # (Alice, Dickens…), which are rarely the next read for someone in
+            # contemporary genre fiction — keep only modern titles in the fallback.
+            out += [b for b in ol_subject(cat, num * 2) if _is_modern(b)]
     out = [b for b in _dedup(out)
            if b.get("id") != book.get("id")
            and (b.get("title") or "").lower() != (book.get("title") or "").lower()]

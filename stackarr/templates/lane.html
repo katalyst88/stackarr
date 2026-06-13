@@ -5,9 +5,10 @@
 {% if not rows %}<div class="empty"><p>Nothing here right now.</p></div>{% endif %}
 <div class="grid">
   {% for s in rows %}
-  <div class="media-card" data-id="{{ s.id }}">
+  <div class="media-card" data-id="{{ s.id }}" data-format="{{ s.format or 'audiobook' }}">
     <a class="media-poster" href="{{ url_for('main.book_page', asin=s.asin) }}">
       <img src="{{ (s.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
+      {% if multi_format %}<span class="fmt-badge {{ s.format or 'audiobook' }}">{{ 'eBook' if s.format == 'ebook' else 'Audio' }}</span>{% endif %}
       {% if s.available %}<span class="corner-badge available">Available</span>
       {% elif lane == 'upcoming' %}<span class="corner-badge handed">Coming {{ s.extra }}</span>
       {% elif lane == 'series' %}<span class="corner-badge series">Series</span>{% endif %}

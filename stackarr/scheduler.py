@@ -98,11 +98,24 @@ def run_for_user(user_id: int, force: bool = False) -> int:
     if not room:
         return 0
     db.set_meta(f"running_{user_id}", "1")
+    added = 0
     try:
-        added = recommend.run(user_id, room)
-    except Exception as e:
-        log.warning("recommend failed for user %s: %s", user_id, e)
-        return 0
+        active = formats.active()
+        # audiobook first (it's primary and dedupes against nothing), ebook
+        # second so it skips any title already picked as an audiobook. Split the
+        # remaining room across active formats.
+        share = max(room // len(active), 1)
+        if "audiobook" in active:
+            try:
+                added += recommend.run(user_id, share)
+            except Exception as e:
+                log.warning("audiobook recommend failed for user %s: %s", user_id, e)
+        if "ebook" in active:
+            try:
+                from . import recommend_ebook
+                added += recommend_ebook.run(user_id, room - added)
+            except Exception as e:
+                log.warning("ebook recommend failed for user %s: %s", user_id, e)
     finally:
         db.set_meta(f"running_{user_id}", "0")
     if added:

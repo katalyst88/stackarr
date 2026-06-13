@@ -48,14 +48,21 @@ def monitored_keys() -> set[str]:
     return keys
 
 
-def add_and_search(title: str, author: str, asin: str = "") -> dict:
+def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audiobook") -> dict:
     """Ensure the author exists in Chaptarr (added monitored) and kick a
-    search. Returns {ok, ref, detail}. Fails gracefully if Chaptarr's
+    search. `fmt` (audiobook | ebook) decides the media type + profiles Chaptarr
+    grabs in. Returns {ok, ref, detail}. Fails gracefully if Chaptarr's
     metadata backend is unavailable."""
     if not configured():
         return {"ok": False, "detail": "Stackarr isn't connected to Chaptarr yet — add it in Settings → Connections."}
-    qp = _profile("chaptarr_quality_profile_id", config.CHAPTARR_QUALITY_PROFILE_ID)
-    mp = _profile("chaptarr_metadata_profile_id", config.CHAPTARR_METADATA_PROFILE_ID)
+    # Audiobook + ebook each have their own quality/metadata profile pair in
+    # Chaptarr; the active media type's pair becomes the author's primary.
+    ab_qp = _profile("chaptarr_quality_profile_id", config.CHAPTARR_QUALITY_PROFILE_ID)
+    ab_mp = _profile("chaptarr_metadata_profile_id", config.CHAPTARR_METADATA_PROFILE_ID)
+    eb_qp = _profile("chaptarr_ebook_quality_profile_id", config.CHAPTARR_EBOOK_QUALITY_PROFILE_ID)
+    eb_mp = _profile("chaptarr_ebook_metadata_profile_id", config.CHAPTARR_EBOOK_METADATA_PROFILE_ID)
+    media = "ebook" if fmt == "ebook" else "audiobook"
+    qp, mp = (eb_qp, eb_mp) if media == "ebook" else (ab_qp, ab_mp)
     rf = root_folder()
     try:
         look = requests.get(f"{url()}/api/v1/author/lookup",
@@ -68,10 +75,10 @@ def add_and_search(title: str, author: str, asin: str = "") -> dict:
         a = results[0]
         folder = a.get("folder") or a["authorName"]
         a.update(
-            mediaType="audiobook", selectedMediaType="audiobook", lastSelectedMediaType="audiobook",
+            mediaType=media, selectedMediaType=media, lastSelectedMediaType=media,
             qualityProfileId=qp, metadataProfileId=mp,
-            audiobookQualityProfileId=qp, audiobookMetadataProfileId=mp,
-            ebookQualityProfileId=1, ebookMetadataProfileId=2,
+            audiobookQualityProfileId=ab_qp, audiobookMetadataProfileId=ab_mp,
+            ebookQualityProfileId=eb_qp, ebookMetadataProfileId=eb_mp,
             rootFolderPath=rf, path=f"{rf.rstrip('/')}/{folder}",
             monitored=True, monitorNewItems="all",
             addOptions={"monitor": "all", "searchForMissingBooks": True})
