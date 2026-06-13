@@ -12,7 +12,7 @@
     t.textContent = m; t.className = "show";
     setTimeout(function () { t.className = ""; }, 3200);
   }
-  ["decide", "bookRequest", "bookMarkRead", "bookIgnore", "addAllByAuthor", "scan", "rate"].forEach(function (fn) {
+  ["decide", "bookRequest", "bookMarkRead", "bookIgnore", "addAllByAuthor", "scan", "rate", "removeFromHistory"].forEach(function (fn) {
     S[fn] = function () { toast(MSG); return false; };
   });
   S.initSearchSuggest = function () {};

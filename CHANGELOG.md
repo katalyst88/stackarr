@@ -2,6 +2,36 @@
 
 All notable changes to Stackarr.
 
+## [1.3.0] - 2026-06-13
+
+### Changed
+- **History & ratings** redesigned as a clean, scannable list (Seer-styled):
+  square cover thumbnail · title/author · a prominent 1–5★ rating on the right.
+  Unrated books float to the top; rating one sinks it to the bottom "done" pile.
+  Stars light up to the cursor on hover and fill in the app's accent colour.
+
+### Added
+- Rating now works for **library books with no ASIN** (most of them): ratings
+  key on a stable title+author slug when there's no ASIN, so every read book is
+  ratable. The title/author are captured on the rating so the recommender's
+  author boost still applies.
+- **Remove from history** (✕ on each row). A removed book is gone for good — it
+  no longer shows in History even though it's still finished in Audiobookshelf,
+  **and it no longer seeds suggestions**.
+- **Settings → My reading → "Hide books from history after rating"**: when on,
+  rating a book removes it from the list instead of sinking it to the bottom.
+
+### Fixed
+- **Goodreads reading-list import** was failing for everyone — Goodreads 403s the
+  default `python-requests` User-Agent. Now sends a browser User-Agent; the
+  public per-shelf RSS imports correctly.
+
+## [1.2.0] - 2026-06-13
+
+### Added
+- **Android APK** — a configurable WebView client (enter your server URL on first
+  launch) as an alternative to the PWA. Built by CI and attached to each Release.
+
 ## [1.1.0] - 2026-06-13
 
 ### Added

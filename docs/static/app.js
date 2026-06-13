@@ -85,6 +85,18 @@ const Stackarr = (() => {
       document.body.classList.add("loaded");
       this.initSearchSuggest();
       this.fitCovers();
+      this.wireStarHover();
+    },
+    // Hover-preview: light up stars from the left up to the cursor (CSS can't
+    // select preceding siblings, so do it here).
+    wireStarHover() {
+      document.querySelectorAll(".rate-stars:not(.disabled)").forEach(row => {
+        const stars = [...row.querySelectorAll(".star")];
+        stars.forEach((star, i) => {
+          star.addEventListener("mouseenter", () => stars.forEach((s, j) => s.classList.toggle("preview", j <= i)));
+        });
+        row.addEventListener("mouseleave", () => stars.forEach(s => s.classList.remove("preview")));
+      });
     },
     fitImg(img) {
       const w = img.naturalWidth, h = img.naturalHeight;
@@ -171,9 +183,59 @@ const Stackarr = (() => {
       if (!res) return; btn.textContent = res.ok ? "Requested" : "Failed"; toast(res.detail || "Done.");
     },
     async rate(asin, stars, el) {
-      [...el.parentElement.children].forEach((s, i) => s.classList.toggle("on", i < stars));
-      await api("/api/rate", { method: "POST", body: JSON.stringify({ asin, stars }) });
+      [...el.parentElement.children].forEach((s, i) => { s.classList.toggle("on", i < stars); s.classList.remove("preview"); });
+      const item = el.closest(".rate-item");
+      // Library books usually have no real ASIN, so send title/author too — the
+      // recommender boosts on author, and api_rate keeps them on the rating.
+      const payload = { asin, stars };
+      if (item) {
+        const t = item.querySelector(".rate-title"), a = item.querySelector(".rate-author");
+        if (t && t.textContent.trim()) payload.title = t.textContent.trim();
+        if (a && a.textContent.trim()) payload.author = a.textContent.trim();
+      }
+      await api("/api/rate", { method: "POST", body: JSON.stringify(payload) });
       toast(`Rated ${stars}★ — your picks just got sharper.`);
+      // On the History list, rating a book either removes it (if "hide after
+      // rating" is on) or sinks it to the bottom "done" pile.
+      if (!item) return;
+      const list = item.parentElement;
+      if (list.dataset.hideRated === "1") this._removeRated(item);
+      else this._sinkRated(item);
+    },
+    _retally(list) {
+      const sub = document.querySelector(".page-title .subtle");
+      if (!sub) return;
+      const total = list.querySelectorAll(".rate-item").length;
+      const rated = list.querySelectorAll('.rate-item[data-rated="1"]').length;
+      sub.textContent = `${total} book${total !== 1 ? "s" : ""}` + (rated ? ` · ${rated} rated` : "");
+    },
+    _removeRated(item) {
+      const list = item.parentElement;
+      item.classList.add("moving");
+      setTimeout(() => { item.remove(); this._retally(list); }, 360);
+    },
+    async removeFromHistory(key, btn) {
+      const item = btn.closest(".rate-item");
+      if (item) item.classList.add("moving");
+      await api("/api/history/remove", { method: "POST", body: JSON.stringify({ key }) });
+      toast("Removed from history.");
+      if (!item) return;
+      const list = item.parentElement;
+      setTimeout(() => { item.remove(); this._retally(list); }, 360);
+    },
+    _sinkRated(item) {
+      const list = item.parentElement;
+      const wasRated = item.dataset.rated === "1";
+      item.dataset.rated = "1";
+      item.classList.add("rated");
+      if (wasRated) return;   // already in the rated pile — leave it where it is
+      this._retally(list);
+      // fade out, drop to the bottom of the list, fade back in
+      item.classList.add("moving");
+      setTimeout(() => {
+        list.appendChild(item);
+        requestAnimationFrame(() => item.classList.remove("moving"));
+      }, 360);
     },
     async markRead(btn) {
       const t = document.getElementById("mr-title").value.trim(); if (!t) return;

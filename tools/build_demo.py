@@ -254,8 +254,8 @@ write("index.html", render("suggestions.html", "/suggestions", lanes=lanes,
       lane_titles=LANE_TITLES, genres=home_genres, rec_authors=rec_authors,
       recently_added=recently_added, recent_requests=recent_requests, abs_base="#")); pages += 1
 write("insights.html", render("insights.html", "/insights", **insights_ctx)); pages += 1
-_read = [{"asin": b["asin"], "title": b["title"], "author": b["author"], "cover": b["cover"],
-          "stars": [5, 4, 5, 3, 4, 5, 4][k % 7]} for k, b in enumerate(BOOKS[:24])]
+_read = [{"asin": b["asin"], "rkey": b["asin"], "title": b["title"], "author": b["author"],
+          "cover": b["cover"], "stars": [5, 4, 5, 3, 4, 5, 4][k % 7]} for k, b in enumerate(BOOKS[:24])]
 write("history.html", render("history.html", "/history", books=_read,
       rated_n=sum(1 for b in _read if b["stars"]))); pages += 1
 write("requests.html", render("browse.html", "/requests", kind="genre",

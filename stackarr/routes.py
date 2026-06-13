@@ -1,6 +1,7 @@
 """Routes: pages + the JSON API the front-end uses. Approval, manual
 'already read', 5-star ratings, discover, settings, email preview, health."""
 import logging
+import re
 
 from flask import (Blueprint, jsonify, redirect, render_template, request,
                    session, url_for)
@@ -198,6 +199,10 @@ def history_page():
         read_sig = c.execute(
             "SELECT value,why FROM signals WHERE user_id=? AND kind='asin' "
             "AND (why LIKE 'already read:%' OR why LIKE 'marked read:%')", (u["id"],)).fetchall()
+        # books the user explicitly removed from history (stays gone even though
+        # it's still finished in Audiobookshelf)
+        hidden = {r["value"] for r in c.execute(
+            "SELECT value FROM signals WHERE user_id=? AND kind='hist_hidden'", (u["id"],))}
 
     books, seen = [], set()
 
@@ -209,8 +214,12 @@ def history_page():
         if not k or k in seen:
             return
         seen.add(k)
-        books.append({"asin": asin or "", "title": title or "Untitled", "author": author or "",
-                      "cover": cover, "stars": (rated.get(asin) or {}).get("stars", 0), "when": when})
+        rk = db.rating_key(asin, title, author)
+        if rk in hidden:
+            return
+        books.append({"asin": asin or "", "rkey": rk, "title": title or "Untitled",
+                      "author": author or "", "cover": cover,
+                      "stars": (rated.get(rk) or {}).get("stars", 0), "when": when})
 
     # 1) finished in Audiobookshelf (the real listening history, with covers)
     for h in hist:
@@ -219,18 +228,26 @@ def history_page():
         m = lib.get(h["item_id"]) or {}
         add((m.get("asin") or "").strip(), m.get("title", ""), m.get("author", ""),
             url_for("main.cover", item_id=h["item_id"]), h["last_update"])
-    # 2) books you've rated that aren't already listed
-    for asin, r in rated.items():
-        add(asin, r["title"], r["author"], "", 0)
+    # 2) books you've rated that aren't already listed (stored key is either a
+    #    real ASIN or a "t-…" slug; only the former is a usable book ASIN)
+    for stored, r in rated.items():
+        add(stored if stored.startswith("B0") else "", r["title"], r["author"], "", 0)
     # 3) titles you marked read in Stackarr
     for s in read_sig:
         val = s["value"] or ""
         title = s["why"].split(":", 1)[1].strip() if ":" in s["why"] else val
         add(val if val.startswith("B0") else "", title, "", "", 0)
 
-    books.sort(key=lambda b: (b["when"] or 0), reverse=True)
+    # optionally drop already-rated books entirely (a "rate it and it's gone"
+    # workflow) — otherwise keep them, sunk to the bottom.
+    hide_rated = db.get_meta("hide_rated_history", "0") == "1"
+    if hide_rated:
+        books = [b for b in books if not b["stars"]]
+    # unrated float to the top (the to-do pile); rated sink to the bottom.
+    # within each group, most-recent first.
+    books.sort(key=lambda b: (b["stars"] > 0, -(b["when"] or 0)))
     rated_n = sum(1 for b in books if b["stars"])
-    return render_template("history.html", books=books, rated_n=rated_n)
+    return render_template("history.html", books=books, rated_n=rated_n, hide_rated=hide_rated)
 
 
 @bp.route("/book/<asin>")
@@ -312,6 +329,7 @@ def settings_page():
                                  "chaptarr_metadata_profile_id": g("chaptarr_metadata_profile_id", str(config.CHAPTARR_METADATA_PROFILE_ID))},
                            reading={"goodreads_rss": g("goodreads_rss", config.GOODREADS_RSS),
                                     "hardcover_token": g("hardcover_token", config.HARDCOVER_TOKEN)},
+                           hide_rated_history=db.get_meta("hide_rated_history", "0") == "1",
                            log_level=config.LOG_LEVEL,
                            is_admin=auth.current_user()["role"] == "admin")
 
@@ -496,11 +514,36 @@ def api_rate():
     asin, stars = body.get("asin", ""), int(body.get("stars", 0))
     if not asin or not 1 <= stars <= 5:
         return jsonify({"error": "asin and stars 1-5 required"}), 400
-    meta = audible.by_asin(asin) or {}
+    # The client sends title/author for library books (which usually have no
+    # real ASIN); only look them up on Audible for genuine ASINs. The author is
+    # what the recommender boosts on, so we must capture it either way.
+    title, author = (body.get("title") or "").strip(), (body.get("author") or "").strip()
+    if (not title or not author) and not asin.startswith("t-"):
+        meta = audible.by_asin(asin) or {}
+        title = title or meta.get("title", "")
+        author = author or meta.get("author", "")
     with db.conn() as c:
         c.execute("INSERT INTO ratings (user_id,asin,title,author,stars) VALUES (?,?,?,?,?) "
-                  "ON CONFLICT(user_id,asin) DO UPDATE SET stars=excluded.stars",
-                  (u["id"], asin, meta.get("title", ""), meta.get("author", ""), stars))
+                  "ON CONFLICT(user_id,asin) DO UPDATE SET "
+                  "stars=excluded.stars, title=excluded.title, author=excluded.author",
+                  (u["id"], asin, title, author, stars))
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/history/remove", methods=["POST"])
+@auth.login_required
+def api_history_remove():
+    """Remove a book from History & ratings for good. Drops any rating and
+    records a 'hist_hidden' marker keyed on the rating key, so the book stays
+    gone even though it's still finished in Audiobookshelf."""
+    u = auth.current_user()
+    key = (request.get_json(force=True).get("key") or "").strip()
+    if not key:
+        return jsonify({"error": "key required"}), 400
+    with db.conn() as c:
+        c.execute("DELETE FROM ratings WHERE user_id=? AND asin=?", (u["id"], key))
+        c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) "
+                  "VALUES (?,?,?,?,?)", (u["id"], "hist_hidden", key, 0, "removed from history"))
     return jsonify({"ok": True})
 
 
@@ -534,7 +577,7 @@ SETTING_KEYS = {
     "chaptarr_quality_profile_id", "chaptarr_metadata_profile_id",
     "goodreads_rss", "hardcover_token", "discord_webhook",
 }
-BOOL_KEYS = {"email_enabled", "discord_enabled"}
+BOOL_KEYS = {"email_enabled", "discord_enabled", "hide_rated_history"}
 
 
 @bp.route("/api/settings", methods=["POST"])
@@ -696,7 +739,7 @@ def manifest():
 def service_worker():
     base = config.URL_BASE or ""
     js = (
-        "const C='stackarr-v2';\n"
+        "const C='stackarr-v3';\n"
         f"const SHELL=['{base}/','{base}/static/style.css','{base}/static/app.js','{base}/static/icon.svg'];\n"
         "self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()))});\n"
         "self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});\n"

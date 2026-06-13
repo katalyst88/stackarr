@@ -35,6 +35,13 @@
     </div>
 
     <div class="settings-cat" id="cat-reading">
+      <div class="panel"><h3>History &amp; ratings</h3>
+        <label class="row"><span>Hide books from history after rating</span>
+          <input type="checkbox" class="switch" id="hide-rated" {{ 'checked' if hide_rated_history }}
+                 onchange="Stackarr.setSetting({hide_rated_history: this.checked})"></label>
+        <p class="muted">When on, rating a book removes it from your History &amp; ratings list. When off,
+          rated books sink to the bottom so you can still see and adjust them.</p>
+      </div>
       <div class="panel"><h3>I've already read…</h3>
         <p class="muted">Tell Stackarr a book you've read so it shapes your suggestions — no download.</p>
         <div class="inline-form">

@@ -80,6 +80,15 @@ def run(user_id: int, max_new: int | None = None) -> int:
                 pos[k] = pos.get(k, 0) + (r["stars"] - 3) * 1.5   # +3 for 5★, -3 for 1★
         seed_lib = {row["item_id"]: dict(row) for row in
                     c.execute("SELECT item_id,title,author,asin FROM library")}
+        # books the user removed from History & ratings must not seed suggestions
+        hidden = {row["value"] for row in c.execute(
+            "SELECT value FROM signals WHERE user_id=? AND kind='hist_hidden'", (user_id,))}
+
+    if hidden:
+        def _hidden_seed(s):
+            m = seed_lib.get(s["item_id"]) or {}
+            return db.rating_key(m.get("asin", ""), m.get("title", ""), m.get("author", "")) in hidden
+        seeds = [s for s in seeds if not _hidden_seed(s)]
 
     # authors *this user* has actually listened to (NOT the whole server library —
     # that would pull in other people's / kids' libraries). Seeds only.

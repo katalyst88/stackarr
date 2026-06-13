@@ -3,6 +3,7 @@ schema covering every Stackarr feature: multi-user, per-user suggestions,
 requests, taste signals (positive + negative), 5-star ratings, a library
 snapshot for deletion-detection, and import-list items."""
 import os
+import re
 import secrets
 import sqlite3
 from contextlib import contextmanager
@@ -140,6 +141,18 @@ def setting(key: str, fallback: str = "") -> str:
     Lets service connections be configured in the UI instead of only env."""
     v = get_meta(key, "")
     return v if v else fallback
+
+
+def rating_key(asin: str, title: str, author: str) -> str:
+    """Stable identity for a book in History & ratings: the real ASIN when we
+    have one, else a slug of title+author. Most ABS library books have no ASIN,
+    so the slug lets them be rated/removed; it's reproducible across page loads
+    and shared by the recommender so 'removed' books stop seeding suggestions.
+    Alphanumeric+dashes, so it's safe in HTML attributes and JS strings."""
+    if asin:
+        return asin
+    base = f"{(title or '').strip().lower()} {(author or '').split(',')[0].strip().lower()}"
+    return "t-" + re.sub(r"[^a-z0-9]+", "-", base).strip("-")
 
 
 def secret_key() -> str:

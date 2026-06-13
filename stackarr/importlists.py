@@ -17,7 +17,12 @@ def goodreads(rss_url: str) -> list[dict]:
     [{title, author}]. RSS is public per-shelf; no API key needed."""
     out = []
     try:
-        r = requests.get(rss_url, timeout=20)
+        # Goodreads 403s the default python-requests User-Agent, so present a
+        # browser one — the per-shelf RSS itself is public, no key needed.
+        r = requests.get(rss_url, timeout=20, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36"})
         r.raise_for_status()
         root = ET.fromstring(r.content)
         for item in root.iter("item"):

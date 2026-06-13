@@ -39,13 +39,16 @@ book/audiobook manager) does the searching, grabbing and importing.
   optional 1–5★ ratings feed back in). "I've already read this" seeding too.
 - **Discover** gallery (endless scroll) + search-to-add typeahead.
 - **Insights** (Spotify-wrapped style): hours listened, top authors, fun facts.
-- **History & ratings** — every book you've finished, rated, or marked read, with
-  a 1–5★ control that sharpens future picks.
+- **History & ratings** — a scannable list of every book you've finished, rated, or
+  marked read (cover · title/author · a prominent 1–5★ control that sharpens future
+  picks). Unrated float to the top; rated sink to the bottom. Remove any book from
+  history (it stops seeding suggestions too), or hide rated books automatically.
 - **Notifications** — email digests (3 themes + live preview), Discord webhook, and
   Apprise (100+ channels). All **off by default**.
 - In-app **Settings** for service connections (Audiobookshelf, Chaptarr), SMTP,
   reading-list import (Goodreads/Hardcover), and a logs viewer — with Test buttons.
-- Installable **PWA**, light/dark themes, responsive, embeds in **nzb360**.
+- Installable **PWA** or **[Android APK](https://github.com/katalyst88/stackarr/releases/latest)**,
+  light/dark themes, responsive, embeds in **nzb360**.
 
 ## How recommendations work (no AI)
 
@@ -95,6 +98,15 @@ automatically on every release.
 | `STACKARR_ACCENT`, `STACKARR_URL_BASE`, `AUDIBLE_DOMAIN` | theming / subpath / region |
 
 See [`.env.example`](.env.example) for the full annotated list.
+
+## Android app
+
+Prefer an app icon to the PWA? Grab `stackarr.apk` from the
+**[latest release](https://github.com/katalyst88/stackarr/releases/latest)**
+and sideload it. It's a thin, configurable WebView client — on first launch it
+asks for your Stackarr URL (e.g. `http://192.168.1.10:8484`) and remembers it;
+use the menu to change servers or reload. Built from `android/` by CI
+(`.github/workflows/android.yml`).
 
 ## Security
 
