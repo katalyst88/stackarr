@@ -154,21 +154,40 @@ const Stackarr = (() => {
       applyTheme();
       const params = new URLSearchParams(location.search);
       const pre = params.get("q");
-      const q = document.getElementById("q"), results = document.getElementById("results"),
-            disc = document.getElementById("discover"), rhead = document.getElementById("results-head");
-      api("/api/discover").then(books => { if (books) document.getElementById("discover").innerHTML = books.map(mediaCard).join(""); });
+      const results = document.getElementById("results"), disc = document.getElementById("discover"),
+            rhead = document.getElementById("results-head"), sentinel = document.getElementById("scroll-sentinel"),
+            discSec = document.getElementById("discover-section");
+
+      // endless scroll of the discovery gallery
+      let page = 0, loading = false, done = false;
+      const loadMore = async () => {
+        if (loading || done) return;
+        loading = true;
+        const books = await api("/api/discover?page=" + page);
+        loading = false;
+        if (!books || !books.length) { done = true; if (sentinel) sentinel.textContent = ""; return; }
+        disc.insertAdjacentHTML("beforeend", books.map(mediaCard).join(""));
+        page++;
+      };
+      if (sentinel && "IntersectionObserver" in window) {
+        new IntersectionObserver((es) => { if (es[0].isIntersecting) loadMore(); },
+          { rootMargin: "600px" }).observe(sentinel);
+      }
+      loadMore();
+
+      // search overrides the gallery
       let timer, seq = 0;
       const doSearch = async (text) => {
         const mine = ++seq;
-        if (!text) { results.innerHTML = ""; rhead.hidden = true; disc.style.display = ""; return; }
+        if (!text) { results.innerHTML = ""; rhead.hidden = true; if (discSec) discSec.style.display = ""; return; }
         const books = await api("/api/search?q=" + encodeURIComponent(text));
         if (!books || mine !== seq) return;
-        disc.style.display = "none"; rhead.hidden = false;
+        if (discSec) discSec.style.display = "none"; rhead.hidden = false;
         results.innerHTML = books.map(mediaCard).join("") || `<div class="empty"><p>No results.</p></div>`;
       };
-      if (q) { q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => doSearch(q.value.trim()), 350); });
-        if (pre) { q.value = pre; doSearch(pre); } }
-      else if (pre) doSearch(pre);
+      const q = document.getElementById("topsearch");
+      if (q) { q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => doSearch(q.value.trim()), 350); }); }
+      if (pre) doSearch(pre);
     },
   };
 })();

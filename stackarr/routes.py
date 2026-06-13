@@ -125,8 +125,8 @@ def _state_for(asin, title, author):
 @bp.route("/api/discover")
 @auth.login_required
 def api_discover():
-    genre = request.args.get("genre", "")
-    books = discover.genre_new([genre] if genre else discover.DEFAULT_GENRES, num_per=8)
+    pg = int(request.args.get("page", "0") or 0)
+    books = discover.page(pg)
     for b in books:
         b["state"] = _state_for(b["asin"], b["title"], b["author"])
     return jsonify(books)

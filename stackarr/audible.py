@@ -76,9 +76,9 @@ def normalize(p: dict) -> dict:
     }
 
 
-def search(query: str, num: int = 12) -> list[dict]:
+def search(query: str, num: int = 12, page: int = 0) -> list[dict]:
     return [normalize(p) for p in _products({
-        "keywords": query, "num_results": num, "products_sort_by": "Relevance",
+        "keywords": query, "num_results": num, "page": page, "products_sort_by": "Relevance",
         "response_groups": GROUPS}) if p.get("title")]
 
 

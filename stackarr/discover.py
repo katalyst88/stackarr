@@ -29,3 +29,20 @@ def genre_new(genres: list[str], num_per: int = 6) -> list[dict]:
 
 def popular(num: int = 12) -> list[dict]:
     return genre_new(DEFAULT_GENRES, num_per=4)[:num]
+
+
+def page(n: int, genres: list[str] | None = None) -> list[dict]:
+    """One page of endless-scroll discovery. Walks genres x audible pages
+    deterministically so scrolling keeps yielding fresh, well-rated books."""
+    g = genres or DEFAULT_GENRES
+    genre = g[n % len(g)]
+    audpage = n // len(g)
+    out = []
+    for b in audible.search(genre, num=18, page=audpage):
+        if not b.get("asin") or (b.get("rating") or 0) < config.SUGGEST_RATING_FLOOR:
+            continue
+        if (b.get("language") or "english") != config.TARGET_LANGUAGE:
+            continue
+        b["genre"] = genre
+        out.append(b)
+    return out
