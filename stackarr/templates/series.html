@@ -7,6 +7,7 @@
     <span class="subtle">{{ series|length }} series in your library{% if have_next %} · {{ have_next }} with a next book ready{% endif %}</span></h2>
   <div class="page-head-actions">{{ fmt_filter() }}
     <button class="btn small ghost" onclick="Stackarr.checkLibrary(this)" title="Re-scan your libraries for newly added books">↻ Check library</button>
+    {% if user and user.role == 'admin' %}<button class="btn small ghost" onclick="Stackarr.repairSeries(this)" title="Find books whose series is missing and write it back to Audiobookshelf">🛠 Repair series</button>{% endif %}
   </div>
 </div>
 
@@ -29,16 +30,21 @@
       <div class="series-progress" title="Read #{{ seq(s.read_to) or 0 }} of #{{ seq(s.highest) }} downloaded">
         <span style="width: {{ (rpct if rpct < 100 else 100) | round }}%"></span></div>{% endif %}
       <div class="series-books">
-        {% for b in s.books %}<span class="series-chip" title="{{ b.title }}">{% if b.series_seq is not none %}#{{ seq(b.series_seq) }} {% endif %}{{ b.title }}</span>{% endfor %}
+        {% for b in s.books %}<span class="series-chip{{ ' chip-read' if b.finished }}{{ ' chip-reading' if b.reading }}" title="{{ b.title }}{{ ' · finished' if b.finished }}{{ ' · reading now' if b.reading }}">{% if b.seq is not none %}#{{ seq(b.seq) }} {% endif %}{{ b.title }}{% if b.finished %} ✓{% elif b.reading %} ▶{% endif %}</span>{% endfor %}
       </div>
+      <p class="muted chip-legend"><span class="series-chip chip-read">✓ finished</span> <span class="series-chip chip-reading">▶ reading</span> <span class="series-chip">not started</span></p>
       {% if multi_format and (s.missing_audio or s.missing_ebook) %}
       <div class="series-meta gap-note">⚠️ You have this series across formats but not completely in each.</div>
       {% endif %}
       <div class="series-actions">
-        <button class="btn small ghost" onclick="Stackarr.findMissing('{{ s.name|e }}', this)">🔍 Find missing books</button>
-        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('{{ s.name|e }}', '{{ s.author|e }}', this)">＋ Get full series</button>
-        {% if multi_format and s.missing_audio %}<button class="btn small ghost" onclick="Stackarr.getSeries('{{ s.name|e }}', '{{ s.author|e }}', this, 'audiobook')">{{ fmt_icon('audiobook') }} Get missing audiobooks</button>{% endif %}
-        {% if multi_format and s.missing_ebook %}<button class="btn small ghost" onclick="Stackarr.getSeries('{{ s.name|e }}', '{{ s.author|e }}', this, 'ebook')">{{ fmt_icon('ebook') }} Get missing eBooks</button>{% endif %}
+        <button class="btn small ghost" onclick="Stackarr.findMissing({{ s.name|tojson }}, this)">🔍 Find missing books</button>
+        {% if multi_format %}
+          <button class="btn small ghost" onclick="Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this, 'audiobook')">{{ fmt_icon('audiobook') }} Get all audiobooks</button>
+          <button class="btn small ghost" onclick="Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this, 'ebook')">{{ fmt_icon('ebook') }} Get all eBooks</button>
+          <button class="btn small ghost" onclick="Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this, 'both')">{{ fmt_icon('all') }} Get both</button>
+        {% else %}
+          <button class="btn small ghost series-getall" onclick="Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this)">{{ fmt_icon(s.format) }} Get full series</button>
+        {% endif %}
       </div>
       <div class="series-missing" hidden></div>
     </div>

@@ -54,7 +54,7 @@
       <div class="onboard-title" title="{{ b.title }}">{{ b.title }}</div>
       <div class="rate-stars" data-asin="{{ b.rkey }}" data-title="{{ b.title }}" data-author="{{ b.author }}">
         {% for n in [1,2,3,4,5] %}
-        <span class="star" onclick="Stackarr.rate('{{ b.rkey }}',{{ n }},this)">★</span>
+        <span class="star" onclick="Stackarr.rate({{ b.rkey|tojson }},{{ n }},this)">★</span>
         {% endfor %}
       </div>
     </div>

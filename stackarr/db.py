@@ -2,6 +2,7 @@
 schema covering every Stackarr feature: multi-user, per-user suggestions,
 requests, taste signals (positive + negative), 5-star ratings, a library
 snapshot for deletion-detection, and import-list items."""
+import logging
 import os
 import re
 import secrets
@@ -18,9 +19,20 @@ CREATE TABLE IF NOT EXISTS users (
   abs_user_id TEXT UNIQUE,
   username TEXT UNIQUE NOT NULL,
   abs_token TEXT,                              -- this user's ABS token (for their history)
+  password_hash TEXT,                          -- local-account password (pbkdf2); NULL = no local password
   role TEXT NOT NULL DEFAULT 'user',           -- user | admin
   created_at TEXT DEFAULT (datetime('now','localtime')),
   last_login TEXT
+);
+-- external sign-in identities linked to a local account. A user may have several
+-- (Audiobookshelf + Kavita + …); the local account is always the canonical one.
+CREATE TABLE IF NOT EXISTS user_links (
+  provider TEXT NOT NULL,                      -- abs | kavita | komga | calibreweb
+  external_id TEXT NOT NULL,
+  user_id INTEGER NOT NULL,
+  token TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now','localtime')),
+  PRIMARY KEY (provider, external_id)
 );
 CREATE TABLE IF NOT EXISTS suggestions (
   id INTEGER PRIMARY KEY,
@@ -39,7 +51,7 @@ CREATE TABLE IF NOT EXISTS suggestions (
   extra TEXT DEFAULT '',                        -- e.g. release date for upcoming titles
   created_at TEXT DEFAULT (datetime('now','localtime')),
   decided_at TEXT,
-  UNIQUE(user_id, asin)
+  UNIQUE(user_id, asin, format)
 );
 CREATE TABLE IF NOT EXISTS requests (
   id INTEGER PRIMARY KEY,
@@ -164,11 +176,46 @@ def init():
                      "ALTER TABLE ratings ADD COLUMN format TEXT DEFAULT 'audiobook'",
                      "ALTER TABLE ratings ADD COLUMN updated_at TEXT",
                      "ALTER TABLE ratings ADD COLUMN spoiler INTEGER DEFAULT 0",
-                     "ALTER TABLE signals ADD COLUMN format TEXT DEFAULT ''"):
+                     "ALTER TABLE signals ADD COLUMN format TEXT DEFAULT ''",
+                     "ALTER TABLE users ADD COLUMN password_hash TEXT",
+                     "ALTER TABLE users ADD COLUMN email TEXT"):
             try:
                 c.execute(stmt)
             except sqlite3.OperationalError:
                 pass
+        # migrate suggestions UNIQUE(user_id,asin) -> (user_id,asin,format) so an
+        # ebook pick can't be dropped just because an audiobook shares its id.
+        # Use ONLY this connection (no get_meta/set_meta — those open nested
+        # connections that would lock the table and make DROP fail).
+        try:
+            done = c.execute("SELECT v FROM meta WHERE k='sugg_fmt_uniq'").fetchone()
+            if not done:
+                cols = ("id,user_id,asin,title,author,narrator,series,cover,reason,"
+                        "lane,format,score,status,extra,created_at,decided_at")
+                c.executescript(
+                    "CREATE TABLE IF NOT EXISTS suggestions_mig ("
+                    " id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, asin TEXT,"
+                    " title TEXT NOT NULL, author TEXT DEFAULT '', narrator TEXT DEFAULT '',"
+                    " series TEXT DEFAULT '', cover TEXT DEFAULT '', reason TEXT DEFAULT '',"
+                    " lane TEXT DEFAULT 'foryou', format TEXT DEFAULT 'audiobook',"
+                    " score REAL DEFAULT 0, status TEXT NOT NULL DEFAULT 'pending',"
+                    " extra TEXT DEFAULT '', created_at TEXT DEFAULT (datetime('now','localtime')),"
+                    " decided_at TEXT, UNIQUE(user_id, asin, format));"
+                    f" INSERT OR IGNORE INTO suggestions_mig ({cols}) SELECT {cols} FROM suggestions;"
+                    " DROP TABLE suggestions;"
+                    " ALTER TABLE suggestions_mig RENAME TO suggestions;")
+                c.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('sugg_fmt_uniq','1')")
+        except sqlite3.OperationalError as e:
+            logging.getLogger("stackarr.db").warning("suggestions migration skipped: %s", e)
+        # seed link rows for pre-existing ABS users so they keep their account
+        # after the multi-provider switch (match by their stored abs_user_id).
+        try:
+            for r in c.execute("SELECT id, abs_user_id, abs_token FROM users "
+                               "WHERE abs_user_id IS NOT NULL AND abs_user_id<>''"):
+                c.execute("INSERT OR IGNORE INTO user_links (provider, external_id, user_id, token) "
+                          "VALUES ('abs', ?, ?, ?)", (r["abs_user_id"], r["id"], r["abs_token"] or ""))
+        except sqlite3.OperationalError:
+            pass
 
 
 def get_meta(k: str, default: str = "") -> str:
@@ -187,6 +234,23 @@ def setting(key: str, fallback: str = "") -> str:
     Lets service connections be configured in the UI instead of only env."""
     v = get_meta(key, "")
     return v if v else fallback
+
+
+# --- per-user preferences (stored as "<key>_<user_id>" meta rows) ------------
+_PREF_SENTINEL = "\x00unset"
+
+
+def get_pref(user_id: int, key: str, default: str = "") -> str:
+    """A per-user preference. Falls back to the install-wide value of the same
+    key (for back-compat with the old global settings), then `default`."""
+    v = get_meta(f"{key}_{user_id}", _PREF_SENTINEL)
+    if v != _PREF_SENTINEL:
+        return v
+    return get_meta(key, default)
+
+
+def set_pref(user_id: int, key: str, value: str):
+    set_meta(f"{key}_{user_id}", value)
 
 
 def rating_key(asin: str, title: str, author: str) -> str:
@@ -209,22 +273,150 @@ def secret_key() -> str:
     return s
 
 
-def upsert_user(abs_user_id: str, username: str, abs_token: str, role: str) -> dict:
-    with conn() as c:
-        c.execute(
-            "INSERT INTO users (abs_user_id, username, abs_token, role, last_login) "
-            "VALUES (?,?,?,?, datetime('now','localtime')) "
-            "ON CONFLICT(username) DO UPDATE SET abs_token=excluded.abs_token, "
-            "abs_user_id=excluded.abs_user_id, role=excluded.role, "
-            "last_login=datetime('now','localtime')",
-            (abs_user_id, username, abs_token, role))
-        return dict(c.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone())
-
-
 def get_user(user_id: int) -> dict | None:
     with conn() as c:
         row = c.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
         return dict(row) if row else None
+
+
+def get_user_by_username(username: str) -> dict | None:
+    with conn() as c:
+        row = c.execute("SELECT * FROM users WHERE username=? COLLATE NOCASE",
+                        (username or "",)).fetchone()
+        return dict(row) if row else None
+
+
+def user_count() -> int:
+    with conn() as c:
+        return c.execute("SELECT COUNT(*) n FROM users").fetchone()["n"]
+
+
+def all_users() -> list[dict]:
+    with conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT id, username, email, role, last_login, created_at FROM users ORDER BY id")]
+
+
+def admin_emails() -> list[str]:
+    with conn() as c:
+        return [r["email"] for r in c.execute(
+            "SELECT email FROM users WHERE role='admin' AND email IS NOT NULL AND email<>''")]
+
+
+def set_role(user_id: int, role: str):
+    if role in ("user", "admin"):
+        with conn() as c:
+            c.execute("UPDATE users SET role=? WHERE id=?", (role, user_id))
+
+
+def _unique_username(c, base: str) -> str:
+    base = (base or "user").strip() or "user"
+    name, i = base, 1
+    while c.execute("SELECT 1 FROM users WHERE username=? COLLATE NOCASE", (name,)).fetchone():
+        i += 1
+        name = f"{base}{i}"
+    return name
+
+
+def create_local_user(username: str, password: str, role: str = "user", email: str = "") -> dict | None:
+    """Create a username/password local account. Returns None if the name is
+    taken or blank."""
+    from werkzeug.security import generate_password_hash
+    username = (username or "").strip()
+    if not username:
+        return None
+    with conn() as c:
+        if c.execute("SELECT 1 FROM users WHERE username=? COLLATE NOCASE", (username,)).fetchone():
+            return None
+        c.execute("INSERT INTO users (username, password_hash, role, email, last_login) "
+                  "VALUES (?,?,?,?, datetime('now','localtime'))",
+                  (username, generate_password_hash(password) if password else None, role, email or ""))
+        return dict(c.execute("SELECT * FROM users WHERE username=? COLLATE NOCASE", (username,)).fetchone())
+
+
+def verify_local(username: str, password: str) -> dict | None:
+    """Check a local username/password. None if no local password is set or it
+    doesn't match."""
+    from werkzeug.security import check_password_hash
+    u = get_user_by_username(username)
+    if not u or not u.get("password_hash"):
+        return None
+    if check_password_hash(u["password_hash"], password or ""):
+        with conn() as c:
+            c.execute("UPDATE users SET last_login=datetime('now','localtime') WHERE id=?", (u["id"],))
+        return u
+    return None
+
+
+def set_password(user_id: int, password: str):
+    from werkzeug.security import generate_password_hash
+    with conn() as c:
+        c.execute("UPDATE users SET password_hash=? WHERE id=?",
+                  (generate_password_hash(password) if password else None, user_id))
+
+
+def set_email(user_id: int, email: str):
+    with conn() as c:
+        c.execute("UPDATE users SET email=? WHERE id=?", (email or "", user_id))
+
+
+def update_abs(user_id: int, abs_user_id: str, token: str):
+    with conn() as c:
+        c.execute("UPDATE users SET abs_user_id=?, abs_token=? WHERE id=?",
+                  (abs_user_id, token, user_id))
+
+
+# --- external provider links (abs / kavita / komga / calibreweb) -------------
+def link_get(provider: str, external_id: str) -> int | None:
+    with conn() as c:
+        r = c.execute("SELECT user_id FROM user_links WHERE provider=? AND external_id=?",
+                      (provider, str(external_id))).fetchone()
+        return r["user_id"] if r else None
+
+
+def link_set(provider: str, external_id: str, user_id: int, token: str = ""):
+    with conn() as c:
+        c.execute("INSERT INTO user_links (provider, external_id, user_id, token) VALUES (?,?,?,?) "
+                  "ON CONFLICT(provider, external_id) DO UPDATE SET user_id=excluded.user_id, "
+                  "token=excluded.token", (provider, str(external_id), user_id, token or ""))
+
+
+def link_remove(provider: str, user_id: int):
+    with conn() as c:
+        c.execute("DELETE FROM user_links WHERE provider=? AND user_id=?", (provider, user_id))
+
+
+def links_for(user_id: int) -> list[dict]:
+    with conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT provider, external_id, token FROM user_links WHERE user_id=?", (user_id,))]
+
+
+def provision_provider_user(provider: str, external_id: str, username: str,
+                            token: str = "", role: str = "user") -> dict:
+    """Find-or-create the local account behind a provider identity and link it.
+    Existing link → that account (kept). No link → a fresh local account,
+    auto-linked. The local account is always the canonical identity."""
+    uid = link_get(provider, external_id)
+    if uid:
+        u = get_user(uid)
+        if u:
+            with conn() as c:
+                # never downgrade an admin; otherwise honour the provider's role
+                c.execute("UPDATE users SET last_login=datetime('now','localtime'), "
+                          "role=CASE WHEN role='admin' THEN 'admin' ELSE ? END WHERE id=?",
+                          (role, u["id"]))
+                if token:
+                    c.execute("UPDATE user_links SET token=? WHERE provider=? AND external_id=?",
+                              (token, provider, str(external_id)))
+            return get_user(u["id"])
+    with conn() as c:
+        name = _unique_username(c, username)
+        c.execute("INSERT INTO users (username, role, last_login) "
+                  "VALUES (?,?, datetime('now','localtime'))", (name, role))
+        u = dict(c.execute("SELECT * FROM users WHERE username=? COLLATE NOCASE", (name,)).fetchone())
+    link_set(provider, external_id, u["id"], token)
+    return u
 
 
 # --- shared ratings & reviews (community signal across all Stackarr users) ---
@@ -295,6 +487,15 @@ def finished_dates(user_id: int) -> list[str]:
         return [r["d"] for r in c.execute(
             "SELECT substr(finished_at,1,10) d FROM shelf WHERE user_id=? AND state='read' AND finished_at IS NOT NULL",
             (user_id,))]
+
+
+def finished_keyed(user_id: int) -> list[tuple]:
+    """(rating_key, YYYY-MM-DD) for every 'read'-shelf finish, so callers can
+    dedup a shelf finish against the same book finished in Audiobookshelf."""
+    with conn() as c:
+        return [(r["rkey"], r["d"]) for r in c.execute(
+            "SELECT rkey, substr(finished_at,1,10) d FROM shelf "
+            "WHERE user_id=? AND state='read' AND finished_at IS NOT NULL", (user_id,))]
 
 
 # --- book tags (mood / pace / genre / content-warning) ----------------------

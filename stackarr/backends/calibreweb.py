@@ -34,11 +34,32 @@ class CalibreWebBackend(Backend):
     media_format = "ebook"
     is_login = False
     supports_progress = False           # only a binary read flag, one account -> warn in UI
+    can_login = True
 
     # --- connection -------------------------------------------------------
     def enabled(self) -> bool:
         u, p = _auth()
         return bool(_url() and u and p)
+
+    def verify_login(self, username: str, password: str) -> dict | None:
+        # Calibre-Web has no auth API; we infer validity from the OPDS root. That's
+        # only trustworthy when OPDS actually REQUIRES auth — if the instance allows
+        # anonymous browsing, a 200 proves nothing, so we refuse to authenticate
+        # against it (otherwise any password would "work").
+        if not username or not password:
+            return None
+        try:
+            anon = requests.get(f"{_url()}/opds", timeout=15)
+            if anon.status_code == 200:
+                log.warning("calibreweb OPDS allows anonymous access — can't use it to verify sign-ins")
+                return None
+            r = requests.get(f"{_url()}/opds", auth=(username, password), timeout=20)
+        except Exception as e:
+            log.warning("calibreweb login failed for %s: %s", username, e)
+            return None
+        if r.status_code == 200 and ("<feed" in r.text[:600].lower() or r.text[:60].lower().startswith("<?xml")):
+            return {"external_id": username, "username": username, "token": "", "is_admin": False}
+        return None
 
     def test(self) -> dict:
         try:

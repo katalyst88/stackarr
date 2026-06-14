@@ -5,7 +5,7 @@
   <h2 class="page-title">{% if kind == 'author' %}Books by {{ title }}{% else %}{{ title }}{% endif %}
     <span class="subtle">{{ books|length }} found</span></h2>
   {% if kind == 'author' %}
-  <button class="btn small" onclick="Stackarr.addAllByAuthor('{{ author|e }}', this)">Add all books by {{ title }}</button>
+  <button class="btn small" onclick="Stackarr.addAllByAuthor({{ author|tojson }}, this)">Add all books by {{ title }}</button>
   {% endif %}
 </div>
 {% if not books %}<div class="empty"><p>Nothing found.</p></div>{% endif %}

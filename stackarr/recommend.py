@@ -55,8 +55,12 @@ def _popularity_factor(num_ratings: int) -> float:
 
 
 def run(user_id: int, max_new: int | None = None) -> int:
-    """Generate pending suggestions for one user. Returns count added."""
-    max_new = max_new or config.SUGGEST_MAX_PENDING
+    """Generate pending suggestions for one user. Returns count added.
+    `max_new=None` means 'use the default cap'; an explicit 0 means 'no room'."""
+    if max_new is None:
+        max_new = config.SUGGEST_MAX_PENDING
+    if max_new <= 0:
+        return 0
     user = db.get_user(user_id)
     if not user or not user.get("abs_token"):
         return 0
@@ -67,8 +71,11 @@ def run(user_id: int, max_new: int | None = None) -> int:
     # authors — so a title you own/like as an ebook can still be suggested as an
     # audiobook (and vice versa). The cross_format_taste setting opts into
     # sharing ratings across formats.
-    xfmt = db.get_meta("cross_format_taste", "0") == "1"
+    xfmt = db.get_pref(user_id, "cross_format_taste", "0") == "1"
+    # format isolation (unless cross-taste is on): only this format's ratings AND
+    # signals shape audiobook picks, so a pass/DNF on an ebook doesn't suppress it.
     rate_where = "" if xfmt else " AND (format='audiobook' OR format IS NULL OR format='')"
+    sig_where = rate_where
     with db.conn() as c:
         # exclusion + preference state (audiobook-scoped ownership/dedup)
         known = set()
@@ -80,9 +87,9 @@ def run(user_id: int, max_new: int | None = None) -> int:
                                  "AND (format='audiobook' OR format IS NULL OR format='')", (user_id,)):
                 known.add(_key(row["title"], row["author"]))
         neg = {(s["kind"], s["value"].lower()): s["weight"]
-               for s in c.execute("SELECT kind,value,weight FROM signals WHERE user_id=? AND weight<0", (user_id,))}
+               for s in c.execute(f"SELECT kind,value,weight FROM signals WHERE user_id=? AND weight<0{sig_where}", (user_id,))}
         pos = {(s["kind"], s["value"].lower()): s["weight"]
-               for s in c.execute("SELECT kind,value,weight FROM signals WHERE user_id=? AND weight>0", (user_id,))}
+               for s in c.execute(f"SELECT kind,value,weight FROM signals WHERE user_id=? AND weight>0{sig_where}", (user_id,))}
         # 5-star ratings -> per-author/series preference boost (format-scoped)
         for r in c.execute(f"SELECT asin,stars,author FROM ratings WHERE user_id=?{rate_where}", (user_id,)):
             if r["author"]:
@@ -90,8 +97,8 @@ def run(user_id: int, max_new: int | None = None) -> int:
                 pos[k] = pos.get(k, 0) + (r["stars"] - 3) * 1.5
         # light household collaborative signal: authors other users in this
         # household rate highly get a gentle nudge (no-op on single-user installs)
-        for r in c.execute("SELECT author, COUNT(*) n FROM ratings WHERE user_id<>? AND stars>=4 "
-                           "AND author<>'' GROUP BY lower(substr(author,1,40))", (user_id,)):
+        for r in c.execute(f"SELECT author, COUNT(*) n FROM ratings WHERE user_id<>? AND stars>=4 "
+                           f"AND author<>''{rate_where} GROUP BY lower(substr(author,1,40))", (user_id,)):
             k = ("author", r["author"].split(",")[0].lower())
             pos[k] = pos.get(k, 0) + min(r["n"], 3) * 0.5   # +3 for 5★, -3 for 1★
         seed_lib = {row["item_id"]: dict(row) for row in
@@ -130,7 +137,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
     # --- deterministic taste profile (no AI): explicit mood prefs (vibe picker /
     # feedback) + moods derived from the genres of the books you've read. Drives
     # mood matching + the serendipity bonus + the adventurousness dial.
-    mood_profile = taste.mood_signals(user_id)
+    mood_profile = taste.mood_signals(user_id)   # moods are cross-format by design
     adv = taste.adventurousness(user_id)
     familiar_mult, discover_mult = taste.adv_multipliers(user_id)
 
@@ -302,11 +309,13 @@ def _finalize(user_id: int, cands: dict, known: set, neg: dict, max_new: int,
     added = 0
     with db.conn() as c:
         for lane, entries in by_lane.items():
+            if added >= max_new:           # honour the caller's overall cap
+                break
             entries.sort(key=lambda x: x["score"], reverse=True)
             per_author: dict[str, int] = {}
             taken = 0
             for entry in entries:
-                if taken >= per_lane:
+                if taken >= per_lane or added >= max_new:
                     break
                 b = entry["cand"]
                 a = (b["author"] or "").split(",")[0].lower()

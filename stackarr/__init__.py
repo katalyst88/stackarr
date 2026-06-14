@@ -73,9 +73,10 @@ def create_app() -> Flask:
 
     @app.before_request
     def _csrf_guard():
-        # CSRF: cookie-authed state changes must come from the same origin.
-        # API-key clients (X-Api-Key) and safe methods are exempt.
-        if request.method in ("POST", "PUT", "DELETE", "PATCH") and not request.headers.get("X-Api-Key"):
+        # CSRF: cookie-authed state changes must come from the same origin. The
+        # KOReader sync endpoints are header-authenticated (x-auth-key) and send
+        # no Origin, so they're naturally exempt; everything else is checked.
+        if request.method in ("POST", "PUT", "DELETE", "PATCH"):
             origin = request.headers.get("Origin") or request.headers.get("Referer") or ""
             if origin and urlparse(origin).netloc and urlparse(origin).netloc != request.host:
                 abort(403)
@@ -87,10 +88,11 @@ def create_app() -> Flask:
 
     @app.context_processor
     def _inject():
+        u = auth.current_user()
         ctx = {"accent": config.ACCENT, "app_name": config.APP_NAME,
-               "url_base": config.URL_BASE, "user": auth.current_user(),
+               "url_base": config.URL_BASE, "user": u,
                "version": config.VERSION, "stage": config.RELEASE_STAGE}
-        ctx.update(formats.flags())     # multi_format / show_audio / show_ebook / …
+        ctx.update(formats.flags(u))    # per-user multi_format / show_audio / show_ebook / …
         return ctx
 
     if not config._bool("STACKARR_NO_SCHED", False):

@@ -196,3 +196,35 @@ def scan(library_id: str):
                       headers=_admin_headers(), timeout=30)
     except Exception as e:
         log.warning("scan failed for %s: %s", library_id, e)
+
+
+def set_series(item_id: str, series_name: str, sequence=None) -> bool:
+    """Write series metadata back to an Audiobookshelf item (admin). Used to
+    repair items whose series field is blank but recoverable from the title."""
+    seq = "" if sequence is None else (str(int(sequence)) if float(sequence) == int(sequence) else str(sequence))
+    payload = {"metadata": {"series": [{"name": series_name, "sequence": seq}]}}
+    try:
+        r = requests.patch(f"{abs_url()}/api/items/{item_id}/media",
+                           json=payload, headers=_admin_headers(), timeout=20)
+        return r.ok
+    except Exception as e:
+        log.warning("set_series failed for %s: %s", item_id, e)
+        return False
+
+
+def list_users() -> list[dict]:
+    """Every account on the Audiobookshelf server (admin API). Each:
+    {id, username, email, is_admin}. Empty list on any failure."""
+    try:
+        r = requests.get(f"{abs_url()}/api/users", headers=_admin_headers(), timeout=20)
+        r.raise_for_status()
+        out = []
+        for u in (r.json().get("users") or []):
+            if u.get("username"):
+                out.append({"id": u.get("id", ""), "username": u["username"],
+                            "email": u.get("email", "") or "",
+                            "is_admin": u.get("type") in ("admin", "root")})
+        return out
+    except Exception as e:
+        log.warning("ABS list users failed: %s", e)
+        return []

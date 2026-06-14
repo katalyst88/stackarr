@@ -1,9 +1,17 @@
 """Backend registry. One place that knows every library source Stackarr can
 read from, which one owns login, and which are currently connected.
 
-Phase 1 ships only Audiobookshelf. Kavita and Calibre-Web register here in
-Phase 4; because everything goes through `sources()`, the scheduler and
-recommender pick them up automatically once connected — no call-site changes."""
+To ADD a new source backend (contributor guide):
+  1. Create `backends/<name>.py` with a class subclassing `base.Backend`.
+     Implement the abstract surface (`enabled()`, `test()`, `library_items()`)
+     and override what applies (`reading_history()`, `cover_url()`,
+     `verify_login()`/`can_login` to allow sign-in, `mark_read()`/
+     `can_write_progress` for write-back, `list_users()`/`can_import_users` for
+     user import). See `base.Backend` for the full documented contract, and
+     `kavita.py` / `komga.py` as worked examples.
+  2. Set `media_format` ("audiobook" | "ebook") and a unique `id`/`label`.
+  3. Add an instance to `ALL` below. Everything else (scheduler, recommender,
+     settings, login) discovers it through `sources()` — no call-site changes."""
 from __future__ import annotations
 
 from .abs import ABSBackend

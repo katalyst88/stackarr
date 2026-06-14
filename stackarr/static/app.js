@@ -1,4 +1,19 @@
-/* Stackarr front-end — vanilla JS, no build step. */
+/* Stackarr front-end — vanilla JS, no build step.
+ *
+ * One global object, `Stackarr`, exposes the methods that templates call from
+ * inline `onclick=` handlers (e.g. `onclick="Stackarr.rate(...)"`). That is the
+ * template↔JS contract: add a UI action by adding a method here and calling it
+ * from the template. Templates pass data into handlers with Jinja's `|tojson`
+ * (never `'{{ x }}'`) so untrusted strings can't break out of the JS context.
+ *
+ * Shared helpers (private to the IIFE):
+ *   api(path, opts)  — fetch JSON; on 401 it redirects to /login and returns null,
+ *                      so every caller must null-check the result before using it.
+ *   toast(msg)       — transient status message.
+ *   esc(str)         — HTML-escape for strings injected into innerHTML.
+ *   B()              — URL_BASE prefix for sub-path deployments.
+ * `Stackarr.boot()` wires up page-load behaviour; call it from a page's scripts block.
+ */
 const Stackarr = (() => {
   const B = () => window.URL_BASE || "";
   const toast = (m) => {
@@ -20,7 +35,7 @@ const Stackarr = (() => {
     document.body.setAttribute("data-theme", light ? "light" : "dark");
   };
 
-  // Seer-style tag system: none -> Requested -> Available
+  // status tag system: none -> Requested -> Available
   const TAG = {
     available: ["Available", "available", "In library"],
     handed:    ["Requested", "handed",   "Requested"],
@@ -218,11 +233,14 @@ const Stackarr = (() => {
     },
 
     async decide(id, verdict, btn) {
-      btn.closest(".ov-actions").querySelectorAll("button").forEach(b => b.disabled = true);
+      // works whether the button is on a suggestion overlay (.ov-actions/.media-card)
+      // or elsewhere (e.g. the Up Next "Next up" card, which has neither).
+      (btn.closest(".ov-actions") || btn.parentElement)?.querySelectorAll("button").forEach(b => b.disabled = true);
       const res = await api(`/api/suggestion/${id}/${verdict}`, { method: "POST" });
       if (!res) return;
       const card = btn.closest(".media-card");
-      card.style.transition = "opacity .3s, transform .3s"; card.style.opacity = .25; card.style.transform = "scale(.9)";
+      if (card) { card.style.transition = "opacity .3s, transform .3s"; card.style.opacity = .25; card.style.transform = "scale(.9)"; }
+      else setTimeout(() => location.reload(), 600);
       toast(verdict === "approve"
         ? (res.ok ? "Approved — sent to Chaptarr." : "Approved, but: " + (res.detail || "handoff failed"))
         : verdict === "read" ? "Marked as read — your picks will improve."
@@ -278,10 +296,11 @@ const Stackarr = (() => {
       const on = btn.classList.contains("on");
       const next = on ? "" : state;
       bar.querySelectorAll(".shelf-btn").forEach(b => b.classList.toggle("on", b === btn && !on));
-      await api("/api/shelf", { method: "POST", body: JSON.stringify({
+      const r = await api("/api/shelf", { method: "POST", body: JSON.stringify({
         key: bar.dataset.key, state: next, title: bar.dataset.title,
         author: bar.dataset.author, cover: bar.dataset.cover, format: bar.dataset.format }) });
-      toast(next ? `On your "${state}" shelf.` : "Removed from shelves.");
+      if (next === "read" && r && r.synced) toast(`Read — also marked finished in ${r.synced}.`);
+      else toast(next ? `On your "${state}" shelf.` : "Removed from shelves.");
     },
     async grabFormat(book, fmt, btn) {
       if (btn) { btn.disabled = true; }
@@ -303,6 +322,7 @@ const Stackarr = (() => {
     },
     async voteReview(id, btn) {
       const r = await api("/api/review/vote", { method: "POST", body: JSON.stringify({ rating_id: id }) });
+      if (!r) return;
       const c = btn.querySelector(".vcount"); if (c) c.textContent = r.votes;
       btn.classList.toggle("voted");
     },
@@ -321,6 +341,7 @@ const Stackarr = (() => {
     async checkLibraries(btn) {
       if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
       const r = await api("/api/requests/check", { method: "POST", body: "{}" });
+      if (!r) { if (btn) { btn.disabled = false; btn.textContent = "↻ Check libraries"; } return; }
       toast(r.detail || "Checked.");
       if (r.flipped) setTimeout(() => location.reload(), 600);
       else if (btn) { btn.disabled = false; btn.textContent = "↻ Check libraries"; }
@@ -328,12 +349,14 @@ const Stackarr = (() => {
     async checkLibrary(btn) {
       if (btn) { btn.disabled = true; btn.textContent = "Scanning…"; }
       const r = await api("/api/library/refresh", { method: "POST", body: "{}" });
+      if (!r) { if (btn) { btn.disabled = false; btn.textContent = "↻ Check library"; } return; }
       toast(r.detail || "Scanned.");
       setTimeout(() => location.reload(), 700);
     },
     async retryAll(btn) {
       if (btn) { btn.disabled = true; btn.textContent = "Retrying…"; }
       const r = await api("/api/requests/retry-all", { method: "POST", body: "{}" });
+      if (!r) { if (btn) { btn.disabled = false; btn.textContent = "↻ Retry all failed"; } return; }
       toast(r.detail || "Retried.");
       setTimeout(() => location.reload(), 900);
     },
@@ -342,7 +365,7 @@ const Stackarr = (() => {
       btn.disabled = true; btn.textContent = "Checking…";
       const r = await api("/api/series/missing?series=" + encodeURIComponent(series));
       btn.disabled = false; btn.textContent = "🔍 Find missing books";
-      if (!box) return;
+      if (!box || !r) return;
       box.hidden = false;
       if (!r.ok || !r.total) { box.innerHTML = '<p class="muted">Couldn\'t map this series in the catalogue.</p>'; return; }
       if (!r.missing.length) { box.innerHTML = `<p class="muted">You have all ${r.total} books in this series. 🎉</p>`; return; }
@@ -353,6 +376,7 @@ const Stackarr = (() => {
     },
     async follow(btn) {
       const r = await api("/api/follow", { method: "POST", body: JSON.stringify({ author: btn.dataset.author }) });
+      if (!r) return;
       btn.classList.toggle("on", r.following);
       btn.textContent = r.following ? "✓ Following" : "＋ Follow";
       toast(r.following ? "Following — you're on the radar." : "Unfollowed.");
@@ -375,12 +399,39 @@ const Stackarr = (() => {
       await api("/api/goal", { method: "POST", body: JSON.stringify({ goal: n }) });
       toast("Goal saved."); setTimeout(() => location.reload(), 400);
     },
+    async saveEmail(btn) {
+      const email = (document.getElementById("acct-email") || {}).value || "";
+      const r = await api("/api/account/email", { method: "POST", body: JSON.stringify({ email }) });
+      if (r) toast(r.ok ? "Email saved." : (r.error || "Couldn't save."));
+    },
+    async savePassword(btn) {
+      const cur = (document.getElementById("acct-curpw") || {}).value || "";
+      const pw = (document.getElementById("acct-newpw") || {}).value || "";
+      const r = await api("/api/account/password", { method: "POST", body: JSON.stringify({ current: cur, password: pw }) });
+      if (r && r.ok) { toast("Password saved."); setTimeout(() => location.reload(), 500); }
+      else if (r) toast(r.error || "Couldn't save password.");
+    },
+    async linkProvider(id, label, btn) {
+      const username = prompt("Your " + label + " username:");
+      if (username === null) return;
+      const password = prompt("Your " + label + " password:");
+      if (password === null) return;
+      const r = await api("/api/account/link", { method: "POST", body: JSON.stringify({ provider: id, username, password }) });
+      if (r && r.ok) { toast(label + " linked."); setTimeout(() => location.reload(), 500); }
+      else if (r) toast(r.error || "Couldn't link.");
+    },
+    async unlinkProvider(id, btn) {
+      if (!confirm("Unlink this sign-in method?")) return;
+      const r = await api("/api/account/unlink", { method: "POST", body: JSON.stringify({ provider: id }) });
+      if (r && r.ok) { toast("Unlinked."); setTimeout(() => location.reload(), 500); }
+      else if (r) toast(r.error || "Couldn't unlink.");
+    },
     async surprise(fmt) {
       const n = Math.floor(Date.now() / 60000);   // varies each minute
       const q = new URLSearchParams({ n: String(n) });
       if (fmt) q.set("format", fmt);
       const r = await api("/api/surprise?" + q.toString());
-      if (r.ok && r.book && r.book.asin) location.href = (window.URL_BASE || "") + "/book/" + r.book.asin;
+      if (r && r.ok && r.book && r.book.asin) location.href = (window.URL_BASE || "") + "/book/" + r.book.asin;
       else toast("No pick right now — try Update Suggestions.");
     },
     _onboardRated(onb) {
@@ -464,8 +515,50 @@ const Stackarr = (() => {
     async markReadBook(book, btn) { btn.disabled = true; const r = await api("/api/mark-read", { method: "POST", body: JSON.stringify(book) }); if (r && r.ok) toast(`Noted “${r.matched}” as read.`); },
     async retry(id) { const r = await api(`/api/request/${id}/retry`, { method: "POST" }); if (r) location.reload(); },
     async removeRequest(id) { await api(`/api/request/${id}`, { method: "DELETE" }); document.querySelector(`.req-row[data-id="${id}"]`)?.remove(); },
+    async approveRequest(id, btn) {
+      if (btn) btn.disabled = true;
+      const r = await api(`/api/requests/${id}/approve`, { method: "POST" });
+      if (!r) { if (btn) btn.disabled = false; return; }     // 401/redirect
+      // keep the row on a failed grab so the admin can retry; remove on success
+      if (r.ok) { toast("Approved — fetching now."); document.querySelector(`.req-row[data-id="${id}"]`)?.remove(); }
+      else { toast(r.detail || "Approved, but the grab failed — see Wanted."); if (btn) btn.disabled = false; }
+    },
+    async denyRequest(id, btn) {
+      const reason = prompt("Reason (optional, shown to the requester):") || "";
+      if (btn) btn.disabled = true;
+      const r = await api(`/api/requests/${id}/deny`, { method: "POST", body: JSON.stringify({ reason }) });
+      if (!r) { if (btn) btn.disabled = false; return; }
+      if (r.ok) { toast("Request denied."); document.querySelector(`.req-row[data-id="${id}"]`)?.remove(); }
+      else { toast(r.error || "Couldn't deny."); if (btn) btn.disabled = false; }
+    },
 
     async setSetting(obj, reload) { await api("/api/settings", { method: "POST", body: JSON.stringify(obj) }); toast("Saved."); if (reload) setTimeout(() => location.reload(), 400); },
+    async setPref(obj, reload) { await api("/api/prefs", { method: "POST", body: JSON.stringify(obj) }); toast("Saved."); if (reload) setTimeout(() => location.reload(), 400); },
+    async setApprovalMode(require) { await api("/api/admin/approval-mode", { method: "POST", body: JSON.stringify({ require_approval: require }) }); toast(require ? "Requests now need your approval." : "Requests now auto-approve."); },
+    async importUsers(btn) {
+      if (btn) { btn.disabled = true; btn.textContent = "Importing…"; }
+      const r = await api("/api/admin/import-users", { method: "POST", body: JSON.stringify({}) });
+      if (btn) { btn.disabled = false; btn.textContent = "Import from sources now"; }
+      if (r) { toast(r.detail || "Imported."); if (r.created) setTimeout(() => location.reload(), 800); }
+    },
+    async setUserSync(on) { await api("/api/admin/import-users", { method: "POST", body: JSON.stringify({ sync: on }) }); toast(on ? "Daily user sync on." : "Daily user sync off."); },
+    async repairSeries(btn) {
+      if (btn) btn.disabled = true;
+      const p = await api("/api/series/repair", { method: "POST", body: JSON.stringify({}) });   // preview
+      if (!p || !p.ok) { if (btn) btn.disabled = false; return toast("Couldn't scan."); }
+      if (!p.count) { if (btn) btn.disabled = false; return toast("No books need series repair."); }
+      const sample = (p.proposals || []).slice(0, 6).map(x => `• ${x.series}${x.seq != null ? " #" + x.seq : ""} — ${x.title}`).join("\n");
+      if (!confirm(`Write series metadata to Audiobookshelf for ${p.count} book(s)?\n\n${sample}${p.count > 6 ? "\n…and more" : ""}`)) { if (btn) btn.disabled = false; return; }
+      const r = await api("/api/series/repair", { method: "POST", body: JSON.stringify({ apply: true }) });
+      if (btn) btn.disabled = false;
+      if (r && r.ok) { toast(r.detail || "Repaired."); setTimeout(() => location.reload(), 1200); }
+      else toast("Repair failed.");
+    },
+    async setUser(uid, obj, el) {
+      const r = await api(`/api/admin/user/${uid}`, { method: "POST", body: JSON.stringify(obj) });
+      if (r && r.ok) { toast("Saved."); if ("role" in obj) setTimeout(() => location.reload(), 400); }
+      else { toast((r && r.error) || "Couldn't save."); if (el) el.checked = !el.checked; }
+    },
     _gather(catId) {
       const obj = {};
       document.querySelectorAll(`#cat-${catId} [data-setting]`).forEach(el => {

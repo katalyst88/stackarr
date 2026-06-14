@@ -4,9 +4,11 @@
 <div class="settings-wrap">
   <nav class="settings-nav">
     <button class="active" onclick="Stackarr.settingsCat('general', this)">General</button>
+    <button onclick="Stackarr.settingsCat('account', this)">Account</button>
     <button onclick="Stackarr.settingsCat('suggest', this)">Suggestions</button>
     <button onclick="Stackarr.settingsCat('reading', this)">My reading</button>
     {% if is_admin %}<button onclick="Stackarr.settingsCat('connections', this)">Connections</button>{% endif %}
+    {% if is_admin %}<button onclick="Stackarr.settingsCat('users', this)">Users</button>{% endif %}
     <button onclick="Stackarr.settingsCat('notify', this)">Notifications</button>
     {% if is_admin %}<button onclick="Stackarr.settingsCat('logs', this)">Logs</button>{% endif %}
     <button onclick="Stackarr.settingsCat('about', this)">About</button>
@@ -31,19 +33,50 @@
             <option value="both" {{ 'selected' if format_mode=='both' }}>Both audiobooks &amp; eBooks</option>
           </select></label>
         <p class="muted">Changing this reloads the page so format-specific menus update.</p>
-        {% if format_mode == 'both' %}
-        <label class="row"><span>Let audiobook &amp; ebook taste inform each other</span>
-          <input type="checkbox" class="switch" {{ 'checked' if cross_format_taste }}
-                 onchange="Stackarr.setSetting({cross_format_taste: this.checked})"></label>
-        <p class="muted">Off (default): each format is recommended only from that format's own history and ratings —
-          your audiobook likes won't shape ebook picks, or vice versa. On: ratings cross-pollinate both ways.</p>
-        {% endif %}
       </div>
       {% endif %}
     </div>
 
+    <div class="settings-cat" id="cat-account">
+      <div class="panel"><h3>Your account</h3>
+        <p class="muted">Signed in as <b>{{ account.username }}</b>{% if account.role == 'admin' %} · admin{% endif %}.</p>
+        <label class="row"><span>Email <span class="muted">(for notifications)</span></span>
+          <input type="email" id="acct-email" value="{{ account.email }}" placeholder="you@example.com" style="max-width:240px"></label>
+        <button class="btn small" onclick="Stackarr.saveEmail(this)">Save email</button>
+      </div>
+
+      <div class="panel"><h3>{{ 'Change password' if account.has_password else 'Set a password' }}</h3>
+        <p class="muted">{% if account.has_password %}Update the password you use to sign in directly.
+          {% else %}Set a password so you can sign in directly (not only through a linked library account).{% endif %}</p>
+        {% if account.has_password %}
+        <label class="row"><span>Current password</span>
+          <input type="password" id="acct-curpw" autocomplete="current-password" style="max-width:240px"></label>
+        {% endif %}
+        <label class="row"><span>New password</span>
+          <input type="password" id="acct-newpw" autocomplete="new-password" style="max-width:240px"></label>
+        <button class="btn small" onclick="Stackarr.savePassword(this)">Save password</button>
+      </div>
+
+      <div class="panel"><h3>Linked sign-in methods</h3>
+        <p class="muted">Link a library account so you can sign in with it — it always maps back to this
+          one Stackarr account. Linking also lets {{ app_name }} read that library for you.</p>
+        {% if account.providers %}
+        {% for p in account.providers %}
+        <div class="row"><span>{{ p.label }}{% if p.linked %} <span class="chip available">linked</span>{% endif %}</span>
+          {% if p.linked %}
+            <button class="btn small ghost" onclick="Stackarr.unlinkProvider('{{ p.id }}', this)">Unlink</button>
+          {% else %}
+            <button class="btn small" onclick="Stackarr.linkProvider('{{ p.id }}','{{ p.label }}', this)">Link</button>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}<p class="muted">No connectable library sources are configured yet.</p>{% endif %}
+      </div>
+    </div>
+
     <div class="settings-cat" id="cat-suggest">
       <div class="panel"><h3>Recommendations</h3>
+        {% if is_admin %}
         <label class="row"><span>Refresh suggestions every (hours)</span>
           <input type="number" min="1" data-setting="suggest_interval_hours" value="{{ interval_hours }}"></label>
         <label class="row"><span>Language</span>
@@ -51,14 +84,16 @@
             {% for l in languages %}<option value="{{ l }}" {{ 'selected' if l == language }}>{{ l|capitalize }}</option>{% endfor %}
           </select></label>
         <p class="muted">Suggestions run on first login, then on this interval. Language filters which editions are suggested.</p>
+        {% endif %}
         <label class="row"><span>Adventurousness <span class="muted">— Comfort ↔ Discovery</span></span>
           <input type="range" min="0" max="100" step="5" id="adv-slider" value="{{ adventurousness }}"
                  oninput="document.getElementById('adv-val').textContent=this.value"
                  onchange="Stackarr.setAdventurousness(this.value)"></label>
         <p class="muted">At <b id="adv-val">{{ adventurousness }}</b>/100: lower leans into authors &amp; series you
           already love; higher pushes new authors, hidden gems and off-the-beaten-path picks.</p>
-        <button class="btn" onclick="Stackarr.saveCategory('suggest', this)">Save</button>
+        {% if is_admin %}<button class="btn" onclick="Stackarr.saveCategory('suggest', this)">Save</button>{% endif %}
       </div>
+      {% if is_admin %}
       <div class="panel"><h3>Auto-add to Chaptarr</h3>
         <p class="muted">Let Stackarr hand high-confidence picks to Chaptarr automatically, with no manual approval.
           Off by default. It skips books you already own, caps how many it adds per cycle, and pauses if Chaptarr can't add right now.</p>
@@ -70,16 +105,27 @@
             <option value="aggressive" {{ 'selected' if auto_add_level=='aggressive' }}>Aggressive — any strong pick (max 10/cycle)</option>
           </select></label>
       </div>
+      {% endif %}
     </div>
 
     <div class="settings-cat" id="cat-reading">
       <div class="panel"><h3>History &amp; ratings</h3>
         <label class="row"><span>Hide books from history after rating</span>
           <input type="checkbox" class="switch" id="hide-rated" {{ 'checked' if hide_rated_history }}
-                 onchange="Stackarr.setSetting({hide_rated_history: this.checked})"></label>
+                 onchange="Stackarr.setPref({hide_rated_history: this.checked})"></label>
         <p class="muted">When on, rating a book removes it from your History &amp; ratings list. When off,
           rated books sink to the bottom so you can still see and adjust them.</p>
       </div>
+      {% if multi_format %}
+      <div class="panel"><h3>Cross-format taste</h3>
+        <label class="row"><span>Let my audiobook &amp; ebook taste inform each other</span>
+          <input type="checkbox" class="switch" {{ 'checked' if cross_format_taste }}
+                 onchange="Stackarr.setPref({cross_format_taste: this.checked})"></label>
+        <p class="muted">Off (default): each format is recommended only from that format's own history and ratings —
+          your audiobook likes won't shape ebook picks, or vice versa. On: your ratings cross-pollinate both ways.
+          This is your own preference; it doesn't affect other users.</p>
+      </div>
+      {% endif %}
       <div class="panel"><h3>I've already read…</h3>
         <p class="muted">Tell Stackarr a book you've read so it shapes your suggestions — no download.</p>
         <div class="inline-form">
@@ -175,7 +221,66 @@
     </div>
     {% endif %}
 
+    {% if is_admin %}
+    <div class="settings-cat" id="cat-users">
+      <div class="panel"><h3>Requests &amp; approval</h3>
+        <label class="row"><span>Require my approval for other users' requests</span>
+          <input type="checkbox" class="switch" {{ 'checked' if require_approval }}
+                 onchange="Stackarr.setApprovalMode(this.checked)"></label>
+        <p class="muted">On (default): a non-admin's book request waits in your approval queue on the
+          <a href="{{ url_for('main.requests_page') }}">Requests</a> page. Off: everyone's requests are grabbed
+          automatically. Admins and <b>trusted</b> users always skip approval.</p>
+      </div>
+      <div class="panel"><h3>Import users</h3>
+        <p class="muted">Pull accounts from your connected sources (Audiobookshelf) in as linked Stackarr
+          accounts — they can then sign in with their existing credentials. New users are also
+          provisioned automatically the first time they sign in.</p>
+        <div class="inline-form">
+          <button class="btn small" onclick="Stackarr.importUsers(this)">Import from sources now</button>
+        </div>
+        <label class="row"><span>Sync users daily</span>
+          <input type="checkbox" class="switch" {{ 'checked' if user_sync }}
+                 onchange="Stackarr.setUserSync(this.checked)"></label>
+      </div>
+      <div class="panel"><h3>Users</h3>
+        <p class="muted">Everyone who has signed in. Make someone an admin, or mark them <b>trusted</b> so their
+          requests skip approval.</p>
+        <table class="user-table">
+          <thead><tr><th>User</th><th>Email</th><th>Admin</th><th>Trusted</th></tr></thead>
+          <tbody>
+          {% for usr in manage_users %}
+          <tr>
+            <td>{{ usr.username }}{% if usr.id == user.id %} <span class="muted">(you)</span>{% endif %}</td>
+            <td class="muted">{{ usr.email or '—' }}</td>
+            <td><input type="checkbox" class="switch" {{ 'checked' if usr.role == 'admin' }}
+                       {{ 'disabled' if usr.id == user.id }}
+                       onchange="Stackarr.setUser({{ usr.id }}, {role: this.checked ? 'admin' : 'user'}, this)"></td>
+            <td><input type="checkbox" class="switch" {{ 'checked' if usr.trusted }}
+                       {{ 'disabled' if usr.role == 'admin' }}
+                       onchange="Stackarr.setUser({{ usr.id }}, {trusted: this.checked}, this)"></td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
     <div class="settings-cat" id="cat-notify">
+      <div class="panel"><h3>Email me when…</h3>
+        {% if not smtp_ready %}<p class="muted">⚠️ Email isn't configured yet{% if is_admin %} — set up SMTP below{% else %} — ask your admin to set up SMTP{% endif %}. These toggles take effect once it is.</p>{% endif %}
+        <label class="row"><span>My request is approved</span>
+          <input type="checkbox" class="switch" {{ 'checked' if notify_prefs.approved }}
+                 onchange="Stackarr.setPref({notify_approved: this.checked})"></label>
+        <label class="row"><span>My request is ready (downloaded)</span>
+          <input type="checkbox" class="switch" {{ 'checked' if notify_prefs.available }}
+                 onchange="Stackarr.setPref({notify_available: this.checked})"></label>
+        <label class="row"><span>My request is declined</span>
+          <input type="checkbox" class="switch" {{ 'checked' if notify_prefs.denied }}
+                 onchange="Stackarr.setPref({notify_denied: this.checked})"></label>
+        <p class="muted">Personal email alerts sent to <b>{{ account.email or 'your account email' }}</b>{% if not account.email %} (set one under Account){% endif %}.</p>
+      </div>
+      {% if is_admin %}
       <div class="panel"><h3>Alerts</h3>
         <label class="row"><span>Tell me when a requested book lands in my library</span>
           <input type="checkbox" class="switch" id="notify-avail" {{ 'checked' if notify_avail_enabled }}
@@ -239,6 +344,7 @@
           <button class="btn small" onclick="Stackarr.saveCategory('notify', this)">Save</button>
         </div>
       </div>
+      {% endif %}
     </div>
 
     {% if is_admin %}

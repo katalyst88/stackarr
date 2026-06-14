@@ -69,6 +69,32 @@ class Backend(abc.ABC):
         Default: none (a source with no per-user signal). ABS/Kavita override."""
         return []
 
+    # Whether a user can SIGN IN with this source's credentials (identity check).
+    can_login: bool = False
+
+    def verify_login(self, username: str, password: str) -> dict | None:
+        """Validate a user's own credentials against this source for sign-in.
+        Returns {"external_id": str, "username": str, "token": str,
+        "is_admin": bool} on success, else None. Default: not a login provider."""
+        return None
+
+    # Whether this backend can push a read/finished status back to its source app.
+    can_write_progress: bool = False
+
+    def mark_read(self, user: dict, item_id: str, finished: bool = True) -> bool:
+        """Tell the source app this item is finished (or un-finished). Only acts
+        on item_ids this backend owns; returns True if it actually synced.
+        Default: unsupported (read-only source)."""
+        return False
+
+    # Whether this source can list its accounts for import (admin roster API).
+    can_import_users: bool = False
+
+    def list_users(self) -> list[dict]:
+        """Accounts on this source for the admin to import, each
+        {external_id, username, email, is_admin}. Empty if unsupported."""
+        return []
+
     # --- optional niceties (sane defaults) --------------------------------
     def listening_stats(self, user: dict) -> dict:
         return {"total_seconds": 0, "days_listened": 0, "items_count": 0}

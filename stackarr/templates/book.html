@@ -1,6 +1,20 @@
 {% extends "base.html" %}
 {% from "_fmt.html" import fmt_icon, fmt_label with context %}
 {% block content %}
+{% macro grab_actions(half=False) %}
+  {% if multi_format %}
+    {# both mode: compact 'Add' + format icon, half-width side by side #}
+    <div class="grab-pair">
+      <button class="btn grab-half" title="Add audiobook" onclick='Stackarr.grabFormat({{ b|tojson }}, "audiobook", this)'>{{ fmt_icon('audiobook') }} Add</button>
+      <button class="btn grab-half" title="Add eBook" onclick='Stackarr.grabFormat({{ b|tojson }}, "ebook", this)'>{{ fmt_icon('ebook') }} Add</button>
+    </div>
+  {% else %}
+    {% if b.state == 'available' %}<button class="btn" disabled>In library</button>
+    {% elif b.state in ('handed','queued') %}<button class="btn" disabled>Requested</button>
+    {% elif b.state == 'failed' %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>{{ fmt_icon(b.format) }} Retry</button>
+    {% else %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>{{ fmt_icon(b.format) }} Add book</button>{% endif %}
+  {% endif %}
+{% endmacro %}
 <button class="btn small ghost back-btn" onclick="history.back()">‹ Back</button>
 <div class="book-detail">
   <div class="book-cover">
@@ -35,6 +49,13 @@
     {% if tags and tags.warning %}<details class="cw"><summary>⚠️ Content warnings ({{ tags.warning|length }})</summary>
       <div class="cw-list">{% for w in tags.warning %}<span class="chip cw-chip">{{ w }}</span>{% endfor %}</div>
       <p class="muted" style="font-size:12px">Auto-detected from catalogue subjects — may be incomplete.</p></details>{% endif %}
+    {# primary grab actions — above the description so they're reachable at once #}
+    <div class="book-actions">
+      {% if multi_format and b.state == 'available' %}<span class="chip">In library</span>{% endif %}
+      {{ grab_actions() }}
+      <button class="btn ghost" onclick='Stackarr.bookIgnore({{ b|tojson }}, this)'>Not interested</button>
+    </div>
+
     {% if b.summary %}<p class="book-summary">{{ b.summary }}</p>{% endif %}
 
     {# personal shelf — want / reading / read #}
@@ -57,25 +78,6 @@
       <strong>Couldn't grab this one yet.</strong> {{ b.req_detail or "Chaptarr couldn't find or fetch a copy. You can retry below." }}
     </div>
     {% endif %}
-    {% macro grab_actions(half=False) %}
-      {% if multi_format %}
-        {# both mode: compact 'Add' + format icon, half-width side by side #}
-        <div class="grab-pair">
-          <button class="btn grab-half" title="Add audiobook" onclick='Stackarr.grabFormat({{ b|tojson }}, "audiobook", this)'>{{ fmt_icon('audiobook') }} Add</button>
-          <button class="btn grab-half" title="Add eBook" onclick='Stackarr.grabFormat({{ b|tojson }}, "ebook", this)'>{{ fmt_icon('ebook') }} Add</button>
-        </div>
-      {% else %}
-        {% if b.state == 'available' %}<button class="btn" disabled>In library</button>
-        {% elif b.state in ('handed','queued') %}<button class="btn" disabled>Requested</button>
-        {% elif b.state == 'failed' %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>{{ fmt_icon(b.format) }} Retry</button>
-        {% else %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>{{ fmt_icon(b.format) }} Add book</button>{% endif %}
-      {% endif %}
-    {% endmacro %}
-    <div class="book-actions">
-      {% if multi_format and b.state == 'available' %}<span class="chip">In library</span>{% endif %}
-      {{ grab_actions() }}
-      <button class="btn ghost" onclick='Stackarr.bookIgnore({{ b|tojson }}, this)'>Not interested</button>
-    </div>
     {# quiet taste-tuning row #}
     <div class="feedback-row">
       <button class="icon-pill" title="More like this" onclick='Stackarr.feedback({{ b|tojson }}, "more", this)'>👍</button>
@@ -98,7 +100,7 @@
     <p class="muted">Your rating{% if community.count %} <span class="community-inline">· community ★ {{ community.avg }} ({{ community.count }}){% endif %}</span></p>
     <div class="rate-stars big" id="my-stars" data-asin="{{ rate_key }}" data-title="{{ b.title }}" data-author="{{ b.author }}">
       {% for n in [1,2,3,4,5] %}<span class="star {{ 'on' if my_stars and n <= my_stars }}"
-        onclick="Stackarr.rate('{{ rate_key }}',{{ n }},this)">★</span>{% endfor %}
+        onclick="Stackarr.rate({{ rate_key|tojson }},{{ n }},this)">★</span>{% endfor %}
     </div>
     <p class="muted" style="font-size:12.5px;margin-top:6px">A quick rating sharpens your recommendations.</p>
   </div>

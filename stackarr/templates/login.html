@@ -14,17 +14,69 @@
   <h1>{{ app_name }}</h1>
   <p class="tagline">Your next listen, picked from your shelf.</p>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  <form method="post">
-    <input name="username" placeholder="Audiobookshelf username" autocomplete="username" autofocus>
-    <input name="password" type="password" placeholder="Password" autocomplete="current-password">
+
+  {% if first_run %}
+  {# no accounts yet -> first sign-up becomes the admin #}
+  <p class="hint">Welcome — create the first account. It becomes the admin.</p>
+  <form method="post" autocomplete="on">
+    <input type="hidden" name="action" value="register">
+    <input type="hidden" name="provider" value="local">
+    <input name="username" placeholder="Choose a username" autocomplete="username" autofocus required>
+    <input name="email" type="email" placeholder="Email (optional, for notifications)" autocomplete="email">
+    <input name="password" type="password" placeholder="Choose a password" autocomplete="new-password" required>
+    <button type="submit">Create admin account</button>
+  </form>
+  {% else %}
+
+  {# choose a sign-in method: local password + any connected source #}
+  {% set methods = [{'id':'local','label':'Password'}] + providers %}
+  {% if methods|length > 1 %}
+  <div class="login-tabs" role="tablist">
+    {% for m in methods %}
+    <button class="login-tab {{ 'on' if loop.first }}" data-method="{{ m.id }}" type="button"
+            onclick="pickMethod('{{ m.id }}', this)">{{ m.label }}</button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="post" autocomplete="on" id="signin-form">
+    <input type="hidden" name="action" value="signin">
+    <input type="hidden" name="provider" id="provider-field" value="{{ methods[0].id }}">
+    <input name="username" id="su-user" placeholder="Username" autocomplete="username" autofocus required>
+    <input name="password" type="password" placeholder="Password" autocomplete="current-password" required>
     <button type="submit">Sign in</button>
   </form>
-  <p class="hint">Sign in with your Audiobookshelf account.</p>
+  <p class="hint" id="method-hint">Sign in with your {{ methods[0].label }}.</p>
+
+  <details class="login-register">
+    <summary>Create an account</summary>
+    <form method="post" autocomplete="on">
+      <input type="hidden" name="action" value="register">
+      <input type="hidden" name="provider" value="local">
+      <input name="username" placeholder="Choose a username" autocomplete="username" required>
+      <input name="email" type="email" placeholder="Email (optional)" autocomplete="email">
+      <input name="password" type="password" placeholder="Choose a password" autocomplete="new-password" required>
+      <input name="invite" placeholder="Invite code">
+      <button type="submit">Sign up</button>
+    </form>
+    <p class="hint">Ask the admin for an invite code. Or sign in above with your
+      Audiobookshelf / Kavita / Komga / Calibre-Web account — that links a Stackarr account automatically.</p>
+  </details>
+  {% endif %}
+
   <p class="hint">v{{ version }} · {{ stage }}</p>
 </div>
 <script>
-// honour saved light/dark preference on the login screen too
 if (localStorage.getItem('stackarr-theme') === 'light') document.body.setAttribute('data-theme','light');
+var METHOD_LABELS = {{ ({'local':'local password'} | tojson) }};
+{% for m in providers %}METHOD_LABELS['{{ m.id }}'] = '{{ m.label }}';{% endfor %}
+function pickMethod(id, btn) {
+  document.getElementById('provider-field').value = id;
+  document.querySelectorAll('.login-tab').forEach(function(t){ t.classList.toggle('on', t === btn); });
+  var h = document.getElementById('method-hint');
+  if (h) h.textContent = id === 'local' ? 'Sign in with your Stackarr password.'
+                                        : 'Sign in with your ' + (METHOD_LABELS[id] || id) + ' account.';
+}
 </script>
 </body>
 </html>

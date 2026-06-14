@@ -67,7 +67,7 @@
       <div class="tune-row" data-key="{{ r.asin }}">
         <span class="tune-stars">{% for n in [1,2,3,4,5] %}<span class="star {{ 'on' if n <= r.stars }}">★</span>{% endfor %}</span>
         <span class="tune-label">{{ r.title }}{% if r.author %} <span class="muted">· {{ r.author }}</span>{% endif %}</span>
-        <button class="tune-undo" onclick="Stackarr.clearRating('{{ r.asin }}', this)">Clear</button></div>
+        <button class="tune-undo" onclick="Stackarr.clearRating({{ r.asin|tojson }}, this)">Clear</button></div>
       {% else %}<p class="muted tune-empty">No ratings yet.</p>{% endfor %}
     </div>
   </div>

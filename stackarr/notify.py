@@ -7,10 +7,16 @@ import smtplib
 import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from html import escape as _esc
 
 import requests
 
 from . import config, db
+
+
+def _clean_subject(s: str) -> str:
+    """Strip CR/LF so a crafted title can't inject extra email headers."""
+    return (s or "").replace("\r", " ").replace("\n", " ")
 
 
 def _email_due() -> bool:
@@ -75,11 +81,14 @@ def current_theme() -> str:
     return t if t in THEMES else "light"
 
 
-def _send_email(subject: str, text: str, html: str) -> bool:
+def _send_email(subject: str, text: str, html: str, to: str | None = None) -> bool:
     s = smtp_settings()
+    recipient = (to or s["to"]).strip()
+    if not (s["host"] and recipient):
+        return False
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"], msg["From"], msg["To"] = subject, f"{config.APP_NAME} <{s['from']}>", s["to"]
+        msg["Subject"], msg["From"], msg["To"] = subject, f"{config.APP_NAME} <{s['from']}>", recipient
         msg.attach(MIMEText(text, "plain", "utf-8"))
         msg.attach(MIMEText(html, "html", "utf-8"))
         with smtplib.SMTP(s["host"], s["port"], timeout=30) as srv:
@@ -93,15 +102,102 @@ def _send_email(subject: str, text: str, html: str) -> bool:
         return False
 
 
+def smtp_ready() -> bool:
+    """SMTP is configured enough to send transactional mail to a given address
+    (host present). The global 'to' isn't required for per-user mail."""
+    return bool(smtp_settings()["host"])
+
+
+def _card(heading: str, lines: list[str], base_url: str = "",
+          btn_label: str = "", btn_path: str = "") -> str:
+    """A small branded transactional email card (approval/availability mails)."""
+    t = THEMES[current_theme()]
+    body = "".join(f'<p style="margin:0 0 10px;color:{t["sub"]};font-size:14.5px;line-height:1.5;">{ln}</p>'
+                   for ln in lines)
+    btn = ""
+    if base_url and btn_label:
+        btn = (f'<a href="{base_url}{btn_path}" style="display:inline-block;background:{t["btnbg"]};'
+               f'color:{t["btnfg"]};font-weight:700;text-decoration:none;padding:11px 26px;'
+               f'border-radius:8px;font-size:14px;margin-top:6px;">{btn_label}</a>')
+    return f"""<!doctype html><html><body style="margin:0;background:{t['page']};">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:{t['page']};padding:28px 0;"><tr><td align="center">
+<table width="520" cellpadding="0" cellspacing="0" style="background:{t['card']};border-radius:12px;overflow:hidden;max-width:94%;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
+<tr><td style="background:{t['head']};padding:18px 26px;">
+<span style="color:{t['brand']};font-size:18px;font-weight:700;">{config.APP_NAME}</span></td></tr>
+<tr><td style="padding:22px 26px;">
+<p style="margin:0 0 12px;color:{t['title']};font-size:16px;font-weight:700;">{heading}</p>
+{body}{btn}</td></tr>
+<tr><td style="background:{t['foot']};padding:12px 26px;color:{t['footfg']};font-size:12px;">
+{config.APP_NAME} · manage email preferences in Settings.</td></tr>
+</table></td></tr></table></body></html>"""
+
+
+def request_pending(book: dict, requester: str, admin_emails: list[str], base_url: str = ""):
+    """A user requested a book that needs admin approval — tell the admins.
+    Dynamic strings (title/author/requester come from external metadata or a
+    user-chosen name) are HTML-escaped so they can't inject markup into the mail."""
+    raw_title = book.get("title", "a book")
+    title, author, who = _esc(raw_title), _esc(book.get("author", "")), _esc(requester)
+    fmt = "eBook" if book.get("format") == "ebook" else "audiobook"
+    subject = _clean_subject(f"{config.APP_NAME}: approval needed — “{raw_title}”")
+    lines = [f"<b>{who}</b> requested the {fmt} <b>{title}</b>{(' by ' + author) if author else ''}.",
+             "It's waiting for your approval."]
+    _discord(f"🕓 **{requester}** requested **{raw_title}**{(' — ' + book.get('author','')) if book.get('author') else ''} ({fmt}) — awaiting approval.")
+    if smtp_ready():
+        html = _card("A request needs your approval", lines, base_url, "Review requests", "/requests")
+        text = f"{requester} requested {raw_title} ({fmt}). Awaiting approval."
+        for em in admin_emails:
+            _send_email(subject, text, html, to=em)
+
+
+def request_approved(book: dict, to_email: str, base_url: str = ""):
+    raw_title = book.get("title", "a book")
+    title, author = _esc(raw_title), _esc(book.get("author", ""))
+    if not (to_email and smtp_ready()):
+        return
+    subject = _clean_subject(f"{config.APP_NAME}: your request for “{raw_title}” was approved")
+    lines = [f"Good news — your request for <b>{title}</b>{(' by ' + author) if author else ''} was approved.",
+             "We're fetching it now; you'll get another note when it's ready."]
+    _send_email(subject, f"Your request for {raw_title} was approved and is being fetched.",
+                _card("Request approved 🎉", lines, base_url, "View your requests", "/requests"), to=to_email)
+
+
+def request_denied(book: dict, to_email: str, reason: str = "", base_url: str = ""):
+    raw_title = book.get("title", "a book")
+    title, author = _esc(raw_title), _esc(book.get("author", ""))
+    if not (to_email and smtp_ready()):
+        return
+    subject = _clean_subject(f"{config.APP_NAME}: your request for “{raw_title}” wasn't approved")
+    lines = [f"Your request for <b>{title}</b>{(' by ' + author) if author else ''} wasn't approved."]
+    if reason:
+        lines.append(f"Reason: {_esc(reason)}")
+    _send_email(subject, f"Your request for {raw_title} wasn't approved." + (f" {reason}" if reason else ""),
+                _card("Request not approved", lines, base_url), to=to_email)
+
+
+def request_available_user(book: dict, to_email: str, base_url: str = ""):
+    """Per-user 'it's ready' mail — sent to the requester who owns the request."""
+    raw_title = book.get("title", "a book")
+    title, author = _esc(raw_title), _esc(book.get("author", ""))
+    if not (to_email and smtp_ready()):
+        return
+    fmt = "eBook" if book.get("format") == "ebook" else "audiobook"
+    subject = _clean_subject(f"{config.APP_NAME}: “{raw_title}” is ready")
+    lines = [f"Your {fmt} <b>{title}</b>{(' by ' + author) if author else ''} just landed in the library — enjoy!"]
+    _send_email(subject, f"{raw_title} is now available in your library.",
+                _card("It's ready 📚", lines, base_url, "Open library", "/requests"), to=to_email)
+
+
 def _row(s: dict, t: dict) -> str:
-    cover = (f'<img src="{s["cover"]}" width="56" height="56" style="border-radius:6px;'
+    # escape catalog-sourced strings (title/author/reason) and the cover URL
+    cover = (f'<img src="{_esc(s["cover"], quote=True)}" width="56" height="56" style="border-radius:6px;'
              'object-fit:cover;display:block;">' if s.get("cover")
              else f'<div style="width:56px;height:56px;border-radius:6px;background:{t["tag"]};"></div>')
     return (f'<tr><td style="padding:10px 14px 10px 0;width:56px;vertical-align:top;">{cover}</td>'
             f'<td style="padding:10px 0;vertical-align:top;">'
-            f'<div style="font-weight:600;color:{t["title"]};font-size:15px;">{s["title"]}</div>'
-            f'<div style="color:{t["sub"]};font-size:13px;">{s["author"]}</div>'
-            f'<div style="color:{t["reason"]};font-size:13px;font-style:italic;margin-top:3px;">{s["reason"]}</div>'
+            f'<div style="font-weight:600;color:{t["title"]};font-size:15px;">{_esc(s.get("title",""))}</div>'
+            f'<div style="color:{t["sub"]};font-size:13px;">{_esc(s.get("author",""))}</div>'
+            f'<div style="color:{t["reason"]};font-size:13px;font-style:italic;margin-top:3px;">{_esc(s.get("reason",""))}</div>'
             f'</td></tr>')
 
 
@@ -164,21 +260,27 @@ def _custom_webhook(payload: dict):
         log.warning("custom webhook failed: %s", e)
 
 
-def available(book: dict, base_url: str = ""):
-    """Fire when a requested book lands in Audiobookshelf. Master switch is
-    notify_avail_enabled; each channel still self-gates on its own config."""
-    if db.get_meta("notify_avail_enabled", "0") != "1":
-        return
-    title, author = book.get("title", "a book"), book.get("author", "")
+def request_available(row: dict, base_url: str = ""):
+    """A requested book just landed. Two audiences, kept distinct for multi-user:
+      1. the **requester** gets a personal email (honouring their own toggle), and
+      2. the admin's **global channels** (Discord / Apprise / custom webhook) fan
+         out if the install-wide 'available' alert is on.
+    `row` is a requests-table row (has user_id, title, author, format)."""
+    book = {"title": row.get("title", "a book"), "author": row.get("author", ""),
+            "format": row.get("format", "audiobook")}
     base = base_url or db.get_meta("public_url", "")
-    subject = f"{config.APP_NAME}: “{title}” is ready to listen"
-    body = f"“{title}”{(' by ' + author) if author else ''} just landed in your Audiobookshelf library."
-    _discord(f"📚 **{title}**{(' — ' + author) if author else ''} is now in your library."
-             + (f" {base}" if base else ""))
-    _apprise(subject, body)
-    _custom_webhook({"event": "available", "title": title, "author": author, "url": base})
-    if email_enabled():
-        _send_email(subject, body, f"<p style='font-family:sans-serif;font-size:15px'>{body}</p>")
+    # 1) personal email to whoever requested it
+    uid = row.get("user_id")
+    user = db.get_user(uid) if uid else None
+    if user and user.get("email") and db.get_pref(uid, "notify_available", "1") == "1":
+        request_available_user(book, user["email"], base)
+    # 2) admin's global firehose channels (optional)
+    if db.get_meta("notify_avail_enabled", "0") == "1":
+        title, author = book["title"], book["author"]
+        _discord(f"📚 **{title}**{(' — ' + author) if author else ''} is now in the library."
+                 + (f" {base}" if base else ""))
+        _apprise(f"{config.APP_NAME}: {title} is ready", f"{title} is now available.")
+        _custom_webhook({"event": "available", "title": title, "author": author, "url": base})
 
 
 def new_release(book: dict, base_url: str = ""):

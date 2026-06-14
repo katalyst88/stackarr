@@ -14,9 +14,9 @@
 </div>
 
 <div class="goal-card">
-  <div class="goal-ring" style="--pct: {{ ((read_this_year / goal * 100) if goal else 0)|round(0,'floor')|int }}">
-    <div class="goal-num">{{ read_this_year }}{% if goal %}<span class="goal-of">/{{ goal }}</span>{% endif %}</div>
-    <div class="goal-lbl">read in {{ year }}</div>
+  <div class="goal-bar" style="--pct: {{ ((read_this_year / goal * 100) if goal else (100 if read_this_year else 0))|round(0,'floor')|int }}">
+    <div class="goal-bar-fill"></div>
+    <div class="goal-bar-text"><span class="goal-bar-num">{{ read_this_year }}</span>{% if goal %}<span class="goal-of">/ {{ goal }}</span>{% endif %}<span class="goal-lbl">read in {{ year }}</span></div>
   </div>
   <div class="goal-set">
     <h3>{{ year }} reading goal</h3>

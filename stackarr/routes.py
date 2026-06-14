@@ -7,10 +7,25 @@ from flask import (Blueprint, jsonify, redirect, render_template, request,
                    session, url_for)
 
 from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
-               discover, ebookmeta, formats, notify, tagging)
+               discover, ebookmeta, formats, notify, recommend, tagging)
 
 log = logging.getLogger("stackarr.routes")
 bp = Blueprint("main", __name__)
+
+# Recommendation lanes — single source of truth for their display titles and the
+# order they appear on the Suggestions page. To add a lane: give it a key here,
+# emit suggestions with that `lane` value from the recommender, and (optionally)
+# place it in LANE_ORDER. Both suggestions_page and lane_grid read these.
+LANE_TITLES = {
+    "series": "Series to finish", "author": "More from authors you love",
+    "enjoyed": "Readers also enjoyed", "discover_author": "New authors to discover",
+    "narrator": "Narrators you love", "genre": "More in your favourite genres",
+    "mood": "Matches your mood", "hidden": "Off the beaten path", "awards": "Award winners",
+    "short": "Short listens", "epic": "Epic listens", "upcoming": "New & upcoming",
+    "importlist": "From your reading list", "discover": "Popular picks", "foryou": "For you",
+}
+LANE_ORDER = ["series", "enjoyed", "mood", "discover_author", "author", "narrator", "genre",
+              "hidden", "awards", "short", "epic", "upcoming", "importlist", "foryou", "discover"]
 
 
 # ------------------------------------------------------------------ auth ---
@@ -24,19 +39,52 @@ def login():
     import time
     error = ""
     ip = request.remote_addr or "?"
+    providers = auth.login_providers()
+    first_run = db.user_count() == 0          # no accounts yet -> bootstrap admin
+    ctx = {"providers": providers, "first_run": first_run,
+           "allow_register": True}
+
+    def _page(err="", code=200):
+        return render_template("login.html", error=err, **ctx), code
+
     if request.method == "POST":
         cnt, first = _LOGIN_FAILS.get(ip, (0, 0.0))
         if cnt >= _LOCK_AFTER and (time.time() - first) < _LOCK_WINDOW:
-            return render_template("login.html", error="Too many attempts — try again in a few minutes."), 429
+            return _page("Too many attempts — try again in a few minutes.", 429)
         if (time.time() - first) >= _LOCK_WINDOW:
             cnt, first = 0, time.time()
-        u = auth.do_login(request.form.get("username", ""), request.form.get("password", ""))
-        if u:
-            _LOGIN_FAILS.pop(ip, None)
-            return redirect(request.args.get("next") or url_for("main.index"))
+
+        action = request.form.get("action", "signin")
+        provider = (request.form.get("provider") or "local").strip()
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+
+        if action == "register":
+            invite = (request.form.get("invite") or "").strip()
+            want = db.get_meta("invite_code", "")
+            if not first_run and want and invite != want:
+                error = "That invite code isn't right."
+            elif not username or not password:
+                error = "Pick a username and password."
+            else:
+                u = auth.register_local(username, password, request.form.get("email", "").strip())
+                if u:
+                    _LOGIN_FAILS.pop(ip, None)
+                    return redirect(request.args.get("next") or url_for("main.index"))
+                error = "That username is taken."
+        else:
+            if provider == "local":
+                u = auth.do_login_local(username, password)
+            else:
+                u = auth.do_login_provider(provider, username, password)
+            if u:
+                _LOGIN_FAILS.pop(ip, None)
+                return redirect(request.args.get("next") or url_for("main.index"))
+            error = "Wrong username or password."
+
         _LOGIN_FAILS[ip] = (cnt + 1, first or time.time())
-        error = "Wrong Audiobookshelf username or password"
-    return render_template("login.html", error=error)
+        return _page(error)
+    return _page()
 
 
 @bp.route("/logout", methods=["POST"])
@@ -93,24 +141,7 @@ def home_page():
     fresh picks, and new from authors you follow — links out to everything."""
     import datetime
     u = auth.current_user()
-    # currently reading (manual shelf + auto in-progress, capped)
-    reading = db.shelf_list(u["id"], "reading")[:6]
-    seen = {(r.get("title") or "").lower() for r in reading}
-    try:
-        with db.conn() as c:
-            lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,format FROM library")}
-        for h in absclient.listening_history(u["abs_token"]):
-            if len(reading) >= 6:
-                break
-            if not h.get("finished") and (h.get("progress") or 0) > 0.02:
-                m = lib.get(h["item_id"]) or {}
-                if m.get("title") and m["title"].lower() not in seen:
-                    seen.add(m["title"].lower())
-                    reading.append({"rkey": db.rating_key("", m["title"], m.get("author", "")), "title": m["title"],
-                                    "author": m.get("author", ""), "cover": url_for("main.cover", item_id=h["item_id"]),
-                                    "format": "audiobook", "auto": True})
-    except Exception:
-        pass
+    shelves, counts = _shelves_data(u)
     # a few fresh picks + new-from-upcoming + goal + up-next count
     with db.conn() as c:
         fresh = [dict(r) for r in c.execute(
@@ -118,17 +149,18 @@ def home_page():
             "WHERE user_id=? AND status='pending' AND lane NOT IN ('upcoming') ORDER BY score DESC LIMIT 8", (u["id"],))]
         upcoming = [dict(r) for r in c.execute(
             "SELECT id,title,author,cover,reason,format,asin,extra FROM suggestions "
-            "WHERE user_id=? AND lane='upcoming' ORDER BY extra DESC LIMIT 6", (u["id"],))]
+            "WHERE user_id=? AND lane='upcoming' AND status='pending' ORDER BY extra DESC LIMIT 6", (u["id"],))]
         want_n = c.execute("SELECT COUNT(*) n FROM shelf WHERE user_id=? AND state='want'", (u["id"],)).fetchone()["n"]
         avail_n = c.execute("SELECT COUNT(*) n FROM requests WHERE user_id=? AND status='available'", (u["id"],)).fetchone()["n"]
     year = datetime.date.today().year
-    read_year = sum(1 for d in db.finished_dates(u["id"]) if d.startswith(str(year)))
+    read_year = sum(1 for d in _finish_dates_all(u) if d.startswith(str(year)))
     try:
         goal = int(db.get_meta(f"goal_{u['id']}", "0") or 0)
     except ValueError:
         goal = 0
-    return render_template("home.html", reading=reading, fresh=fresh, upcoming=upcoming,
-                           goal=goal, read_year=read_year, year=year, want_n=want_n, avail_n=avail_n)
+    return render_template("home.html", fresh=fresh, upcoming=upcoming,
+                           goal=goal, read_year=read_year, year=year, want_n=want_n, avail_n=avail_n,
+                           shelves=shelves, counts=counts)
 
 
 @bp.route("/suggestions")
@@ -144,16 +176,8 @@ def suggestions_page():
     lanes = {}
     for r in rows:
         lanes.setdefault(r["lane"], []).append(r)
-    lane_titles = {"series": "Series to finish", "author": "More from authors you love",
-                   "enjoyed": "Readers also enjoyed", "discover_author": "New authors to discover",
-                   "narrator": "Narrators you love", "genre": "More in your favourite genres",
-                   "mood": "Matches your mood", "hidden": "Off the beaten path", "awards": "Award winners",
-                   "short": "Short listens", "epic": "Epic listens",
-                   "upcoming": "New & upcoming", "importlist": "From your reading list",
-                   "discover": "Popular picks", "foryou": "For you"}
-    lane_order = ["series", "enjoyed", "mood", "discover_author", "author", "narrator", "genre",
-                  "hidden", "awards", "short", "epic", "upcoming", "importlist", "foryou", "discover"]
-    lanes = {k: lanes[k] for k in lane_order if k in lanes}
+    lane_titles = LANE_TITLES
+    lanes = {k: lanes[k] for k in LANE_ORDER if k in lanes}
     # authors to feature as browse cards — only SUGGESTED authors (new discoveries /
     # readers-also-enjoyed), NOT the "authors you love" backlist lane.
     seen_a, rec_authors = set(), []
@@ -195,12 +219,7 @@ def suggestions_page():
 @auth.login_required
 def lane_grid(lane):
     u = auth.current_user()
-    titles = {"series": "Series to finish", "author": "More from authors you love",
-              "enjoyed": "Readers also enjoyed", "discover_author": "New authors to discover",
-              "narrator": "Narrators you love", "genre": "More in your favourite genres",
-              "hidden": "Hidden gems", "awards": "Award winners", "short": "Short listens",
-              "epic": "Epic listens", "upcoming": "New & upcoming", "importlist": "From your reading list",
-              "discover": "Popular picks", "foryou": "For you"}
+    titles = LANE_TITLES
     with db.conn() as c:
         rows = [dict(r) for r in c.execute(
             "SELECT * FROM suggestions WHERE user_id=? AND lane=? AND status='pending' ORDER BY score DESC",
@@ -229,7 +248,56 @@ def requests_page():
                     f"JOIN users u ON u.id=r.user_id {where.replace('status','r.status')} ORDER BY r.id DESC LIMIT 200")]
         else:
             rows = [dict(r) for r in c.execute(f"SELECT * FROM requests {where} AND user_id=? ORDER BY id DESC LIMIT 200", (u["id"],))]
-    return render_template("requests.html", requests=rows, admin=admin, wanted=wanted)
+        # admins get the approval queue (everyone's pending requests)
+        approvals = []
+        if admin:
+            approvals = [dict(r) for r in c.execute(
+                "SELECT r.*, u.username FROM requests r JOIN users u ON u.id=r.user_id "
+                "WHERE r.status='pending_approval' ORDER BY r.id")]
+    # a normal user shouldn't see their pending_approval rows twice; they already
+    # appear in their own list with a 'pending_approval' status badge.
+    return render_template("requests.html", requests=rows, admin=admin, wanted=wanted,
+                           approvals=approvals)
+
+
+def _finish_dates_all(u) -> list[str]:
+    """Every book the user has FINISHED, as ISO dates — combining Audiobookshelf
+    listening history, connected ebook sources, and the manual 'read' shelf. Each
+    book counts ONCE: a title finished in Audiobookshelf AND marked read on the
+    shelf is deduped by rating-key so the goal/heatmap aren't inflated."""
+    import datetime
+    # library item_id -> rating-key, so a source finish can be matched to a shelf finish
+    with db.conn() as c:
+        lib = {r["item_id"]: db.rating_key(r["asin"] or "", r["title"], r["author"])
+               for r in c.execute("SELECT item_id,title,author,asin FROM library")}
+    finishes: dict[str, str] = {}      # book key -> earliest finish date
+
+    def _add(key, date):
+        if not key:
+            return
+        if key not in finishes or date < finishes[key]:
+            finishes[key] = date
+
+    try:
+        for h in absclient.listening_history(u["abs_token"]):
+            if h.get("finished") and h.get("last_update"):
+                d = datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat()
+                _add(lib.get(h["item_id"]) or "abs:" + str(h["item_id"]), d)
+    except Exception:
+        pass
+    if formats.show("ebook"):
+        from . import backends
+        for be in backends.sources("ebook"):
+            try:
+                for h in be.reading_history(u):
+                    if h.get("finished") and h.get("last_update"):
+                        d = datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat()
+                        _add(lib.get(h["item_id"]) or "eb:" + str(h["item_id"]), d)
+            except Exception:
+                pass
+    for rkey, d in db.finished_keyed(u["id"]):     # manual read-shelf finishes
+        _add(rkey, d)
+    return list(finishes.values())
 
 
 def _heatmap(dates: list[str]) -> dict:
@@ -365,6 +433,10 @@ def history_page():
         rk = db.rating_key(asin, title, author)
         if rk in hidden:
             return
+        # no stored cover (ebook / marked-read item) -> resolve it lazily via /coverart
+        if not cover:
+            cover = url_for("main.coverart", asin=asin or "", title=title or "",
+                            author=author or "", fmt=fmt)
         books.append({"asin": asin or "", "rkey": rk, "title": title or "Untitled",
                       "author": author or "", "cover": cover, "format": fmt,
                       "stars": (rated.get(rk) or {}).get("stars", 0), "when": when})
@@ -404,7 +476,7 @@ def history_page():
 
     # optionally drop already-rated books entirely (a "rate it and it's gone"
     # workflow) — otherwise keep them, sunk to the bottom.
-    hide_rated = db.get_meta("hide_rated_history", "0") == "1"
+    hide_rated = db.get_pref(u["id"], "hide_rated_history", "0") == "1"
     if hide_rated:
         books = [b for b in books if not b["stars"]]
     # unrated float to the top (the to-do pile); rated sink to the bottom.
@@ -412,6 +484,29 @@ def history_page():
     books.sort(key=lambda b: (b["stars"] > 0, -(b["when"] or 0)))
     rated_n = sum(1 for b in books if b["stars"])
     return render_template("history.html", books=books, rated_n=rated_n, hide_rated=hide_rated)
+
+
+_INFER_NON_SERIES = re.compile(
+    r"\b(unabridged|abridged|edition|audiobook|novel|novella|boxset|box set|collection|complete)\b", re.I)
+
+
+def _infer_series(title: str):
+    """Recover a (series_name, sequence) from a title when the source left the
+    series field blank. Two common shapes:
+      * trailing parenthetical — "Leviathan Falls (The Expanse Book 9)"
+      * leading numbered prefix — "The Expanse 05 Nemesis Games"
+    Returns (None, None) when nothing confident matches (so unrelated standalone
+    titles like "1984" never get grouped). Conservative on purpose."""
+    t = (title or "").strip()
+    m = re.search(r"\(([^()]+?)(?:[, ]+Book\s+(\d+(?:\.\d+)?))?\)\s*$", t, re.I)
+    if m and not _INFER_NON_SERIES.search(m.group(1)):
+        name = m.group(1).strip()
+        if name and not name[0].isdigit() and len(name) > 2:
+            return name, (float(m.group(2)) if m.group(2) else None)
+    m = re.match(r"^(.+?)\s+(\d{1,3}(?:\.\d+)?)\s+([A-Za-z].*)$", t)
+    if m and len(m.group(1).strip()) > 2 and any(ch.isalpha() for ch in m.group(1)):
+        return m.group(1).strip(), float(m.group(2))
+    return None, None
 
 
 @bp.route("/series")
@@ -422,24 +517,33 @@ def series_page():
     u = auth.current_user()
     # which library items has the user actually FINISHED (read), so we can show
     # reading progress separately from what's downloaded.
-    finished_ids = set()
+    finished_ids, inprogress_ids = set(), set()
     try:
         for h in absclient.listening_history(u["abs_token"]):
             if h.get("finished"):
                 finished_ids.add(h["item_id"])
+            elif (h.get("progress") or 0) > 0.02:
+                inprogress_ids.add(h["item_id"])
     except Exception:
         pass
     if formats.show("ebook"):
         from . import backends
         for be in backends.sources("ebook"):
             try:
-                finished_ids |= {h["item_id"] for h in be.reading_history(u) if h.get("finished")}
+                for h in be.reading_history(u):
+                    if h.get("finished"):
+                        finished_ids.add(h["item_id"])
+                    elif 0.02 < (h.get("progress") or 0) < 1:
+                        inprogress_ids.add(h["item_id"])
             except Exception:
                 pass
     with db.conn() as c:
+        # Include books with NO series field — many audiobook rips encode the
+        # series in the title ("The Expanse 05 …") and some ebook feeds drop the
+        # series metadata. _infer_series recovers those so they still group.
         libr = [dict(r) for r in c.execute(
             "SELECT item_id,title,author,series,series_seq,asin,format FROM library "
-            "WHERE gone_at IS NULL AND series<>'' ORDER BY series, series_seq")]
+            "WHERE gone_at IS NULL ORDER BY series, series_seq")]
         sugg = [dict(r) for r in c.execute(
             "SELECT id,title,author,series,asin,cover,reason FROM suggestions "
             "WHERE user_id=? AND lane='series' AND status='pending' ORDER BY score DESC", (u["id"],))]
@@ -461,30 +565,60 @@ def series_page():
                 return rq["status"]
         return None
 
-    groups = {}
+    def _series_key(name):
+        # merge "The Expanse" / "Expanse" and casing variants into one group
+        return re.sub(r"^the\s+", "", (name or "").strip(), flags=re.I).lower()
+
+    # group by effective series: the stored field, else one inferred from the
+    # title. Variants collapse by normalised key; the longest seen name displays.
+    groups, display_name = {}, {}
     for b in libr:
-        groups.setdefault(b["series"], []).append(b)
+        series = (b.get("series") or "").strip()
+        if not series:
+            series, inferred_seq = _infer_series(b["title"])
+            if not series:
+                continue
+            if b.get("series_seq") is None and inferred_seq is not None:
+                b["series_seq"] = inferred_seq
+        key = _series_key(series)
+        if key not in display_name or len(series) > len(display_name[key]):
+            display_name[key] = series
+        groups.setdefault(key, []).append(b)
+    # relabel groups from the normalised key to the chosen display name
+    groups = {display_name[k]: v for k, v in groups.items()}
+
+    def _seq_from_title(t):
+        # ABS often stores the series name without a number; recover it from the
+        # title, e.g. "Cradle Book 5 - Ghostwater", "Reaper: Cradle, Book 10".
+        m = re.search(r"\bbook\s+(\d+(?:\.\d+)?)\b", (t or ""), re.I) or re.search(r"#\s*(\d+(?:\.\d+)?)", t or "")
+        try:
+            return float(m.group(1)) if m else None
+        except (ValueError, TypeError):
+            return None
 
     both = formats.multi()
     cards = []
     for name, books in groups.items():
-        books.sort(key=lambda b: b["series_seq"] if b["series_seq"] is not None else 0)
-        seqs = [b["series_seq"] for b in books if b["series_seq"] is not None]
-        # reading progress: highest sequence among books you've FINISHED
-        read_seqs = [b["series_seq"] for b in books
-                     if b["series_seq"] is not None and b["item_id"] in finished_ids]
-        # per-format ownership of each sequence (for "get the other format" gaps)
-        audio_seqs = {round(b["series_seq"], 1) for b in books
-                      if b["series_seq"] is not None and (b.get("format") or "audiobook") == "audiobook"}
-        ebook_seqs = {round(b["series_seq"], 1) for b in books
-                      if b["series_seq"] is not None and b.get("format") == "ebook"}
+        # effective sequence (series field, else parsed from title) + read flag
+        for b in books:
+            b["seq"] = b["series_seq"] if b["series_seq"] is not None else _seq_from_title(b["title"])
+            b["finished"] = b["item_id"] in finished_ids
+            b["reading"] = b["item_id"] in inprogress_ids
+        books.sort(key=lambda b: b["seq"] if b["seq"] is not None else 0)
+        seqs = [b["seq"] for b in books if b["seq"] is not None]
+        read_seqs = [b["seq"] for b in books if b["seq"] is not None and b["finished"]]
+        audio_seqs = {round(b["seq"], 1) for b in books
+                      if b["seq"] is not None and (b.get("format") or "audiobook") == "audiobook"}
+        ebook_seqs = {round(b["seq"], 1) for b in books
+                      if b["seq"] is not None and b.get("format") == "ebook"}
         all_seqs = audio_seqs | ebook_seqs
         nxt = next_by_series.get(norm(name))
         fmts = {b.get("format") or "audiobook" for b in books}
         cards.append({"name": name, "owned": len(books),
                       "highest": max(seqs) if seqs else None,
                       "read_to": max(read_seqs) if read_seqs else None,
-                      "read_count": len(read_seqs),
+                      "read_count": sum(1 for b in books if b["finished"]),
+                      "reading_now": any(b["item_id"] in inprogress_ids for b in books),
                       "books": books,
                       "format": (books[0].get("format") or "audiobook") if len(fmts) == 1 else "both",
                       "missing_audio": (both and len(all_seqs - audio_seqs) > 0),
@@ -666,6 +800,38 @@ def api_series_missing():
                     "owned": len(entries) - len(missing), "missing": missing, "entries": entries})
 
 
+@bp.route("/api/series/repair", methods=["POST"])
+@auth.admin_required
+def api_series_repair():
+    """Find library books whose series field is blank but recoverable from the
+    title, and (when apply=true) write the series back to Audiobookshelf so it's
+    fixed everywhere — not just inferred on the Up Next display. Calibre-Web has
+    no write API, so only ABS audiobook items can be repaired. Admin-only."""
+    apply_now = bool((request.get_json(silent=True) or {}).get("apply"))
+    with db.conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT item_id,title,format FROM library WHERE gone_at IS NULL AND (series IS NULL OR series='')")]
+    proposals = []
+    for r in rows:
+        # only ABS audiobook items have a writable, un-namespaced id
+        if (r.get("format") or "audiobook") != "audiobook" or ":" in (r["item_id"] or ""):
+            continue
+        name, seq = _infer_series(r["title"])
+        if name:
+            proposals.append({"item_id": r["item_id"], "title": r["title"], "series": name, "seq": seq})
+    if not apply_now:
+        return jsonify({"ok": True, "count": len(proposals), "proposals": proposals[:60]})
+    written = sum(1 for p in proposals if absclient.set_series(p["item_id"], p["series"], p["seq"]))
+    if written:
+        try:
+            from . import scheduler
+            scheduler.refresh_library()
+        except Exception as e:
+            log.debug("post-repair refresh failed: %s", e)
+    return jsonify({"ok": True, "written": written, "count": len(proposals),
+                    "detail": f"Repaired {written} of {len(proposals)} item(s) in Audiobookshelf."})
+
+
 @bp.route("/api/series/add", methods=["POST"])
 @auth.login_required
 def api_series_add():
@@ -678,7 +844,15 @@ def api_series_add():
     fmt = body.get("format") or "audiobook"
     if not name or not author:
         return jsonify({"ok": False, "detail": "Series needs an author Stackarr can look up."}), 400
-    res = chaptarr.add_and_search(name, author, fmt=fmt)
+    # non-admins (non-trusted) can't bulk-grab a whole series past the approval gate
+    if _needs_approval(u):
+        return jsonify(_queue_for_approval(u, {"title": name, "author": author, "format": fmt}, "series"))
+    fmts = ["audiobook", "ebook"] if fmt == "both" else [fmt]
+    res = {"ok": False, "detail": "Nothing to add."}
+    for f in fmts:
+        res = chaptarr.add_and_search(name, author, fmt=f)
+    if fmt == "both" and res.get("ok"):
+        res = {"ok": True, "detail": f"Sent “{name}” to Chaptarr as audiobook + eBook."}
     with db.conn() as c:
         c.execute("INSERT INTO requests (user_id,title,author,status,detail,source) VALUES (?,?,?,?,?,?)",
                   (u["id"], f"Full series: {name}", author,
@@ -686,14 +860,11 @@ def api_series_add():
     return jsonify(res)
 
 
-@bp.route("/shelves")
-@auth.login_required
-def shelves_page():
-    """Your reading shelves: Want to read · Reading · Read."""
-    u = auth.current_user()
+def _shelves_data(u):
+    """Want / Reading / Read shelves, with 'Reading' auto-populated from
+    in-progress state across every connected library (ABS + ebook sources +
+    Hardcover), merged with anything set manually. Returns (shelves, counts)."""
     shelves = {s: db.shelf_list(u["id"], s) for s in ("reading", "want", "read")}
-    # auto-pull "currently reading" from in-progress state across your libraries
-    # (ABS + ebook sources + Hardcover), merged with anything you set manually.
     seen_titles = {(it.get("title") or "").strip().lower() for it in shelves["reading"]}
 
     def _add_reading(title, author, cover, fmt, rkey=""):
@@ -705,12 +876,14 @@ def shelves_page():
                                    "author": author or "", "cover": cover or "", "format": fmt, "auto": True})
     try:
         with db.conn() as c:
-            lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,format FROM library")}
+            lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,asin,format FROM library")}
         for h in absclient.listening_history(u["abs_token"]):
             if not h.get("finished") and (h.get("progress") or 0) > 0.02:
                 m = lib.get(h["item_id"]) or {}
                 if m.get("title"):
-                    _add_reading(m["title"], m.get("author", ""), url_for("main.cover", item_id=h["item_id"]), "audiobook")
+                    # pass the real ASIN as the key so the card links to the book page
+                    _add_reading(m["title"], m.get("author", ""), url_for("main.cover", item_id=h["item_id"]),
+                                 "audiobook", rkey=(m.get("asin") or "").strip())
         if formats.show("ebook"):
             from . import backends
             for be in backends.sources("ebook"):
@@ -728,16 +901,14 @@ def shelves_page():
         log.debug("shelves auto-reading failed: %s", e)
     counts = dict(db.shelf_counts(u["id"]))
     counts["reading"] = len(shelves["reading"])
-    goal = 0
-    try:
-        goal = int(db.get_meta(f"goal_{u['id']}", "0") or 0)
-    except ValueError:
-        goal = 0
-    import datetime
-    year = datetime.date.today().year
-    read_this_year = sum(1 for d in db.finished_dates(u["id"]) if d.startswith(str(year)))
-    return render_template("shelves.html", shelves=shelves, counts=counts,
-                           goal=goal, read_this_year=read_this_year, year=year)
+    return shelves, counts
+
+
+@bp.route("/shelves")
+@auth.login_required
+def shelves_page():
+    # Shelves are now part of the Home hub — keep the URL working for bookmarks.
+    return redirect(url_for("main.home_page"))
 
 
 @bp.route("/api/adventurousness", methods=["POST"])
@@ -772,6 +943,57 @@ def api_vibes():
     return jsonify({"ok": True})
 
 
+@bp.route("/api/account/password", methods=["POST"])
+@auth.login_required
+def api_account_password():
+    u = auth.current_user()
+    b = request.get_json(force=True)
+    new = (b.get("password") or "").strip()
+    if len(new) < 6:
+        return jsonify({"error": "Password must be at least 6 characters."}), 400
+    # if a password is already set, require the current one
+    if u.get("password_hash") and not db.verify_local(u["username"], b.get("current") or ""):
+        return jsonify({"error": "Current password is wrong."}), 403
+    db.set_password(u["id"], new)
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/account/email", methods=["POST"])
+@auth.login_required
+def api_account_email():
+    u = auth.current_user()
+    db.set_email(u["id"], (request.get_json(force=True).get("email") or "").strip())
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/account/link", methods=["POST"])
+@auth.login_required
+def api_account_link():
+    """Link an external sign-in method to the current account."""
+    u = auth.current_user()
+    b = request.get_json(force=True)
+    ok = auth.link_provider(u, (b.get("provider") or "").strip(),
+                            b.get("username", ""), b.get("password", ""))
+    if not ok:
+        return jsonify({"error": "Couldn't verify those credentials, or that account is already linked to someone else."}), 400
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/account/unlink", methods=["POST"])
+@auth.login_required
+def api_account_unlink():
+    u = auth.current_user()
+    provider = (request.get_json(force=True).get("provider") or "").strip()
+    # don't let someone strip their ONLY way back in
+    links = db.links_for(u["id"])
+    if not u.get("password_hash") and len(links) <= 1:
+        return jsonify({"error": "Set a password first — this is your only way to sign in."}), 400
+    db.link_remove(provider, u["id"])
+    if provider == "abs":
+        db.update_abs(u["id"], None, "")
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/goal", methods=["POST"])
 @auth.login_required
 def api_goal():
@@ -791,7 +1013,7 @@ def upcoming_page():
     u = auth.current_user()
     with db.conn() as c:
         rows = [dict(r) for r in c.execute(
-            "SELECT * FROM suggestions WHERE user_id=? AND lane='upcoming' ORDER BY extra", (u["id"],))]
+            "SELECT * FROM suggestions WHERE user_id=? AND lane='upcoming' AND status='pending' ORDER BY extra", (u["id"],))]
         for r in rows:
             r["available"] = _owned(c, r["asin"], r["title"], r["author"])
     import datetime
@@ -863,6 +1085,8 @@ def api_author_add():
     author = request.get_json(force=True).get("author", "").strip()
     if not author:
         return jsonify({"error": "author required"}), 400
+    if _needs_approval(u):
+        return jsonify(_queue_for_approval(u, {"title": f"All books by {author}", "author": author}, "author"))
     res = chaptarr.add_and_search(author, author)
     with db.conn() as c:
         c.execute("INSERT INTO requests (user_id,title,author,status,detail,source) VALUES (?,?,?,?,?,?)",
@@ -916,28 +1140,62 @@ def settings_page():
                            koreader_sync=db.get_meta("koreader_sync", "1" if config.KOREADER_SYNC else "0") == "1",
                            reading={"goodreads_rss": g("goodreads_rss", config.GOODREADS_RSS),
                                     "hardcover_token": g("hardcover_token", config.HARDCOVER_TOKEN)},
-                           hide_rated_history=db.get_meta("hide_rated_history", "0") == "1",
+                           hide_rated_history=db.get_pref(auth.current_user()["id"], "hide_rated_history", "0") == "1",
                            format_mode=formats.mode(),
-                           cross_format_taste=db.get_meta("cross_format_taste", "0") == "1",
+                           cross_format_taste=db.get_pref(auth.current_user()["id"], "cross_format_taste", "0") == "1",
                            adventurousness=db.get_meta(f"adventurousness_{auth.current_user()['id']}", str(config.ADVENTUROUSNESS)),
                            log_level=config.LOG_LEVEL,
+                           account=_account_ctx(auth.current_user()),
+                           require_approval=db.get_meta("require_approval", "1") == "1",
+                           user_sync=db.get_meta("user_sync", "0") == "1",
+                           manage_users=_manage_users_ctx() if auth.current_user()["role"] == "admin" else [],
+                           notify_prefs=_notify_prefs_ctx(auth.current_user()),
+                           smtp_ready=notify.smtp_ready(),
                            is_admin=auth.current_user()["role"] == "admin")
 
 
+def _manage_users_ctx() -> list[dict]:
+    """User list for the admin Users panel, with each user's trusted flag."""
+    out = []
+    for u in db.all_users():
+        out.append({**u, "trusted": db.get_pref(u["id"], "trusted", "0") == "1"})
+    return out
+
+
+def _notify_prefs_ctx(u: dict) -> dict:
+    return {k: db.get_pref(u["id"], f"notify_{k}", "1") == "1"
+            for k in ("approved", "available", "denied")}
+
+
+def _account_ctx(u: dict) -> dict:
+    """Identity + linked sign-in methods for the Settings → Account section."""
+    linked = {l["provider"] for l in db.links_for(u["id"])}
+    provs = []
+    for p in auth.login_providers():           # connected sources that can authenticate
+        provs.append({"id": p["id"], "label": p["label"], "linked": p["id"] in linked})
+    return {"username": u["username"], "email": u.get("email") or "",
+            "role": u["role"], "has_password": bool(u.get("password_hash")),
+            "providers": provs}
+
+
 # ------------------------------------------------------------------- api ---
-def _owned(c, asin, title, author) -> bool:
+def _owned(c, asin, title, author, fmt=None) -> bool:
     """True only if the book is really in the library — ASIN match, or exact
     title AND author match. Title-only matching gives false positives on
-    common one-word titles (e.g. 'Emergence')."""
-    if asin and c.execute("SELECT 1 FROM library WHERE gone_at IS NULL AND asin=? AND asin<>''",
-                          (asin,)).fetchone():
+    common one-word titles (e.g. 'Emergence'). When `fmt` is given, the match is
+    restricted to that format, so owning the audiobook doesn't count as owning
+    the ebook (and the other format can still be grabbed)."""
+    fclause = " AND format=?" if fmt else ""
+    fargs = (fmt,) if fmt else ()
+    if asin and c.execute("SELECT 1 FROM library WHERE gone_at IS NULL AND asin=? AND asin<>''" + fclause,
+                          (asin,) + fargs).fetchone():
         return True
     a = (author or "").split(",")[0].strip().lower()
     if not a:
         return False
     return bool(c.execute(
-        "SELECT 1 FROM library WHERE gone_at IS NULL AND lower(title)=? AND lower(author) LIKE ?",
-        ((title or "").strip().lower(), f"%{a}%")).fetchone())
+        "SELECT 1 FROM library WHERE gone_at IS NULL AND lower(title)=? AND lower(author) LIKE ?" + fclause,
+        ((title or "").strip().lower(), f"%{a}%") + fargs).fetchone())
 
 
 def _ensure_webhook_token() -> str:
@@ -966,11 +1224,18 @@ def _cached_book(asin) -> dict:
     if not asin:
         return {}
     with db.conn() as c:
+        # rating-key slug ("t-…") rows live keyed on rkey/asin in shelf + ratings,
+        # so a 'currently reading' / rated book still resolves to a real page.
         for q in ("SELECT title, author, cover FROM suggestions WHERE asin=? ORDER BY id DESC LIMIT 1",
-                  "SELECT title, author, cover FROM requests WHERE asin=? ORDER BY id DESC LIMIT 1"):
+                  "SELECT title, author, cover FROM requests WHERE asin=? ORDER BY id DESC LIMIT 1",
+                  "SELECT title, author, cover FROM shelf WHERE rkey=? LIMIT 1"):
             row = c.execute(q, (asin,)).fetchone()
             if row and (row["title"] or "").strip():
                 return {"title": row["title"], "author": row["author"], "cover": row["cover"]}
+        row = c.execute("SELECT title, author FROM ratings WHERE asin=? AND title<>'' LIMIT 1",
+                        (asin,)).fetchone()
+        if row:
+            return {"title": row["title"], "author": row["author"]}
         row = c.execute("SELECT title, author FROM library WHERE asin=? AND asin<>'' LIMIT 1",
                         (asin,)).fetchone()
         if row:
@@ -1070,13 +1335,52 @@ def api_search():
     return jsonify(books)
 
 
+def _needs_approval(user) -> bool:
+    """Should this user's grab wait for an admin? Admins self-approve; a global
+    'manual approval' switch (default on) requires it for everyone else, unless
+    that user is marked trusted."""
+    if not user or user.get("role") == "admin":
+        return False
+    if db.get_meta("require_approval", "1") != "1":
+        return False
+    return db.get_pref(user["id"], "trusted", "0") != "1"
+
+
+def _base_url() -> str:
+    try:
+        return db.get_meta("public_url", "") or request.host_url.rstrip("/")
+    except Exception:
+        return db.get_meta("public_url", "")
+
+
+def _queue_for_approval(user, item, source):
+    """Record a request that needs an admin's approval and ping the admins.
+    `item` has title/author and optionally asin/cover/format. Used by both
+    single-book grabs and the bulk series/author 'add all' paths."""
+    with db.conn() as c:
+        c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,source,format) "
+                  "VALUES (?,?,?,?,?,?,?,?,?)",
+                  (user["id"], item.get("asin", ""), item["title"], item.get("author", ""),
+                   item.get("cover", ""), "pending_approval", "Waiting for an admin to approve",
+                   source, item.get("format", "audiobook")))
+    try:
+        notify.request_pending(item, user.get("username", "A user"), db.admin_emails(), _base_url())
+    except Exception as e:
+        log.debug("pending-approval notify failed: %s", e)
+    return {"ok": True, "pending": True, "detail": "Request sent — an admin will approve it shortly."}
+
+
 def _hand_to_chaptarr(user_id, book, source):
     fmt = book.get("format") or "audiobook"
+    user = db.get_user(user_id)
+    # Hold non-admin, non-trusted requests for approval instead of grabbing.
+    if _needs_approval(user):
+        return _queue_for_approval(user, book, source)
     # Bypass Chaptarr if the book is already in a connected library (the user may
     # have added it straight to Audiobookshelf / Kavita / Calibre-Web). Record it
     # as available rather than redundantly asking Chaptarr to grab it.
     with db.conn() as c:
-        if _owned(c, book.get("asin", ""), book.get("title", ""), book.get("author", "")):
+        if _owned(c, book.get("asin", ""), book.get("title", ""), book.get("author", ""), fmt=fmt):
             c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,source,format) "
                       "VALUES (?,?,?,?,?,?,?,?,?)",
                       (user_id, book.get("asin", ""), book["title"], book.get("author", ""),
@@ -1116,9 +1420,13 @@ def api_suggestion(sid, verdict):
         new_status = "approved" if verdict == "approve" else "rejected"
         c.execute("UPDATE suggestions SET status=?,decided_at=datetime('now','localtime') WHERE id=?",
                   (new_status, sid))
+        # a suggestion can have no ASIN (ebook/inferred picks) — fall back to the
+        # title/author key so the negative signal is never silently dropped (the
+        # signals.value column is NOT NULL) and the title sticks as "don't show".
+        sig_val = row.get("asin") or db.rating_key("", row.get("title", ""), row.get("author", ""))
         if verdict == "reject":
             c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
-                      (u["id"], "asin", row["asin"], -3, f"passed: {row['title']}"))
+                      (u["id"], "asin", sig_val, -3, f"passed: {row['title']}"))
         elif verdict == "read":
             # treat like the manual 'already read' seed: positive author/series,
             # never re-suggest this title, and drop it from the queue.
@@ -1129,7 +1437,7 @@ def api_suggestion(sid, verdict):
                 c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
                           (u["id"], "series", row["series"], 2, f"already read: {row['title']}"))
             c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
-                      (u["id"], "asin", row["asin"], -1, f"already read: {row['title']}"))
+                      (u["id"], "asin", sig_val, -1, f"already read: {row['title']}"))
     if verdict == "approve":
         return jsonify(_hand_to_chaptarr(u["id"], row, "suggestion"))
     return jsonify({"status": new_status})
@@ -1184,6 +1492,10 @@ def api_rate():
         meta = audible.by_asin(asin) or {}
         title = title or meta.get("title", "")
         author = author or meta.get("author", "")
+    # Store under the canonical rating key so writes and reads agree. eBooks with
+    # a gb:/ol: id rate under the same title-slug the book page reads (book_page
+    # strips those ids), instead of a separate key that would hide the rating.
+    key = db.rating_key("", title, author) if (asin.startswith(("gb:", "ol:")) and title and author) else asin
     with db.conn() as c:
         # a blank review on an update must not wipe an existing one
         c.execute("INSERT INTO ratings (user_id,asin,title,author,stars,review,spoiler,format,updated_at) "
@@ -1192,8 +1504,8 @@ def api_rate():
                   "stars=excluded.stars, title=excluded.title, author=excluded.author, "
                   "review=CASE WHEN excluded.review<>'' THEN excluded.review ELSE ratings.review END, "
                   "spoiler=excluded.spoiler, format=excluded.format, updated_at=datetime('now','localtime')",
-                  (u["id"], asin, title, author, stars, review, spoiler, fmt))
-    return jsonify({"ok": True, "community": db.community_rating(asin)})
+                  (u["id"], key, title, author, stars, review, spoiler, fmt))
+    return jsonify({"ok": True, "community": db.community_rating(key)})
 
 
 @bp.route("/api/history/remove", methods=["POST"])
@@ -1296,23 +1608,70 @@ def api_requests_status():
 @bp.route("/api/webhook/chaptarr", methods=["POST"])
 def api_webhook_chaptarr():
     """Chaptarr Connect webhook → real-time request updates. Token-protected via
-    ?token= (set the same token in Settings). On import/download, flips the
-    matching request to available/handed."""
+    ?token= (set the same token in Settings). On an import/download event we run
+    the library refresh, which flips a request to 'available' ONLY when the book
+    actually appears in the library in that request's format, and notifies the
+    real requester. Delegating here avoids the old fuzzy title-match that could
+    flip the wrong user's or wrong-format request."""
+    import secrets as _secrets
     token = db.get_meta("chaptarr_webhook_token", "")
-    if not token or request.args.get("token") != token:
+    if not token or not _secrets.compare_digest(request.args.get("token") or "", token):
         return jsonify({"error": "bad token"}), 403
     body = request.get_json(silent=True) or {}
     event = (body.get("eventType") or "").lower()
-    book = (body.get("book") or {})
-    title = (book.get("title") or body.get("bookTitle") or "").strip()
-    if not title:
-        return jsonify({"ok": True, "ignored": "no title"})
-    new = "available" if event in ("download", "bookfileimported", "import") else None
-    if new:
-        with db.conn() as c:
-            c.execute("UPDATE requests SET status=?,updated_at=datetime('now','localtime') "
-                      "WHERE lower(title) LIKE ? AND status IN ('queued','handed','failed')",
-                      (new, f"%{title.lower()[:40]}%"))
+    if event in ("download", "bookfileimported", "import"):
+        try:
+            from . import scheduler
+            scheduler.refresh_library()
+        except Exception as e:
+            log.warning("webhook refresh failed: %s", e)
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/requests/<int:rid>/approve", methods=["POST"])
+@auth.admin_required
+def api_request_approve(rid):
+    with db.conn() as c:
+        row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    row = dict(row)
+    if row["status"] != "pending_approval":
+        return jsonify({"error": "not awaiting approval"}), 400
+    book = {"asin": row["asin"], "title": row["title"], "author": row["author"],
+            "cover": row["cover"], "format": row["format"]}
+    res = chaptarr.add_and_search(book["title"], book["author"], book["asin"], fmt=book["format"])
+    status = "handed" if res["ok"] else "failed"
+    with db.conn() as c:
+        c.execute("UPDATE requests SET status=?,detail=?,chaptarr_ref=?,updated_at=datetime('now','localtime') WHERE id=?",
+                  (status, res.get("detail", ""), res.get("ref", ""), rid))
+    requester = db.get_user(row["user_id"])
+    if requester and requester.get("email") and db.get_pref(row["user_id"], "notify_approved", "1") == "1":
+        try:
+            notify.request_approved(book, requester["email"], _base_url())
+        except Exception as e:
+            log.debug("approved notify failed: %s", e)
+    return jsonify({"ok": res["ok"], "status": status, "detail": res.get("detail", "")})
+
+
+@bp.route("/api/requests/<int:rid>/deny", methods=["POST"])
+@auth.admin_required
+def api_request_deny(rid):
+    reason = (request.get_json(silent=True) or {}).get("reason", "").strip()
+    with db.conn() as c:
+        row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
+        if not row:
+            return jsonify({"error": "not found"}), 404
+        row = dict(row)
+        c.execute("UPDATE requests SET status='denied',detail=?,updated_at=datetime('now','localtime') WHERE id=?",
+                  (reason or "Not approved", rid))
+    requester = db.get_user(row["user_id"])
+    if requester and requester.get("email") and db.get_pref(row["user_id"], "notify_denied", "1") == "1":
+        try:
+            notify.request_denied({"title": row["title"], "author": row.get("author", ""),
+                                   "format": row.get("format", "audiobook")}, requester["email"], reason, _base_url())
+        except Exception as e:
+            log.debug("denied notify failed: %s", e)
     return jsonify({"ok": True})
 
 
@@ -1365,7 +1724,16 @@ def api_retry(rid):
         if not row:
             return jsonify({"error": "not found"}), 404
         row = dict(row)
+        # only failed/denied requests are retryable — don't clobber an available
+        # or pending-approval row.
+        if row["status"] not in ("failed", "denied"):
+            return jsonify({"error": "Only failed requests can be retried."}), 400
+        was_denied = row["status"] == "denied"
         c.execute("DELETE FROM requests WHERE id=?", (rid,))
+    # a denial is an explicit admin decision — re-requesting it goes BACK through
+    # approval (unless the requester is admin), never straight to a grab.
+    if was_denied and u["role"] != "admin":
+        return jsonify(_queue_for_approval(u, row, row.get("source", "manual")))
     return jsonify(_hand_to_chaptarr(u["id"], row, row["source"]))
 
 
@@ -1390,7 +1758,52 @@ def api_shelf():
         return jsonify({"error": "key + valid state required"}), 400
     db.shelf_set(u["id"], rkey, state, b.get("title", ""), b.get("author", ""),
                  b.get("cover", ""), b.get("format") or "audiobook")
-    return jsonify({"ok": True, "state": state, "counts": db.shelf_counts(u["id"])})
+    synced = None
+    if state == "read":
+        synced = _push_read_to_source(u, b.get("title", ""), b.get("author", ""),
+                                      b.get("format") or "audiobook")
+    return jsonify({"ok": True, "state": state, "counts": db.shelf_counts(u["id"]),
+                    "synced": synced})
+
+
+def _push_read_to_source(u, title, author, fmt):
+    """Best-effort: tell the originating library app (Audiobookshelf, Komga,
+    Kavita…) that this book is finished, so 'Read' in Stackarr propagates back.
+    Returns the source's label if it synced, else None — marking locally never
+    depends on the push succeeding."""
+    tl = (title or "").strip().lower()
+    if not tl:
+        return None
+    al = (author or "").split(",")[0].strip().lower()
+    with db.conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT item_id,author,format FROM library WHERE lower(title)=? AND gone_at IS NULL", (tl,))]
+    if not rows:
+        return None
+
+    def _score(r):
+        s = 0
+        if (r.get("format") or "audiobook") == fmt:
+            s += 2
+        if al and al in (r.get("author") or "").lower():
+            s += 1
+        return s
+
+    rows.sort(key=_score, reverse=True)
+    row = rows[0]
+    item_id, rfmt = row["item_id"], (row.get("format") or "audiobook")
+    try:
+        if rfmt == "audiobook":
+            if absclient.set_finished(u.get("abs_token"), item_id):
+                return "Audiobookshelf"
+        else:
+            from . import backends
+            for be in backends.sources("ebook"):
+                if getattr(be, "can_write_progress", False) and be.mark_read(u, item_id):
+                    return be.label
+    except Exception as e:
+        log.debug("mark-read push failed: %s", e)
+    return None
 
 
 @bp.route("/api/feedback", methods=["POST"])
@@ -1417,10 +1830,11 @@ def api_feedback():
 @auth.login_required
 def api_review_vote():
     u = auth.current_user()
-    rid = request.get_json(force=True).get("rating_id")
-    if not rid:
+    try:
+        rid = int(request.get_json(force=True).get("rating_id"))
+    except (TypeError, ValueError):
         return jsonify({"error": "rating_id required"}), 400
-    return jsonify({"ok": True, "votes": db.review_vote(u["id"], int(rid))})
+    return jsonify({"ok": True, "votes": db.review_vote(u["id"], rid)})
 
 
 @bp.route("/api/get-other-format", methods=["POST"])
@@ -1484,20 +1898,81 @@ SETTING_KEYS = {
     "opds_url", "opds_user", "opds_pass",
     "chaptarr_webhook_token",
 }
-BOOL_KEYS = {"email_enabled", "discord_enabled", "hide_rated_history",
-             "notify_avail_enabled", "notify_newrelease_enabled", "cross_format_taste",
+BOOL_KEYS = {"email_enabled", "discord_enabled",
+             "notify_avail_enabled", "notify_newrelease_enabled",
              "abs_ebooks", "koreader_sync"}
+# per-user boolean preferences (written via /api/prefs, never the global endpoint)
+USER_BOOL_PREFS = {"cross_format_taste", "hide_rated_history"}
+# per-user email notification toggles (also via /api/prefs)
+NOTIFY_PREF_KEYS = {"notify_approved", "notify_available", "notify_denied"}
 
 
 @bp.route("/api/settings", methods=["POST"])
-@auth.login_required
+@auth.admin_required
 def api_settings():
+    """Install-wide configuration — admin only (server URLs, API keys, SMTP,
+    format mode, …). Per-user preferences go through /api/prefs."""
     body = request.get_json(force=True)
     for k, v in body.items():
         if k in BOOL_KEYS:
             db.set_meta(k, "1" if v else "0")
         elif k in SETTING_KEYS:
             db.set_meta(k, str(v).strip())
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/prefs", methods=["POST"])
+@auth.login_required
+def api_prefs():
+    """Per-user preferences any signed-in user may set for themselves."""
+    u = auth.current_user()
+    body = request.get_json(force=True)
+    for k, v in body.items():
+        if k in USER_BOOL_PREFS or k in NOTIFY_PREF_KEYS:
+            db.set_pref(u["id"], k, "1" if v else "0")
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/admin/approval-mode", methods=["POST"])
+@auth.admin_required
+def api_admin_approval_mode():
+    """Toggle global manual-approval vs auto-approve for non-admin requests."""
+    require = bool(request.get_json(force=True).get("require_approval"))
+    db.set_meta("require_approval", "1" if require else "0")
+    return jsonify({"ok": True, "require_approval": require})
+
+
+@bp.route("/api/admin/import-users", methods=["POST"])
+@auth.admin_required
+def api_admin_import_users():
+    """Import accounts from the connected sources (e.g. Audiobookshelf) as linked
+    local accounts. Also flips the daily-sync setting when asked."""
+    from . import scheduler
+    body = request.get_json(silent=True) or {}
+    if "sync" in body:
+        db.set_meta("user_sync", "1" if body["sync"] else "0")
+        return jsonify({"ok": True, "sync": bool(body["sync"])})
+    res = scheduler.import_users()
+    return jsonify({"ok": True, **res,
+                    "detail": f"{res['created']} new account(s) imported from {res['seen']} source user(s)."})
+
+
+@bp.route("/api/admin/user/<int:uid>", methods=["POST"])
+@auth.admin_required
+def api_admin_user(uid):
+    """Admin: set a user's role or trusted flag."""
+    me = auth.current_user()
+    body = request.get_json(force=True)
+    target = db.get_user(uid)
+    if not target:
+        return jsonify({"error": "no such user"}), 404
+    if "role" in body:
+        # don't let an admin demote themselves into a lockout
+        if uid == me["id"] and body["role"] != "admin":
+            return jsonify({"error": "You can't remove your own admin role."}), 400
+        db.set_role(uid, "admin" if body["role"] == "admin" else "user")
+    if "trusted" in body:
+        db.set_pref(uid, "trusted", "1" if body["trusted"] else "0")
     return jsonify({"ok": True})
 
 
@@ -1625,7 +2100,41 @@ def cover(item_id):
             return redirect(hits[0]["cover"])
     except Exception:
         pass
-    return redirect(url_for("static", filename="icon.svg"))
+    return redirect(url_for("static", filename="cover-placeholder.svg"))
+
+
+@bp.route("/coverart")
+@auth.login_required
+def coverart():
+    """Resolve cover art for a book that has no stored cover (ebooks, and
+    'marked read' items not in Audiobookshelf). Looks the cover up by ASIN, then
+    by title+author — eBooks via the book metadata APIs, audiobooks via Audible —
+    and caches the resolved URL so it's a one-time lookup per book. Redirects to
+    the art, or a placeholder when nothing is found."""
+    asin = (request.args.get("asin") or "").strip()
+    title = (request.args.get("title") or "").strip()
+    author = (request.args.get("author") or "").strip()
+    fmt = (request.args.get("fmt") or "").strip()
+    placeholder = url_for("static", filename="cover-placeholder.svg")
+    if not title and not asin.startswith("B0"):
+        return redirect(placeholder)
+    cache_key = "cart:" + db.rating_key(asin if asin.startswith("B0") else "", title, author)
+    cached = db.get_meta(cache_key, "")
+    if cached:
+        return redirect(placeholder if cached == "none" else cached)
+    cover = ""
+    try:
+        if asin.startswith("B0"):
+            cover = (audible.by_asin(asin) or {}).get("cover", "")
+        if not cover and title:
+            q = f"{title} {author}".strip()
+            hits = ebookmeta.search(q, 1) if (fmt == "ebook" or asin.startswith(("gb:", "ol:"))) else audible.search(q, num=1)
+            if hits:
+                cover = hits[0].get("cover", "")
+    except Exception as e:
+        log.debug("coverart lookup failed for %s: %s", title, e)
+    db.set_meta(cache_key, cover or "none")
+    return redirect(cover or placeholder)
 
 
 # ---- KOReader progress sync (kosync protocol) ----------------------------
@@ -1636,15 +2145,34 @@ def _kosync_on() -> bool:
     return db.get_meta("koreader_sync", "1" if config.KOREADER_SYNC else "0") == "1"
 
 
+def _kosync_check():
+    """The kosync username when the x-auth-user/x-auth-key headers match a
+    registered user, else None. KOReader sends the key as an md5 of the password,
+    so we store and compare that key verbatim (constant-time)."""
+    import secrets
+    user = request.headers.get("x-auth-user", "")
+    key = request.headers.get("x-auth-key", "")
+    if not user:
+        return None
+    stored = db.get_meta(f"kosync_user_{user}", "")
+    return user if (stored and secrets.compare_digest(stored, key)) else None
+
+
 @bp.route("/users/create", methods=["POST"])
 def kosync_create():
     if not _kosync_on():
         return jsonify({"message": "disabled"}), 403
     b = request.get_json(silent=True) or {}
     user = (b.get("username") or "").strip()
-    if not user:
+    pw = b.get("password") or ""
+    # require a non-empty password — an empty key would be both unusable to auth
+    # with AND silently overwritable later (the "already registered" guard treats
+    # an empty stored value as "not registered").
+    if not user or not pw:
         return jsonify({"message": "Invalid request"}), 400
-    db.set_meta(f"kosync_user_{user}", b.get("password", ""))
+    if db.get_meta(f"kosync_user_{user}", ""):
+        return jsonify({"message": "Username is already registered."}), 402
+    db.set_meta(f"kosync_user_{user}", pw)
     return jsonify({"username": user}), 201
 
 
@@ -1652,9 +2180,8 @@ def kosync_create():
 def kosync_auth():
     if not _kosync_on():
         return jsonify({"message": "disabled"}), 403
-    user = request.headers.get("x-auth-user", "")
-    if db.get_meta(f"kosync_user_{user}", None) is None and not db.get_meta(f"kosync_user_{user}"):
-        db.set_meta(f"kosync_user_{user}", request.headers.get("x-auth-key", ""))
+    if not _kosync_check():
+        return jsonify({"message": "Unauthorized"}), 401
     return jsonify({"authorized": "OK"})
 
 
@@ -1662,8 +2189,10 @@ def kosync_auth():
 def kosync_put():
     if not _kosync_on():
         return jsonify({"message": "disabled"}), 403
+    user = _kosync_check()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
     b = request.get_json(silent=True) or {}
-    user = request.headers.get("x-auth-user", "anon")
     doc = b.get("document", "")
     if not doc:
         return jsonify({"message": "Invalid request"}), 400
@@ -1678,8 +2207,10 @@ def kosync_put():
 def kosync_get(doc):
     if not _kosync_on():
         return jsonify({"message": "disabled"}), 403
+    user = _kosync_check()
+    if not user:
+        return jsonify({"message": "Unauthorized"}), 401
     import json as _json
-    user = request.headers.get("x-auth-user", "anon")
     raw = db.get_meta(f"kosync_{user}_{doc}", "")
     if not raw:
         return jsonify({})
@@ -1717,13 +2248,16 @@ def manifest():
 def service_worker():
     base = config.URL_BASE or ""
     js = (
-        "const C='stackarr-v5';\n"
-        f"const SHELL=['{base}/','{base}/static/style.css','{base}/static/app.js','{base}/static/icon.svg'];\n"
+        "const C='stackarr-v18';\n"
+        # Only static assets are precached/cached. Authenticated HTML pages (home,
+        # settings, requests — which contain per-user data) are NEVER cached, so a
+        # shared device can't serve one user's page to the next.
+        f"const SHELL=['{base}/static/style.css','{base}/static/app.js','{base}/static/icon.svg'];\n"
         "self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()))});\n"
         "self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});\n"
         "self.addEventListener('fetch',e=>{const u=new URL(e.request.url);"
-        "if(e.request.method!=='GET'||u.pathname.includes('/api/')){return}"
-        "e.respondWith(fetch(e.request).then(r=>{const cp=r.clone();caches.open(C).then(c=>c.put(e.request,cp));return r}).catch(()=>caches.match(e.request)))});\n"
+        "if(e.request.method!=='GET'||!u.pathname.includes('/static/')){return}"   # static assets only
+        "e.respondWith(caches.match(e.request).then(c=>c||fetch(e.request).then(r=>{const cp=r.clone();caches.open(C).then(c=>c.put(e.request,cp));return r})))});\n"
     )
     from flask import Response
     return Response(js, mimetype="application/javascript",

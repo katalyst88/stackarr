@@ -28,10 +28,39 @@ class KomgaBackend(Backend):
     media_format = "ebook"
     is_login = False
     supports_progress = True
+    can_write_progress = True
+    can_login = True
 
     def enabled(self) -> bool:
         u, p = _auth()
         return bool(_url() and u and p)
+
+    def verify_login(self, username: str, password: str) -> dict | None:
+        for path in ("/api/v2/users/me", "/api/v1/users/me"):
+            try:
+                r = requests.get(f"{_url()}{path}", auth=(username, password), timeout=20)
+            except Exception as e:
+                log.warning("komga login failed for %s: %s", username, e)
+                return None
+            if r.status_code == 200:
+                d = r.json() or {}
+                roles = d.get("roles") or []
+                return {"external_id": str(d.get("id") or username),
+                        "username": d.get("email") or username,
+                        "token": "", "is_admin": "ADMIN" in roles}
+        return None
+
+    def mark_read(self, user: dict, item_id: str, finished: bool = True) -> bool:
+        if not (item_id or "").startswith("komga:"):
+            return False
+        bid = item_id.split(":", 1)[1]
+        try:
+            r = requests.patch(f"{_url()}/api/v1/books/{bid}/read-progress",
+                               auth=_auth(), json={"completed": bool(finished)}, timeout=30)
+            return r.status_code in (200, 204)
+        except Exception as e:
+            log.warning("komga mark_read failed: %s", e)
+            return False
 
     def _get(self, path, **params):
         r = requests.get(f"{_url()}{path}", auth=_auth(), params=params or {}, timeout=30)

@@ -15,6 +15,21 @@ class ABSBackend(Backend):
     media_format = "audiobook"
     is_login = True
     supports_progress = True
+    can_login = True
+
+    can_import_users = True
+
+    def verify_login(self, username: str, password: str) -> dict | None:
+        info = absclient.login(username, password)
+        if not info:
+            return None
+        return {"external_id": info.get("id") or username, "username": info.get("username") or username,
+                "token": info.get("token", ""), "is_admin": bool(info.get("isAdmin"))}
+
+    def list_users(self) -> list[dict]:
+        return [{"external_id": u["id"] or u["username"], "username": u["username"],
+                 "email": u.get("email", ""), "is_admin": u["is_admin"]}
+                for u in absclient.list_users()]
 
     # --- connection -------------------------------------------------------
     def enabled(self) -> bool:

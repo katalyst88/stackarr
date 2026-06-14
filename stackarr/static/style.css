@@ -1,4 +1,4 @@
-/* Stackarr — Seer-inspired UI.
+/* Stackarr — media-library request UI.
    Dark by default; [data-theme="light"] flips tokens. Accent injected as --accent. */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 [hidden] { display: none !important; }   /* the HTML hidden attr must win over display rules */
@@ -103,6 +103,7 @@ body.nav-collapsed .brand { justify-content: center; padding: 10px 0 18px; }
 .icon-btn { background: var(--bg3); border: 1px solid var(--line); color: var(--text); width: 40px; height: 40px;
   border-radius: 999px; cursor: pointer; font-size: 16px; display: grid; place-items: center; }
 .icon-btn:hover { border-color: var(--accent); }
+.icon-btn svg { fill: currentColor; }
 
 main { padding: 18px clamp(14px,3vw,40px) 96px; max-width: 2400px; width: 100%; margin: 0 auto; }
 .page-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 6px 0 18px; flex-wrap: wrap; }
@@ -136,18 +137,18 @@ main { padding: 18px clamp(14px,3vw,40px) 96px; max-width: 2400px; width: 100%; 
 @media (hover: none) { .slider-arrow { display: none; } }   /* touch devices just swipe */
 .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(clamp(180px, 13vw, 260px), 1fr)); }
 
-/* ---------- media card (the Seer hover overlay is the centerpiece) ---------- */
+/* ---------- media card (the hover overlay is the centerpiece) ---------- */
 .media-card { position: relative; border-radius: var(--radius); overflow: hidden; background: var(--bg2);
   box-shadow: 0 6px 18px rgba(0,0,0,.45); transition: transform .18s ease, box-shadow .18s ease;
   text-decoration: none; color: inherit; display: block; }
 body[data-theme="light"] .media-card { box-shadow: 0 6px 18px rgba(15,23,42,.14); }
 .media-card:hover { transform: translateY(-5px) scale(1.02); box-shadow: 0 18px 40px rgba(0,0,0,.6); }
 body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,42,.22); }
-.media-poster { position: relative; aspect-ratio: 1; background: #000; }
+.media-poster { display: block; position: relative; aspect-ratio: 1; background: #000; }   /* block so aspect-ratio holds even when it's an <a> */
 /* square covers fill the square box; only non-square covers get black bars (.letterbox, set by JS) */
 .media-poster img { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
 .media-poster img.letterbox { object-fit: contain; }
-/* Seer-style status tags: translucent, blurred, soft border */
+/* status tags: translucent, blurred, soft border */
 .corner-badge { position: absolute; top: 9px; right: 9px; z-index: 3; padding: 4px 10px; border-radius: 999px;
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #fff;
   background: rgba(217,140,63,.62); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
@@ -163,7 +164,7 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
 .media-card:hover .media-overlay, .media-card:focus-within .media-overlay { opacity: 1; }
 .ov-reason { color: #dfe6f1; font-size: 12px; line-height: 1.4; margin-bottom: 3px;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-/* clean Seer-style action stack: prominent primary, compact secondary row */
+/* clean action stack: prominent primary, compact secondary row */
 .ov-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 .ov-actions .btn { flex: 1 1 100%; padding: 9px 12px; font-size: 13px; border-radius: 8px; box-shadow: none; }
 .ov-actions .btn.ghost { flex: 1 1 0; padding: 7px 10px; font-size: 12px;
@@ -338,6 +339,24 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
 .login-card button { width: 100%; padding: 12px; border-radius: 9px; border: none; background: linear-gradient(180deg,var(--accent),#c47a2f); color: #1a0f02; font-weight: 700; font-size: 15px; cursor: pointer; }
 .hint { color: var(--subtle); font-size: 12px; margin-top: 14px; }
 .error { color: #f87171; margin-bottom: 12px; font-size: 14px; }
+/* sign-in method tabs + sign-up disclosure */
+.login-tabs { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 4px 0 16px; }
+.login-tab { width: auto !important; flex: 0 0 auto; padding: 7px 13px !important; font-size: 13px !important;
+  background: var(--bg3) !important; color: var(--subtle) !important; border: 1px solid var(--line) !important; }
+.login-tab.on { background: linear-gradient(180deg,var(--accent),#c47a2f) !important; color: #1a0f02 !important; border-color: var(--accent) !important; }
+.login-register { margin-top: 16px; text-align: left; border-top: 1px solid var(--line); padding-top: 12px; }
+.login-register summary { cursor: pointer; color: var(--subtle); font-size: 13px; text-align: center; list-style: none; }
+.login-register summary::-webkit-details-marker { display: none; }
+.login-register[open] summary { margin-bottom: 12px; color: var(--text); }
+/* admin user table + approval queue */
+.user-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.user-table th { text-align: left; color: var(--subtle); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.user-table td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.user-table tr:last-child td { border-bottom: none; }
+.req-row.pending { border-left: 3px solid var(--accent); }
+.section.approvals .req-row { background: color-mix(in srgb, var(--accent) 7%, var(--bg2)); }
+.badge-pending_approval { background: color-mix(in srgb, var(--accent) 22%, var(--bg3)); color: var(--accent2); }
+.badge-denied { background: color-mix(in srgb, #f87171 18%, var(--bg3)); color: #fca5a5; }
 
 /* ---------- responsive ---------- */
 @media (max-width: 820px) {
@@ -397,8 +416,9 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
 .rate-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 .rate-meta { flex: 1 1 auto; min-width: 0; }
-.rate-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rate-author { color: var(--subtle); font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* wrap long titles/authors (up to 2 lines) instead of truncating with an ellipsis */
+.rate-title { font-weight: 600; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rate-author { color: var(--subtle); font-size: 13.5px; overflow-wrap: anywhere; }
 
 .rate-stars { flex: 0 0 auto; display: flex; gap: 4px; }
 .rate-stars .star { cursor: pointer; color: var(--bg4); font-size: 24px; line-height: 1; transition: color .12s, transform .12s; }
@@ -486,6 +506,18 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
   .rate-stars .star { font-size: 21px; gap: 2px; }
   .rate-item { gap: 12px; padding: 9px 11px; }
   .rate-cover { width: 46px; height: 46px; }
+}
+
+/* settings: stack the side-nav above the body and stop wide controls overflowing */
+@media (max-width: 760px) {
+  .settings-wrap { flex-direction: column; gap: 14px; }
+  .settings-nav { width: 100%; flex-direction: row; flex-wrap: wrap; position: static; gap: 6px; }
+  .settings-nav button { box-shadow: none !important; border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px; font-size: 13px; }
+  .settings-nav button.active { box-shadow: none !important; border-color: var(--accent); }
+  .panel { padding: 14px; }
+  .panel .row { flex-wrap: wrap; }
+  .panel input, .panel select { max-width: 100%; }
+  .user-table { display: block; overflow-x: auto; }      /* scroll rather than overflow the viewport */
 }
 
 /* ---------- animation polish (all motion opt-out via reduced-motion) ---------- */
@@ -611,11 +643,16 @@ body[data-theme="light"] .format-chip.audiobook { color: #b5701f; }
 .goal-card { display: flex; gap: 20px; align-items: center; background: var(--bg2); border: 1px solid var(--line);
   border-radius: 14px; padding: 18px 20px; margin: 4px 0 18px; flex-wrap: wrap; }
 .goal-card.mini { margin: 0; flex: 1 1 260px; }
-.goal-ring { --pct: 0; width: 104px; height: 104px; border-radius: 50%; flex: none; display: grid; place-items: center; text-align: center;
-  background: radial-gradient(closest-side, var(--bg2) 79%, transparent 80% 100%),
-    conic-gradient(var(--accent) calc(var(--pct) * 1%), var(--bg4) 0); }
-.goal-num { font-size: 26px; font-weight: 800; line-height: 1; } .goal-of { font-size: 15px; color: var(--subtle); }
-.goal-lbl { font-size: 11px; color: var(--subtle); text-transform: uppercase; letter-spacing: .04em; }
+/* reading-goal progress as a horizontal fill bar with the count overlaid */
+.goal-bar { --pct: 0; position: relative; flex: 1 1 240px; min-width: 200px; height: 42px;
+  border-radius: 11px; overflow: hidden; background: var(--bg4); }
+.goal-bar-fill { position: absolute; inset: 0 auto 0 0; width: calc(var(--pct) * 1%); max-width: 100%;
+  border-radius: 11px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .6s ease; }
+.goal-bar-text { position: absolute; inset: 0; display: flex; align-items: center; gap: 6px;
+  padding: 0 15px; color: var(--text); text-shadow: 0 1px 1px rgba(0,0,0,.22); }
+.goal-bar-num { font-size: 21px; font-weight: 800; line-height: 1; }
+.goal-of { font-size: 14px; opacity: .8; position: relative; top: 1px; }
+.goal-lbl { margin-left: auto; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; opacity: .85; }
 .goal-set h3, .mood-card h3 { margin: 0 0 4px; }
 
 /* format split bar (insights) */
@@ -692,3 +729,12 @@ img.cover-ph { object-fit: contain !important; background: var(--bg3); padding: 
 .dup-note { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0; padding: 10px 14px;
   background: color-mix(in srgb, var(--ebook) 10%, var(--bg2)); border: 1px solid color-mix(in srgb, var(--ebook) 30%, var(--line));
   border-radius: 10px; font-size: 14px; }
+
+/* series book chips: colour finished / currently-reading distinctly */
+.series-chip.chip-read { background: color-mix(in srgb, #22c55e 16%, var(--bg3)); border-color: color-mix(in srgb, #22c55e 45%, var(--line)); color: #6ee7a8; }
+.series-chip.chip-reading { background: color-mix(in srgb, var(--accent) 18%, var(--bg3)); border-color: var(--accent); color: var(--accent2); }
+/* light theme needs dark ink on the pale chip fills, not the dark-theme pastels */
+body[data-theme="light"] .series-chip.chip-read { background: #dcfce7; border-color: #86efac; color: #15803d; }
+body[data-theme="light"] .series-chip.chip-reading { background: #ffedd5; border-color: var(--accent); color: #b45309; }
+.chip-legend { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0 0; font-size: 12px; }
+.chip-legend .series-chip { font-size: 11px; padding: 2px 8px; }

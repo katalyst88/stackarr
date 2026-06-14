@@ -16,6 +16,26 @@
     </div>
   </div>
 </div>
+{% if admin and approvals %}
+<section class="section approvals">
+  <div class="section-head"><h3>Awaiting your approval <span class="subtle">{{ approvals|length }}</span></h3></div>
+  <div class="req-list">
+    {% for r in approvals %}
+    <div class="req-row pending" data-id="{{ r.id }}" data-format="{{ r.format or 'audiobook' }}">
+      <img class="req-cover" src="{{ r.cover or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
+      <div class="req-info">
+        <div class="req-title">{% if multi_format %}<span class="req-fmt">{{ fmt_icon(r.format) }}</span> {% endif %}{{ r.title }} <span class="subtle">· requested by {{ r.username }}</span></div>
+        <div class="req-author">{{ r.author }}</div>
+      </div>
+      <div class="req-actions">
+        <button class="btn small" onclick="Stackarr.approveRequest({{ r.id }}, this)">Approve</button>
+        <button class="btn small ghost" onclick="Stackarr.denyRequest({{ r.id }}, this)">Deny</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
 {% if not requests %}
 <div class="empty"><p>No requests yet. Approve a suggestion or add one from Discover.</p></div>
 {% endif %}
@@ -28,7 +48,7 @@
       <div class="req-author">{{ r.author }}</div>
       {% if r.detail %}<div class="req-detail" title="{{ r.detail }}">{{ r.detail }}</div>{% endif %}
     </div>
-    <span class="badge badge-{{ r.status }}">{{ {'queued':'Requested','handed':'Requested','available':'Available','failed':'Failed'}.get(r.status, r.status) }}</span>
+    <span class="badge badge-{{ r.status }}">{{ {'queued':'Requested','handed':'Requested','available':'Available','failed':'Failed','pending_approval':'Awaiting approval','denied':'Not approved'}.get(r.status, r.status) }}</span>
     <div class="req-actions">
       {% if r.status == 'failed' %}<button class="btn small" onclick="Stackarr.retry({{ r.id }})">Retry</button>{% endif %}
       <button class="btn small ghost" onclick="Stackarr.removeRequest({{ r.id }})">Remove</button>

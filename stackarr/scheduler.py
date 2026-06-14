@@ -11,6 +11,40 @@ from . import absclient, backends, config, db, formats, notify, recommend
 log = logging.getLogger("stackarr.scheduler")
 
 
+def import_users() -> dict:
+    """Provision a linked local account for every user on the connected sources
+    that expose an admin roster (Audiobookshelf, …). Additive: creates accounts
+    that don't exist yet and back-fills emails; never deletes. Returns counts."""
+    created, seen = 0, 0
+    for be in backends.ALL:
+        if not getattr(be, "can_import_users", False):
+            continue
+        try:
+            if not be.enabled():
+                continue
+        except Exception:
+            continue
+        try:
+            roster = be.list_users()
+        except Exception as e:
+            log.warning("user import (%s) failed: %s", be.id, e)
+            continue
+        for su in roster:
+            ext = str(su.get("external_id") or "")
+            if not ext:
+                continue
+            seen += 1
+            existed = db.link_get(be.id, ext) is not None
+            role = "admin" if su.get("is_admin") else "user"
+            u = db.provision_provider_user(be.id, ext, su.get("username", ""), role=role)
+            if su.get("email") and not (u.get("email") or ""):
+                db.set_email(u["id"], su["email"])
+            if not existed:
+                created += 1
+    log.info("user import: %d new of %d source accounts", created, seen)
+    return {"created": created, "seen": seen}
+
+
 def refresh_library():
     seen = set()
     with db.conn() as c:
@@ -55,12 +89,18 @@ def refresh_library():
 
         # requests -> available when their book shows up
         newly_available = []
-        for r in c.execute("SELECT id,title,author,cover FROM requests WHERE status IN ('queued','handed')"):
+        for r in c.execute("SELECT id,user_id,title,author,cover,format FROM requests WHERE status IN ('queued','handed','failed')"):
+            title = (r['title'] or '').strip().lower()
+            if len(title) < 4:           # too short to match safely (e.g. "It")
+                continue
+            # match the same FORMAT so an audiobook arrival doesn't satisfy an
+            # ebook request (and vice-versa)
             hit = c.execute("SELECT 1 FROM library WHERE gone_at IS NULL AND lower(title) LIKE ? "
-                            "AND (?='' OR lower(author) LIKE ?)",
-                            (f"%{r['title'].lower()[:40]}%",
+                            "AND (?='' OR lower(author) LIKE ?) AND format=?",
+                            (f"%{title[:40]}%",
                              (r['author'] or '').split(',')[0].lower(),
-                             f"%{(r['author'] or '').split(',')[0].lower()}%")).fetchone()
+                             f"%{(r['author'] or '').split(',')[0].lower()}%",
+                             r['format'] or 'audiobook')).fetchone()
             if hit:
                 c.execute("UPDATE requests SET status='available',updated_at=datetime('now','localtime') WHERE id=?", (r["id"],))
                 newly_available.append(dict(r))
@@ -69,7 +109,7 @@ def refresh_library():
     base = db.get_meta("public_url", "")
     for r in newly_available:
         try:
-            notify.available(r, base_url=base)
+            notify.request_available(r, base_url=base)
         except Exception as e:
             log.warning("availability notify failed for %s: %s", r.get("title"), e)
 
@@ -110,7 +150,7 @@ def run_for_user(user_id: int, force: bool = False) -> int:
                 added += recommend.run(user_id, share)
             except Exception as e:
                 log.warning("audiobook recommend failed for user %s: %s", user_id, e)
-        if "ebook" in active:
+        if "ebook" in active and added < room:    # only if room remains
             try:
                 from . import recommend_ebook
                 added += recommend_ebook.run(user_id, room - added)
@@ -252,7 +292,23 @@ def _loop():
             new_release_radar()
         except Exception as e:
             log.warning("new-release radar failed: %s", e)
+        try:
+            _daily_user_sync()
+        except Exception as e:
+            log.warning("user sync failed: %s", e)
         time.sleep(config.LIBRARY_REFRESH_MINUTES * 60)
+
+
+def _daily_user_sync():
+    """Run import_users at most once a day, when the admin has enabled the daily
+    sync setting (off by default — import is otherwise an explicit admin action)."""
+    if db.get_meta("user_sync", "0") != "1":
+        return
+    last = db.get_meta("last_user_sync_ts", "")
+    if last and (time.time() - float(last)) < 86400:
+        return
+    import_users()
+    db.set_meta("last_user_sync_ts", str(int(time.time())))
 
 
 def start():

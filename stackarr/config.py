@@ -21,7 +21,7 @@ PORT = int(os.environ.get("STACKARR_PORT", "8484"))
 FORMATS = os.environ.get("STACKARR_FORMATS", "audiobook").strip().lower()
 DATA_DIR = os.environ.get("STACKARR_DATA", "/config")
 APP_NAME = os.environ.get("STACKARR_NAME", "Stackarr")
-ACCENT = os.environ.get("STACKARR_ACCENT", "#d98c3f")          # amber; Seer uses purple
+ACCENT = os.environ.get("STACKARR_ACCENT", "#d98c3f")          # amber accent (themeable)
 # Subpath when reverse-proxied / embedded (e.g. "/stackarr"). Blank = root.
 URL_BASE = "/" + os.environ.get("STACKARR_URL_BASE", "").strip("/") if os.environ.get("STACKARR_URL_BASE", "").strip("/") else ""
 

@@ -47,8 +47,9 @@
 <div class="insights-twocol">
   {% if goal %}
   <div class="goal-card mini">
-    <div class="goal-ring" style="--pct: {{ ((read_year/goal*100) if goal else 0)|round(0,'floor')|int }}">
-      <div class="goal-num">{{ read_year }}<span class="goal-of">/{{ goal }}</span></div><div class="goal-lbl">{{ year }} goal</div>
+    <div class="goal-bar" style="--pct: {{ ((read_year/goal*100) if goal else 0)|round(0,'floor')|int }}">
+      <div class="goal-bar-fill"></div>
+      <div class="goal-bar-text"><span class="goal-bar-num">{{ read_year }}</span><span class="goal-of">/ {{ goal }}</span><span class="goal-lbl">{{ year }} goal</span></div>
     </div>
     <div><h3>Reading goal</h3><p class="muted">{{ (goal - read_year) if goal > read_year else 0 }} to go. Set it on <a href="{{ url_for('main.shelves_page') }}">My shelves</a>.</p></div>
   </div>

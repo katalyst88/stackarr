@@ -59,8 +59,12 @@ def _ebook_seeds(user: dict) -> list[dict]:
 
 
 def run(user_id: int, max_new: int | None = None) -> int:
-    """Generate pending ebook suggestions for one user. Returns count added."""
-    max_new = max_new or config.SUGGEST_MAX_PENDING
+    """Generate pending ebook suggestions for one user. Returns count added.
+    `max_new=None` means 'use the default cap'; an explicit 0 means 'no room'."""
+    if max_new is None:
+        max_new = config.SUGGEST_MAX_PENDING
+    if max_new <= 0:
+        return 0
     user = db.get_user(user_id)
     if not user:
         return 0
@@ -71,8 +75,11 @@ def run(user_id: int, max_new: int | None = None) -> int:
     # requested EBOOKS (so a book you own/like as an audiobook can still be
     # suggested as an ebook — "give me the option for either"), and only ebook
     # ratings inform author boost. cross_format_taste opts into sharing.
-    xfmt = db.get_meta("cross_format_taste", "0") == "1"
+    xfmt = db.get_pref(user_id, "cross_format_taste", "0") == "1"
     rate_where = "" if xfmt else " AND format='ebook'"
+    # signals: keep ebook-specific AND format-agnostic ones (a plain "ignore"),
+    # only drop audiobook-specific signals so a DNF there doesn't suppress ebooks.
+    sig_where = "" if xfmt else " AND (format='ebook' OR format IS NULL OR format='')"
     with db.conn() as c:
         known = set()
         for row in c.execute("SELECT title, author FROM library WHERE gone_at IS NULL AND format='ebook'"):
@@ -81,16 +88,16 @@ def run(user_id: int, max_new: int | None = None) -> int:
             for row in c.execute(f"SELECT title, author FROM {tbl} WHERE user_id=? AND format='ebook'", (user_id,)):
                 known.add(_key(row["title"], row["author"]))
         neg = {(s["kind"], s["value"].lower()): s["weight"]
-               for s in c.execute("SELECT kind,value,weight FROM signals WHERE user_id=? AND weight<0", (user_id,))}
+               for s in c.execute(f"SELECT kind,value,weight FROM signals WHERE user_id=? AND weight<0{sig_where}", (user_id,))}
         pos = {(s["kind"], s["value"].lower()): s["weight"]
-               for s in c.execute("SELECT kind,value,weight FROM signals WHERE user_id=? AND weight>0", (user_id,))}
+               for s in c.execute(f"SELECT kind,value,weight FROM signals WHERE user_id=? AND weight>0{sig_where}", (user_id,))}
         for r in c.execute(f"SELECT stars,author FROM ratings WHERE user_id=?{rate_where}", (user_id,)):
             if r["author"]:
                 k = ("author", r["author"].split(",")[0].lower())
                 pos[k] = pos.get(k, 0) + (r["stars"] - 3) * 1.5
 
     target_lang = db.get_meta("language", config.TARGET_LANGUAGE)
-    mood_profile = taste.mood_signals(user_id)
+    mood_profile = taste.mood_signals(user_id)   # moods are cross-format by design
     adv = taste.adventurousness(user_id)
     cands: dict[str, dict] = {}
 

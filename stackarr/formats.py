@@ -1,12 +1,14 @@
 """Format mode — which media formats this Stackarr install surfaces.
 
-One of: "audiobook" (default), "ebook", or "both". The DB setting `formats`
-overrides the STACKARR_FORMATS env default, like every other runtime setting.
+Source libraries are connected and maintained by the **admin** (server-wide), and
+the admin chooses what the install offers: "audiobook" (default), "ebook", or
+"both". Every user sees the same offered formats and just requests books — so
+availability is install-wide, not per-user. A single-format install NEVER renders
+the other format's UI (no badges, filters or picker); "both" unlocks the
+multi-format chrome.
 
-Everything format-aware reads from here so the rule is enforced in one place:
-a single-format install NEVER renders the other format's UI (no badges, no
-filters, no picker), and the recommender only pulls from sources of an active
-format. `both` unlocks the multi-format chrome."""
+The public helpers accept an optional `user` for forward-compatibility (a future
+admin-set per-user format permission could narrow it), but today it's ignored."""
 from __future__ import annotations
 
 from . import config, db
@@ -21,30 +23,32 @@ def mode() -> str:
     return m if m in VALID else "audiobook"
 
 
+def available(user: dict | None = None) -> list[str]:
+    """Concrete formats in play (expands 'both'). Install-wide for every user."""
+    return ["audiobook", "ebook"] if mode() == "both" else [mode()]
+
+
 def active() -> list[str]:
-    """Concrete formats in play (expands 'both' to both)."""
-    m = mode()
-    return ["audiobook", "ebook"] if m == "both" else [m]
+    return available()
 
 
-def multi() -> bool:
-    return mode() == "both"
+def multi(user: dict | None = None) -> bool:
+    return len(available(user)) > 1
 
 
-def show(fmt: str) -> bool:
+def show(fmt: str, user: dict | None = None) -> bool:
     """Should UI/recommendations for this format be surfaced at all?"""
-    return fmt in active()
+    return fmt in available(user)
 
 
-def primary() -> str:
-    """The default/leading format (what a new pick is tagged when ambiguous)."""
-    a = active()
+def primary(user: dict | None = None) -> str:
+    a = available(user)
     return "audiobook" if "audiobook" in a else a[0]
 
 
-def flags() -> dict:
+def flags(user: dict | None = None) -> dict:
     """Template globals — injected on every render via the context processor."""
-    a = active()
+    a = available(user)
     return {
         "format_mode": mode(),
         "multi_format": len(a) > 1,

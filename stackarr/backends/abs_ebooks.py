@@ -21,12 +21,19 @@ def _has_ebook(it: dict) -> bool:
                 or (media.get("numEbooks") or 0) > 0)
 
 
+def _has_audio(it: dict) -> bool:
+    media = it.get("media") or {}
+    return bool((media.get("numAudioFiles") or 0) > 0 or media.get("audioFiles")
+                or media.get("tracks") or (media.get("duration") or 0) > 0)
+
+
 class ABSEbooksBackend(Backend):
     id = "abs_ebooks"
     label = "Audiobookshelf eBooks"
     media_format = "ebook"
     is_login = False
     supports_progress = True
+    can_write_progress = True
 
     def enabled(self) -> bool:
         return _enabled() and bool(absclient.abs_url() and absclient.admin_token())
@@ -44,7 +51,10 @@ class ABSEbooksBackend(Backend):
         for lib in absclient.libraries():
             try:
                 for it in absclient.items(lib["id"]):
-                    if _has_ebook(it):
+                    # ebook-ONLY items: a hybrid (audio+epub) item is owned by the
+                    # audiobook source, so skip it here to avoid an item_id clash
+                    # that would mislabel the audiobook as an ebook.
+                    if _has_ebook(it) and not _has_audio(it):
                         m = absclient.item_meta(it)
                         if m.get("item_id"):
                             ids[m["item_id"]] = m
@@ -66,3 +76,13 @@ class ABSEbooksBackend(Backend):
             return []
         ebook_ids = set(self._ebook_ids().keys())
         return [h for h in absclient.listening_history(token) if h["item_id"] in ebook_ids]
+
+    def mark_read(self, user: dict, item_id: str, finished: bool = True) -> bool:
+        # ABS ebooks use raw ABS library-item ids (no namespace prefix); skip any
+        # id that belongs to another ebook source.
+        if not item_id or ":" in item_id:
+            return False
+        token = (user or {}).get("abs_token")
+        if not token:
+            return False
+        return absclient.set_finished(token, item_id, finished)

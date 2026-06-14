@@ -19,7 +19,7 @@
 <div class="rate-list fmt-group" id="rate-list"{% if hide_rated %} data-hide-rated="1"{% endif %}>
   {% for b in books %}
   <div class="rate-item{{ ' rated' if b.stars }}" data-asin="{{ b.asin }}" data-format="{{ b.format or 'audiobook' }}" data-rated="{{ 1 if b.stars else 0 }}">
-    <a class="rate-cover" {% if b.asin %}href="{{ url_for('main.book_page', asin=b.asin) }}"{% endif %}>
+    <a class="rate-cover" {% set lk = b.asin or b.rkey %}{% if lk %}href="{{ url_for('main.book_page', asin=lk) }}"{% endif %}>
       <img src="{{ (b.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt=""
            onerror="this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
     </a>
@@ -29,11 +29,11 @@
     </div>
     <div class="rate-stars" data-asin="{{ b.rkey }}" data-title="{{ b.title }}" data-author="{{ b.author }}" title="Rate this book">
       {% for n in [1,2,3,4,5] %}
-      <span class="star {{ 'on' if n <= b.stars }}" onclick="Stackarr.rate('{{ b.rkey }}',{{ n }},this)">★</span>
+      <span class="star {{ 'on' if n <= b.stars }}" onclick="Stackarr.rate({{ b.rkey|tojson }},{{ n }},this)">★</span>
       {% endfor %}
     </div>
     <button class="rate-remove" title="Remove from history"
-            onclick="Stackarr.removeFromHistory('{{ b.rkey }}', this)" aria-label="Remove from history">✕</button>
+            onclick="Stackarr.removeFromHistory({{ b.rkey|tojson }}, this)" aria-label="Remove from history">✕</button>
   </div>
   {% endfor %}
 </div>

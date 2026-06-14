@@ -53,6 +53,24 @@ class KavitaBackend(Backend):
     media_format = "ebook"
     is_login = False
     supports_progress = True
+    can_write_progress = True
+    can_login = True
+
+    def verify_login(self, username: str, password: str) -> dict | None:
+        try:
+            r = requests.post(f"{_url()}/api/Account/login",
+                              json={"username": username, "password": password}, timeout=20)
+            if r.status_code != 200:
+                return None
+            d = r.json() or {}
+            if not d.get("token"):
+                return None
+            return {"external_id": str(d.get("username") or username),
+                    "username": d.get("username") or username,
+                    "token": d.get("token", ""), "is_admin": False}
+        except Exception as e:
+            log.warning("kavita login failed for %s: %s", username, e)
+            return None
 
     _jwt = ""
     _jwt_exp = 0.0
@@ -88,6 +106,21 @@ class KavitaBackend(Backend):
             return {"ok": True, "detail": f"Connected — {n} librar{'y' if n == 1 else 'ies'}"}
         except Exception as e:
             return {"ok": False, "detail": str(e)}
+
+    def mark_read(self, user: dict, item_id: str, finished: bool = True) -> bool:
+        if not (item_id or "").startswith("kavita:"):
+            return False
+        try:
+            sid = int(item_id.split(":", 1)[1])
+        except ValueError:
+            return False
+        try:
+            ep = "/api/Reader/mark-read" if finished else "/api/Reader/mark-unread"
+            r = self._post(ep, json={"seriesId": sid})
+            return r.status_code in (200, 204)
+        except Exception as e:
+            log.warning("kavita mark_read failed: %s", e)
+            return False
 
     # --- data -------------------------------------------------------------
     def _all_series(self) -> list[dict]:

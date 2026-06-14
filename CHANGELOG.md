@@ -94,7 +94,7 @@ All notable changes to Stackarr.
 ## [1.3.0] - 2026-06-13
 
 ### Changed
-- **History & ratings** redesigned as a clean, scannable list (Seer-styled):
+- **History & ratings** redesigned as a clean, scannable list:
   square cover thumbnail · title/author · a prominent 1–5★ rating on the right.
   Unrated books float to the top; rating one sinks it to the bottom "done" pile.
   Stars light up to the cursor on hover and fill in the app's accent colour.
@@ -145,7 +145,7 @@ First stable release.
 - "Approve" renamed to **"Add book"** throughout.
 - Home gains an **"Authors you might like"** card row (suggested authors only) →
   author grid with "add all books by this author".
-- Docs accuracy pass; "Seerr" references corrected to "Seer".
+- Docs accuracy pass.
 
 ### Fixed
 - CI: `docker-publish` now sets up Buildx so the gha build cache works.

@@ -9,12 +9,20 @@ from __future__ import annotations
 from . import config, db, tagging
 
 
-def mood_signals(user_id: int) -> dict:
+def mood_signals(user_id: int, fmt: str | None = None) -> dict:
     """Explicit mood affinity: positive from the vibe picker / 'more like this',
-    negative from DNF/pass propagation. {mood_lower: weight}."""
+    negative from DNF/pass propagation. {mood_lower: weight}. Moods are treated as
+    CROSS-FORMAT (a "dark" preference applies to audiobooks and ebooks alike), so
+    `fmt` is accepted for API symmetry but moods aren't format-isolated — unlike
+    ratings/author signals, which are. (The signals table is value-unique, so a
+    per-format mood row can't be isolated without a schema change anyway.)"""
+    clause, args = "", [user_id]
+    if fmt in ("audiobook", "ebook"):
+        clause = " AND (format=? OR format IS NULL OR format='')"
+        args.append(fmt)
     out: dict[str, float] = {}
     with db.conn() as c:
-        for r in c.execute("SELECT value, weight FROM signals WHERE user_id=? AND kind='mood'", (user_id,)):
+        for r in c.execute(f"SELECT value, weight FROM signals WHERE user_id=? AND kind='mood'{clause}", args):
             k = (r["value"] or "").lower()
             out[k] = out.get(k, 0.0) + r["weight"]
     return out
