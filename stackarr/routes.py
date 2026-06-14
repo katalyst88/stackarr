@@ -2409,7 +2409,11 @@ def service_worker():
         "self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});\n"
         "self.addEventListener('fetch',e=>{const u=new URL(e.request.url);"
         "if(e.request.method!=='GET'||!u.pathname.includes('/static/')){return}"   # static assets only
-        "e.respondWith(caches.match(e.request).then(c=>c||fetch(e.request).then(r=>{const cp=r.clone();caches.open(C).then(c=>c.put(e.request,cp));return r})))});\n"
+        # NETWORK-FIRST: always try the live asset (so a deploy is instantly picked
+        # up and a stale SW can never serve a broken old app.js), falling back to
+        # cache only when offline. Cache-first previously made the app look "down"
+        # after a deploy until the SW happened to update.
+        "e.respondWith(fetch(e.request).then(r=>{const cp=r.clone();caches.open(C).then(c=>c.put(e.request,cp));return r}).catch(()=>caches.match(e.request)))});\n"
     )
     from flask import Response
     return Response(js, mimetype="application/javascript",

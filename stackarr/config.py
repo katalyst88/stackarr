@@ -2,7 +2,7 @@
 deploys anywhere with no code edits. Single source of truth for settings."""
 import os
 
-VERSION = "1.6.5"
+VERSION = "1.6.6"
 RELEASE_STAGE = "stable"
 
 
