@@ -2,6 +2,7 @@
 (the *arr book backend) to add the author/book and search for it. Stackarr
 never touches a download client directly — Chaptarr owns grab/import."""
 import logging
+import re
 
 import requests
 
@@ -19,7 +20,14 @@ def api_key() -> str:
 
 
 def root_folder() -> str:
-    return db.setting("chaptarr_root_folder", config.CHAPTARR_ROOT_FOLDER)
+    rf = db.setting("chaptarr_root_folder", config.CHAPTARR_ROOT_FOLDER)
+    # Guard against Git-Bash path mangling (a unix /path passed through Git Bash
+    # at container-create time becomes "C:/Program Files/Git/path"). Recover the
+    # real container path so Chaptarr doesn't reject it as an invalid path.
+    m = re.search(r"/Git(/.*)$", rf)
+    if rf.startswith("C:") and "Program Files/Git" in rf and m:
+        rf = m.group(1)
+    return rf
 
 
 def _profile(key: str, fallback: int) -> int:
@@ -151,6 +159,13 @@ def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audioboo
         if r.ok:
             return {"ok": True, "ref": str(r.json().get("id", "")),
                     "detail": f"Sent “{a['authorName']}” to Chaptarr — it's searching now."}
+        body = r.text or ""
+        if r.status_code in (502, 503) or "V5 API" in body or "author info" in body:
+            return {"ok": False, "detail": "Chaptarr's metadata service (api.chaptarr.com) is down, so it can't add "
+                    "books right now — this is a Chaptarr outage, not Stackarr. We've kept your pick; retry when it's back."}
+        if "Invalid Path" in body:
+            return {"ok": False, "detail": "Chaptarr rejected the root folder path — check Settings → Connections → "
+                    "Chaptarr root folder matches a path that exists inside the Chaptarr container."}
         return {"ok": False, "detail": "Chaptarr couldn't add this one right now — please try again in a bit."}
     except Exception:
         return {"ok": False, "detail": "Couldn't reach Chaptarr — check it's running and connected in Settings."}

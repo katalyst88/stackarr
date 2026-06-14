@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "_fmt.html" import fmt_badge with context %}
+{% macro bookcard(b, link=True) %}
+{% set asin = b.asin or b.rkey %}
+{% set canlink = asin and (asin.startswith('B') or asin.startswith('gb:') or asin.startswith('ol:')) %}
+<a class="media-card" data-format="{{ b.format or 'audiobook' }}" href="{{ url_for('main.book_page', asin=asin) if (link and canlink) else '#' }}">
+  <div class="media-poster"><img src="{{ (b.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
+    {{ fmt_badge(b.format) }}</div>
+  <div class="media-foot"><div class="media-title" title="{{ b.title }}">{{ b.title }}</div><div class="media-author">{{ b.author }}</div></div>
+</a>
+{% endmacro %}
+{% block content %}
+<div class="page-head"><h2 class="page-title">Home <span class="subtle">your reading at a glance</span></h2></div>
+
+<div class="home-top">
+  <div class="goal-card mini">
+    <div class="goal-ring" style="--pct: {{ ((read_year/goal*100) if goal else 0)|round(0,'floor')|int }}">
+      <div class="goal-num">{{ read_year }}{% if goal %}<span class="goal-of">/{{ goal }}</span>{% endif %}</div>
+      <div class="goal-lbl">read in {{ year }}</div>
+    </div>
+    <div><h3>{{ year }} reading</h3>
+      <p class="muted">{% if goal %}{{ (goal - read_year) if goal > read_year else 0 }} to your goal · {% endif %}<a href="{{ url_for('main.shelves_page') }}">shelves</a> · <a href="{{ url_for('main.insights_page') }}">insights</a></p></div>
+  </div>
+  <a class="home-stat" href="{{ url_for('main.shelves_page') }}"><div class="home-stat-num">{{ want_n }}</div><div class="muted">want to read</div></a>
+  <a class="home-stat" href="{{ url_for('main.requests_page') }}"><div class="home-stat-num">{{ avail_n }}</div><div class="muted">ready in library</div></a>
+</div>
+
+{% if reading %}
+<section class="section"><div class="section-head"><h3>Currently reading</h3></div>
+  <div class="slider-wrap"><div class="slider">{% for b in reading %}{{ bookcard(b) }}{% endfor %}</div></div>
+</section>
+{% endif %}
+
+{% if fresh %}
+<section class="section">
+  <div class="section-head"><a class="section-link" href="{{ url_for('main.suggestions_page') }}"><h3>Fresh picks for you</h3><span class="chev">›</span></a></div>
+  <div class="slider-wrap"><div class="slider">
+    {% for s in fresh %}
+    <div class="media-card" data-format="{{ s.format or 'audiobook' }}">
+      <a class="media-poster" href="{{ url_for('main.book_page', asin=s.asin) }}">
+        <img src="{{ (s.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
+        {{ fmt_badge(s.format) }}
+        <div class="media-overlay"><div class="ov-reason">{{ s.reason }}</div>
+          <div class="ov-actions"><button class="btn" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'approve',this)">Add book</button>
+            <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'reject',this)">Ignore</button></div></div>
+      </a>
+      <div class="media-foot"><div class="media-title" title="{{ s.title }}">{{ s.title }}</div><div class="media-author">{{ s.author }}</div></div>
+    </div>
+    {% endfor %}
+  </div></div>
+</section>
+{% endif %}
+
+{% if upcoming %}
+<section class="section">
+  <div class="section-head"><a class="section-link" href="{{ url_for('main.upcoming_page') }}"><h3>New from authors you read</h3><span class="chev">›</span></a></div>
+  <div class="slider-wrap"><div class="slider">{% for b in upcoming %}{{ bookcard(b) }}{% endfor %}</div></div>
+</section>
+{% endif %}
+
+{% if not reading and not fresh %}
+<div class="empty"><p>As you listen, rate and shelve books, your home fills up with what you're reading,
+  what's next, and fresh picks. Start on the <a href="{{ url_for('main.suggestions_page') }}">Suggestions</a> page.</p></div>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script>Stackarr.boot();Stackarr.initFormatFilter&&Stackarr.initFormatFilter();</script>{% endblock %}

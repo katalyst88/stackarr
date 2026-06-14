@@ -20,16 +20,25 @@
   <div class="series-card" data-format="{{ s.format or 'audiobook' }}">
     <div class="series-info">
       <div class="series-name">{{ s.name }}</div>
-      <div class="series-meta">{{ s.owned }} book{{ 's' if s.owned != 1 }} in your library{% if s.highest is not none %}
-        · you're up to #{{ seq(s.highest) }}{% endif %}</div>
-      {% if s.highest and s.highest > 1 %}{% set pct = ((s.owned / s.highest * 100) if s.highest else 0) %}
-      <div class="series-progress" title="{{ s.owned }} of the first {{ seq(s.highest) }}"><span style="width: {{ (pct if pct < 100 else 100)|round }}%"></span></div>{% endif %}
+      <div class="series-meta">📚 <b>In your library:</b> {{ s.owned }} book{{ 's' if s.owned != 1 }}{% if s.highest is not none %} (up to #{{ seq(s.highest) }}){% endif %}</div>
+      <div class="series-meta read-meta">
+        {% if s.read_to is not none %}🎧 <b>You've read up to:</b> #{{ seq(s.read_to) }}{% if s.highest and s.read_to < s.highest %} <span class="ahead">· {{ ((s.highest - s.read_to) | round | int) }} more already downloaded &amp; waiting</span>{% endif %}
+        {% else %}🎧 <span class="muted">Not started yet</span>{% endif %}
+      </div>
+      {% if s.highest and s.highest > 0 %}{% set rpct = ((s.read_to or 0) / s.highest * 100) %}
+      <div class="series-progress" title="Read #{{ seq(s.read_to) or 0 }} of #{{ seq(s.highest) }} downloaded">
+        <span style="width: {{ (rpct if rpct < 100 else 100) | round }}%"></span></div>{% endif %}
       <div class="series-books">
         {% for b in s.books %}<span class="series-chip" title="{{ b.title }}">{% if b.series_seq is not none %}#{{ seq(b.series_seq) }} {% endif %}{{ b.title }}</span>{% endfor %}
       </div>
+      {% if multi_format and (s.missing_audio or s.missing_ebook) %}
+      <div class="series-meta gap-note">⚠️ You have this series across formats but not completely in each.</div>
+      {% endif %}
       <div class="series-actions">
         <button class="btn small ghost" onclick="Stackarr.findMissing('{{ s.name|e }}', this)">🔍 Find missing books</button>
-        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('{{ s.name|e }}', '{{ (s.books[0].author if s.books else '')|e }}', this)">＋ Get full series</button>
+        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('{{ s.name|e }}', '{{ s.author|e }}', this)">＋ Get full series</button>
+        {% if multi_format and s.missing_audio %}<button class="btn small ghost" onclick="Stackarr.getSeries('{{ s.name|e }}', '{{ s.author|e }}', this, 'audiobook')">{{ fmt_icon('audiobook') }} Get missing audiobooks</button>{% endif %}
+        {% if multi_format and s.missing_ebook %}<button class="btn small ghost" onclick="Stackarr.getSeries('{{ s.name|e }}', '{{ s.author|e }}', this, 'ebook')">{{ fmt_icon('ebook') }} Get missing eBooks</button>{% endif %}
       </div>
       <div class="series-missing" hidden></div>
     </div>

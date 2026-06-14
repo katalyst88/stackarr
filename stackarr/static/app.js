@@ -190,12 +190,13 @@ const Stackarr = (() => {
       const pill = document.querySelector(`#fmt-filter .fmt-pill[data-fmt="${f}"]`);
       if (pill) this.filterFormat(f, pill);
     },
-    async getSeries(name, author, btn) {
+    async getSeries(name, author, btn, format) {
       if (!author) { toast("No author found for this series."); return; }
+      const label = btn ? btn.textContent : "";
       if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
-      const r = await api("/api/series/add", { method: "POST", body: JSON.stringify({ series: name, author }) });
+      const r = await api("/api/series/add", { method: "POST", body: JSON.stringify({ series: name, author, format }) });
       toast(r.detail || (r.ok ? "Sent to Chaptarr." : "Couldn't add right now."));
-      if (btn) { btn.disabled = false; btn.textContent = r.ok ? "✓ Requested" : "＋ Get full series"; }
+      if (btn) { btn.disabled = false; btn.textContent = r.ok ? "✓ Requested" : (label || "＋ Get full series"); }
     },
     toggleTheme() {
       localStorage.setItem("stackarr-theme", localStorage.getItem("stackarr-theme") === "light" ? "dark" : "light");
@@ -281,6 +282,12 @@ const Stackarr = (() => {
         key: bar.dataset.key, state: next, title: bar.dataset.title,
         author: bar.dataset.author, cover: bar.dataset.cover, format: bar.dataset.format }) });
       toast(next ? `On your "${state}" shelf.` : "Removed from shelves.");
+    },
+    async grabFormat(book, fmt, btn) {
+      if (btn) { btn.disabled = true; }
+      const r = await api("/api/request", { method: "POST", body: JSON.stringify(Object.assign({}, book, { format: fmt })) });
+      toast(r.detail || (r.ok ? `Grabbing the ${fmt === "ebook" ? "eBook" : "audiobook"}…` : "Couldn't add right now."));
+      if (btn) { btn.disabled = false; }
     },
     async getOtherFormat(book, btn) {
       if (btn) { btn.disabled = true; }

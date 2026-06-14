@@ -83,7 +83,52 @@ def _onboarding_books(u, limit=12):
 @bp.route("/")
 @auth.login_required
 def index():
-    return redirect(url_for("main.suggestions_page"))
+    return redirect(url_for("main.home_page"))
+
+
+@bp.route("/home")
+@auth.login_required
+def home_page():
+    """Dashboard hub: what you're reading, what's next, goal progress, a few
+    fresh picks, and new from authors you follow — links out to everything."""
+    import datetime
+    u = auth.current_user()
+    # currently reading (manual shelf + auto in-progress, capped)
+    reading = db.shelf_list(u["id"], "reading")[:6]
+    seen = {(r.get("title") or "").lower() for r in reading}
+    try:
+        with db.conn() as c:
+            lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,format FROM library")}
+        for h in absclient.listening_history(u["abs_token"]):
+            if len(reading) >= 6:
+                break
+            if not h.get("finished") and (h.get("progress") or 0) > 0.02:
+                m = lib.get(h["item_id"]) or {}
+                if m.get("title") and m["title"].lower() not in seen:
+                    seen.add(m["title"].lower())
+                    reading.append({"rkey": db.rating_key("", m["title"], m.get("author", "")), "title": m["title"],
+                                    "author": m.get("author", ""), "cover": url_for("main.cover", item_id=h["item_id"]),
+                                    "format": "audiobook", "auto": True})
+    except Exception:
+        pass
+    # a few fresh picks + new-from-upcoming + goal + up-next count
+    with db.conn() as c:
+        fresh = [dict(r) for r in c.execute(
+            "SELECT id,title,author,cover,reason,format,asin FROM suggestions "
+            "WHERE user_id=? AND status='pending' AND lane NOT IN ('upcoming') ORDER BY score DESC LIMIT 8", (u["id"],))]
+        upcoming = [dict(r) for r in c.execute(
+            "SELECT id,title,author,cover,reason,format,asin,extra FROM suggestions "
+            "WHERE user_id=? AND lane='upcoming' ORDER BY extra DESC LIMIT 6", (u["id"],))]
+        want_n = c.execute("SELECT COUNT(*) n FROM shelf WHERE user_id=? AND state='want'", (u["id"],)).fetchone()["n"]
+        avail_n = c.execute("SELECT COUNT(*) n FROM requests WHERE user_id=? AND status='available'", (u["id"],)).fetchone()["n"]
+    year = datetime.date.today().year
+    read_year = sum(1 for d in db.finished_dates(u["id"]) if d.startswith(str(year)))
+    try:
+        goal = int(db.get_meta(f"goal_{u['id']}", "0") or 0)
+    except ValueError:
+        goal = 0
+    return render_template("home.html", reading=reading, fresh=fresh, upcoming=upcoming,
+                           goal=goal, read_year=read_year, year=year, want_n=want_n, avail_n=avail_n)
 
 
 @bp.route("/suggestions")
@@ -375,9 +420,25 @@ def series_page():
     """Up Next: series you're collecting, how far you are, and the next book
     (with its state) — built from your library + the engine's series picks."""
     u = auth.current_user()
+    # which library items has the user actually FINISHED (read), so we can show
+    # reading progress separately from what's downloaded.
+    finished_ids = set()
+    try:
+        for h in absclient.listening_history(u["abs_token"]):
+            if h.get("finished"):
+                finished_ids.add(h["item_id"])
+    except Exception:
+        pass
+    if formats.show("ebook"):
+        from . import backends
+        for be in backends.sources("ebook"):
+            try:
+                finished_ids |= {h["item_id"] for h in be.reading_history(u) if h.get("finished")}
+            except Exception:
+                pass
     with db.conn() as c:
         libr = [dict(r) for r in c.execute(
-            "SELECT title,author,series,series_seq,asin,format FROM library "
+            "SELECT item_id,title,author,series,series_seq,asin,format FROM library "
             "WHERE gone_at IS NULL AND series<>'' ORDER BY series, series_seq")]
         sugg = [dict(r) for r in c.execute(
             "SELECT id,title,author,series,asin,cover,reason FROM suggestions "
@@ -390,7 +451,7 @@ def series_page():
 
     next_by_series = {}
     for s in sugg:
-        next_by_series.setdefault(norm(s["series"]), s)   # highest-scored next book per series
+        next_by_series.setdefault(norm(s["series"]), s)
 
     def req_status(title):
         nt = norm(title)
@@ -404,20 +465,33 @@ def series_page():
     for b in libr:
         groups.setdefault(b["series"], []).append(b)
 
+    both = formats.multi()
     cards = []
     for name, books in groups.items():
         books.sort(key=lambda b: b["series_seq"] if b["series_seq"] is not None else 0)
         seqs = [b["series_seq"] for b in books if b["series_seq"] is not None]
+        # reading progress: highest sequence among books you've FINISHED
+        read_seqs = [b["series_seq"] for b in books
+                     if b["series_seq"] is not None and b["item_id"] in finished_ids]
+        # per-format ownership of each sequence (for "get the other format" gaps)
+        audio_seqs = {round(b["series_seq"], 1) for b in books
+                      if b["series_seq"] is not None and (b.get("format") or "audiobook") == "audiobook"}
+        ebook_seqs = {round(b["series_seq"], 1) for b in books
+                      if b["series_seq"] is not None and b.get("format") == "ebook"}
+        all_seqs = audio_seqs | ebook_seqs
         nxt = next_by_series.get(norm(name))
         fmts = {b.get("format") or "audiobook" for b in books}
         cards.append({"name": name, "owned": len(books),
-                      "highest": max(seqs) if seqs else None, "books": books,
-                      "format": books[0].get("format") or "audiobook" if len(fmts) == 1 else "both",
+                      "highest": max(seqs) if seqs else None,
+                      "read_to": max(read_seqs) if read_seqs else None,
+                      "read_count": len(read_seqs),
+                      "books": books,
+                      "format": (books[0].get("format") or "audiobook") if len(fmts) == 1 else "both",
+                      "missing_audio": (both and len(all_seqs - audio_seqs) > 0),
+                      "missing_ebook": (both and len(all_seqs - ebook_seqs) > 0),
+                      "author": (books[0].get("author") if books else ""),
                       "next": nxt, "next_status": req_status(nxt["title"]) if nxt else None})
-    # "Up Next" is for series you're actually collecting — 2+ books, or one with
-    # a next pick queued. Drops single-book noise and mislabelled one-offs.
     cards = [x for x in cards if x["owned"] >= 2 or x["next"]]
-    # most-invested series first; then alphabetical
     cards.sort(key=lambda x: (-x["owned"], x["name"].lower()))
     have_next = sum(1 for c in cards if c["next"])
     return render_template("series.html", series=cards, have_next=have_next)
@@ -493,7 +567,16 @@ def book_page(asin):
         tags = tagging.fetch_for(key, b.get("title", ""), b.get("author", ""), b.get("categories"))
     except Exception:
         tags = {}
-    return render_template("book.html", b=b, rate_key=key,
+    # duplicate/upgrade: which formats of this title you already own
+    owned_formats = []
+    if formats.multi() and b.get("title"):
+        a1 = (b.get("author") or "").split(",")[0].strip().lower()
+        with db.conn() as c:
+            for r in c.execute("SELECT DISTINCT format FROM library WHERE gone_at IS NULL "
+                               "AND lower(title)=? AND (?='' OR lower(author) LIKE ?)",
+                               ((b["title"] or "").strip().lower(), a1, f"%{a1}%")):
+                owned_formats.append(r["format"])
+    return render_template("book.html", b=b, rate_key=key, owned_formats=owned_formats,
                            community=db.community_rating(key), reviews=db.reviews_for(key),
                            my_stars=(my["stars"] if my else 0), my_review=(my["review"] if my else ""),
                            tags=tags, shelf=db.shelf_state(u["id"], key))
@@ -592,9 +675,10 @@ def api_series_add():
     body = request.get_json(force=True)
     name = (body.get("series") or "").strip()
     author = (body.get("author") or "").split(",")[0].strip()
+    fmt = body.get("format") or "audiobook"
     if not name or not author:
         return jsonify({"ok": False, "detail": "Series needs an author Stackarr can look up."}), 400
-    res = chaptarr.add_and_search(name, author)
+    res = chaptarr.add_and_search(name, author, fmt=fmt)
     with db.conn() as c:
         c.execute("INSERT INTO requests (user_id,title,author,status,detail,source) VALUES (?,?,?,?,?,?)",
                   (u["id"], f"Full series: {name}", author,
@@ -608,7 +692,42 @@ def shelves_page():
     """Your reading shelves: Want to read · Reading · Read."""
     u = auth.current_user()
     shelves = {s: db.shelf_list(u["id"], s) for s in ("reading", "want", "read")}
-    counts = db.shelf_counts(u["id"])
+    # auto-pull "currently reading" from in-progress state across your libraries
+    # (ABS + ebook sources + Hardcover), merged with anything you set manually.
+    seen_titles = {(it.get("title") or "").strip().lower() for it in shelves["reading"]}
+
+    def _add_reading(title, author, cover, fmt, rkey=""):
+        t = (title or "").strip()
+        if not t or t.lower() in seen_titles:
+            return
+        seen_titles.add(t.lower())
+        shelves["reading"].append({"rkey": rkey or db.rating_key("", t, author), "title": t,
+                                   "author": author or "", "cover": cover or "", "format": fmt, "auto": True})
+    try:
+        with db.conn() as c:
+            lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,format FROM library")}
+        for h in absclient.listening_history(u["abs_token"]):
+            if not h.get("finished") and (h.get("progress") or 0) > 0.02:
+                m = lib.get(h["item_id"]) or {}
+                if m.get("title"):
+                    _add_reading(m["title"], m.get("author", ""), url_for("main.cover", item_id=h["item_id"]), "audiobook")
+        if formats.show("ebook"):
+            from . import backends
+            for be in backends.sources("ebook"):
+                try:
+                    for h in be.reading_history(u):
+                        if not h.get("finished") and 0.02 < (h.get("progress") or 0) < 1:
+                            m = lib.get(h["item_id"]) or {}
+                            if m.get("title"):
+                                _add_reading(m["title"], m.get("author", ""), "", "ebook")
+                except Exception:
+                    pass
+        for it in ebookmeta.hardcover_reading(ebookmeta.hardcover_token()):
+            _add_reading(it.get("title", ""), it.get("author", ""), "", "ebook")
+    except Exception as e:
+        log.debug("shelves auto-reading failed: %s", e)
+    counts = dict(db.shelf_counts(u["id"]))
+    counts["reading"] = len(shelves["reading"])
     goal = 0
     try:
         goal = int(db.get_meta(f"goal_{u['id']}", "0") or 0)

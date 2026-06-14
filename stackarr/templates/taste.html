@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="page-head">
-  <h2 class="page-title">Taste <span class="subtle">everything that shapes your recommendations — see it, undo it</span></h2>
+  <h2 class="page-title">History <span class="subtle">everything that shapes your recommendations — see it, undo it</span></h2>
+</div>
+<div class="seg subtabs-row">
+  <a class="btn small ghost" href="{{ url_for('main.history_page') }}">Read &amp; rated</a>
+  <a class="btn small ghost on" href="{{ url_for('main.taste_page') }}">What shapes my picks</a>
 </div>
 
 <div class="taste-wrap">

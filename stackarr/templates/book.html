@@ -44,62 +44,64 @@
       <button class="btn small ghost shelf-btn {{ 'on' if shelf == st }}" data-state="{{ st }}" onclick="Stackarr.setShelf('{{ st }}', this)">{{ lbl }}</button>
       {% endfor %}
     </div>
+    {% if owned_formats and (('audiobook' in owned_formats) != ('ebook' in owned_formats)) %}
+    <div class="dup-note">
+      {% set have = 'audiobook' if 'audiobook' in owned_formats else 'ebook' %}
+      {% set other = 'ebook' if have == 'audiobook' else 'audiobook' %}
+      <span>You own the {{ 'audiobook' if have == 'audiobook' else 'eBook' }} of this.</span>
+      <button class="btn small" onclick='Stackarr.grabFormat({{ b|tojson }}, "{{ other }}", this)'>{{ fmt_icon(other) }} Also get the {{ 'eBook' if other == 'ebook' else 'audiobook' }}</button>
+    </div>
+    {% endif %}
     {% if b.state == 'failed' %}
     <div class="error-banner">
       <strong>Couldn't grab this one yet.</strong> {{ b.req_detail or "Chaptarr couldn't find or fetch a copy. You can retry below." }}
     </div>
     {% endif %}
+    {% macro grab_actions(half=False) %}
+      {% if multi_format %}
+        {# both mode: compact 'Add' + format icon, half-width side by side #}
+        <div class="grab-pair">
+          <button class="btn grab-half" title="Add audiobook" onclick='Stackarr.grabFormat({{ b|tojson }}, "audiobook", this)'>{{ fmt_icon('audiobook') }} Add</button>
+          <button class="btn grab-half" title="Add eBook" onclick='Stackarr.grabFormat({{ b|tojson }}, "ebook", this)'>{{ fmt_icon('ebook') }} Add</button>
+        </div>
+      {% else %}
+        {% if b.state == 'available' %}<button class="btn" disabled>In library</button>
+        {% elif b.state in ('handed','queued') %}<button class="btn" disabled>Requested</button>
+        {% elif b.state == 'failed' %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>{{ fmt_icon(b.format) }} Retry</button>
+        {% else %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>{{ fmt_icon(b.format) }} Add book</button>{% endif %}
+      {% endif %}
+    {% endmacro %}
     <div class="book-actions">
-      {% if b.state == 'available' %}<button class="btn" disabled>In library</button>
-      {% elif b.state in ('handed','queued') %}<button class="btn" disabled>Requested</button>
-      {% elif b.state == 'failed' %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>Retry</button>
-      {% else %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>Request</button>{% endif %}
-      <button class="btn ghost" onclick='Stackarr.bookMarkRead({{ b|tojson }}, this)'>Already read</button>
-      <button class="btn ghost" onclick='Stackarr.bookIgnore({{ b|tojson }}, this)'>Ignore</button>
-      {% if multi_format %}<button class="btn ghost" onclick='Stackarr.getOtherFormat({{ b|tojson }}, this)'
-        title="Also get this as {{ 'an eBook' if (b.format or 'audiobook')=='audiobook' else 'an audiobook' }}">
-        {{ fmt_icon('ebook' if (b.format or 'audiobook')=='audiobook' else 'audiobook') }} Get other format</button>{% endif %}
+      {% if multi_format and b.state == 'available' %}<span class="chip">In library</span>{% endif %}
+      {{ grab_actions() }}
+      <button class="btn ghost" onclick='Stackarr.bookIgnore({{ b|tojson }}, this)'>Not interested</button>
     </div>
+    {# quiet taste-tuning row #}
     <div class="feedback-row">
-      <button class="btn small ghost" onclick='Stackarr.feedback({{ b|tojson }}, "more", this)'>👍 More like this</button>
-      <button class="btn small ghost" onclick='Stackarr.feedback({{ b|tojson }}, "less", this)'>👎 Less like this</button>
+      <button class="icon-pill" title="More like this" onclick='Stackarr.feedback({{ b|tojson }}, "more", this)'>👍</button>
+      <button class="icon-pill" title="Less like this" onclick='Stackarr.feedback({{ b|tojson }}, "less", this)'>👎</button>
+      <span class="muted" style="font-size:12.5px">Tune your recommendations</span>
     </div>
   </div>
 </div>
 
+{# below-the-fold: repeat the primary grab actions so they're reachable after reading #}
+<div class="book-actions-bottom">
+  {{ grab_actions() }}
+  <button class="btn ghost" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑ Back to top</button>
+</div>
+
 {% set rate_key = rate_key or b.asin %}
 {% set community = community or {'avg': 0, 'count': 0} %}
-<section class="reviews" id="reviews" data-key="{{ rate_key }}" data-title="{{ b.title }}" data-author="{{ b.author }}" data-format="{{ b.format or 'audiobook' }}">
-  <div class="reviews-head">
-    <h3>Ratings &amp; reviews</h3>
-    {% if community.count %}<span class="community-rating">★ {{ community.avg }}
-      <span class="subtle">· {{ community.count }} rating{{ '' if community.count == 1 else 's' }}</span></span>{% endif %}
-  </div>
+<section class="reviews" id="reviews">
   <div class="my-review">
-    <p class="muted">Your rating</p>
+    <p class="muted">Your rating{% if community.count %} <span class="community-inline">· community ★ {{ community.avg }} ({{ community.count }}){% endif %}</span></p>
     <div class="rate-stars big" id="my-stars" data-asin="{{ rate_key }}" data-title="{{ b.title }}" data-author="{{ b.author }}">
       {% for n in [1,2,3,4,5] %}<span class="star {{ 'on' if my_stars and n <= my_stars }}"
         onclick="Stackarr.rate('{{ rate_key }}',{{ n }},this)">★</span>{% endfor %}
     </div>
-    <textarea id="my-review-text" class="review-input" rows="3" maxlength="1500"
-      placeholder="Write a short review to share with everyone (optional)…">{{ my_review or '' }}</textarea>
-    <label class="spoiler-toggle"><input type="checkbox" id="my-review-spoiler"> Contains spoilers</label>
-    <button class="btn small" onclick="Stackarr.submitReview(this)">Save review</button>
+    <p class="muted" style="font-size:12.5px;margin-top:6px">A quick rating sharpens your recommendations.</p>
   </div>
-  {% if reviews %}
-  <div class="review-list">
-    {% for r in reviews %}
-    <div class="review-item">
-      <div class="review-meta"><strong>{{ r.username }}</strong>
-        <span class="review-stars">{% for n in [1,2,3,4,5] %}<span class="star {{ 'on' if n <= r.stars }}">★</span>{% endfor %}</span>
-        <span class="subtle">{{ (r.created_at or '')[:10] }}</span>
-        <button class="vote-btn" onclick="Stackarr.voteReview({{ r.id }}, this)" title="Helpful">👍 <span class="vcount">{{ r.votes }}</span></button></div>
-      {% if r.spoiler %}<p class="review-text spoiler" onclick="this.classList.remove('spoiler')"><span class="spoiler-label">Spoiler — tap to reveal</span><span class="spoiler-body">{{ r.review }}</span></p>
-      {% else %}<p class="review-text">{{ r.review }}</p>{% endif %}
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}<p class="muted">No written reviews yet — be the first.</p>{% endif %}
 </section>
 {% endblock %}
 {% block scripts %}<script>Stackarr.boot();</script>{% endblock %}

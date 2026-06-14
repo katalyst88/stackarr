@@ -6,6 +6,10 @@
     <span class="subtle">{{ books|length }} book{{ 's' if books|length != 1 }}{% if rated_n %} · {{ rated_n }} rated{% endif %}</span></h2>
   <div class="page-head-actions">{{ fmt_filter() }}</div>
 </div>
+<div class="seg subtabs-row">
+  <a class="btn small ghost on" href="{{ url_for('main.history_page') }}">Read &amp; rated</a>
+  <a class="btn small ghost" href="{{ url_for('main.taste_page') }}">What shapes my picks</a>
+</div>
 
 {% if not books %}
 <div class="empty"><p>No read books yet. Finish a book in Audiobookshelf, or mark one

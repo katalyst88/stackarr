@@ -660,3 +660,30 @@ input[type=range] { accent-color: var(--accent); }
 .missing-seq { color: var(--accent); font-weight: 700; flex: none; }
 /* cover placeholder fills its frame cleanly */
 img.cover-ph { object-fit: contain !important; background: var(--bg3); padding: 0; }
+
+/* book page declutter: quiet feedback pills + below-fold action bar */
+.icon-pill { background: var(--bg3); border: 1px solid var(--line); border-radius: 999px; width: 34px; height: 30px;
+  cursor: pointer; font-size: 14px; color: var(--text); }
+.icon-pill:hover { border-color: var(--accent); }
+.icon-pill.on { background: var(--accent); }
+.feedback-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.book-actions-bottom { display: flex; flex-wrap: wrap; gap: 10px; margin: 24px auto 8px; max-width: 820px;
+  padding: 16px clamp(14px,3vw,24px) 0; border-top: 1px solid var(--line); }
+.community-inline { color: var(--subtle); }
+
+/* both-mode compact grab pair (two half-width Add buttons side by side) */
+.grab-pair { display: inline-flex; gap: 6px; }
+.grab-pair .grab-half { flex: 1 1 0; padding-left: 14px; padding-right: 14px; white-space: nowrap; }
+.grab-half .fmt-ic { margin-right: 2px; }
+/* home dashboard */
+.home-top { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+.home-stat { background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 16px 22px;
+  text-decoration: none; color: var(--text); display: flex; flex-direction: column; justify-content: center; min-width: 130px; }
+.home-stat:hover { border-color: var(--accent); }
+.home-stat-num { font-size: 30px; font-weight: 800; line-height: 1; }
+
+/* history/taste subtabs + duplicate-format note */
+.subtabs-row { margin: -6px 0 18px; }
+.dup-note { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0; padding: 10px 14px;
+  background: color-mix(in srgb, var(--ebook) 10%, var(--bg2)); border: 1px solid color-mix(in srgb, var(--ebook) 30%, var(--line));
+  border-radius: 10px; font-size: 14px; }
