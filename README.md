@@ -1,26 +1,62 @@
 # Stackarr
 
-## 🔎 [**▶ Try the live demo →**](https://katalyst88.github.io/stackarr/)
+#### You've got a thousand books on your own server. So why is "what next?" still so hard?
 
-**No install — runs in your browser.** A sample of the full UI (sample data,
-actions disabled), hosted on GitHub Pages.
+Your homelab already nails the boring parts. Sonarr finds your shows, Radarr your
+movies, and Chaptarr grabs your books. But nothing ever answers the actual
+question you have at 11pm with headphones in: *out of everything I could read or
+listen to next — what's actually worth it?*
 
----
+That's the whole job of **Stackarr**. It quietly learns your taste from the
+library you already have, lines up a shelf of "you'll probably love this — and
+here's why," and when you say yes, hands it straight to Chaptarr to download.
+It's a private, self-hosted **Goodreads / StoryGraph alternative** wired into
+**Audiobookshelf, Kavita and Calibre-Web** — for **audiobooks *and* ebooks**.
 
-![version](https://img.shields.io/badge/version-1.0.0-brightgreen)
-![docker](https://img.shields.io/badge/docker-ghcr.io%2Fkatalyst88%2Fstackarr-blue)
+No AI. No cloud. No account. Nothing phones home, and every single pick comes
+with a plain-English reason you can argue with.
 
-> **1.0** — used day-to-day by its author. Written largely with an AI assistant,
-> so read the code before relying on it. Issues and PRs welcome.
+<p align="center">
+  <a href="https://katalyst88.github.io/stackarr/"><img src="docs/img/hero-suggestions.png" alt="Stackarr — personalised audiobook and ebook recommendations from your own library" width="820"></a>
+</p>
 
-**The recommendation shelf for Chaptarr.** Stackarr reads your
-[Audiobookshelf](https://www.audiobookshelf.org/) listening history and suggests
-your next audiobook — then hands the ones you pick to **Chaptarr** to download.
-Think Seer, but for *what to listen to next*. **No AI in the recommendations** —
-every pick is a real catalogue entry reached by an explainable rule.
+<p align="center">
+  <a href="https://katalyst88.github.io/stackarr/"><b>▶ Try the live demo</b></a> — no install, runs in your browser ·
+  <a href="RECOMMENDATIONS.md">how the picks are made</a>
+</p>
 
-Stackarr never touches a download client itself: Chaptarr (the Readarr-style
-book/audiobook manager) does the searching, grabbing and importing.
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.6.0-brightgreen">
+  <img src="https://img.shields.io/badge/docker-ghcr.io%2Fkatalyst88%2Fstackarr-blue">
+  <img src="https://img.shields.io/badge/license-MIT-green">
+  <img src="https://img.shields.io/badge/AI%20in%20recommendations-none-orange">
+</p>
+
+### What it actually does
+
+- **Recommends from *your* taste, not a bestseller list.** It reads what you've
+  finished, what you've rated, and the *moods* you gravitate to — fast-paced,
+  dark, cozy, epic — StoryGraph-style, but private. Then it explains every pick.
+- **Audiobooks and ebooks, one shelf.** Pulls your library from Audiobookshelf,
+  Kavita, Calibre-Web (and Komga / OPDS). Run one format or both.
+- **One tap and it's downloading.** Approve a suggestion and Chaptarr does the
+  searching, grabbing and importing. Stackarr never touches a download client.
+- **It's a reading tracker too.** Want / Reading / Read shelves, a yearly reading
+  goal, a GitHub-style activity heatmap, "up next" for your series, and
+  Wrapped-style insights into your year.
+- **Built to be lived in.** Browse by mood, follow authors for new-release pings,
+  hit "surprise me" for one perfect pick, leave reviews, chase hidden gems. A
+  clean, installable PWA that's genuinely nice on a phone.
+
+> Built by someone who uses it every single day. Written largely with an AI
+> assistant (the *app* has none) — so skim the code before you trust it with your
+> stack. Issues and PRs very welcome.
+
+<p align="center">
+  <img src="docs/img/shelves.png" width="265" alt="Reading shelves and goal">
+  <img src="docs/img/insights.png" width="265" alt="Insights with activity heatmap">
+  <img src="docs/img/mobile.png" width="170" alt="Stackarr on mobile">
+</p>
 
 ---
 

@@ -21,9 +21,9 @@
     <svg viewBox="0 0 24 24"><path d="M12 2 3 7v10l9 5 9-5V7zm0 2.2 6.5 3.6L12 11.4 5.5 7.8zM5 9.3l6 3.3v6.8l-6-3.3zm14 0v6.8l-6 3.3v-6.8z"/></svg><span>Suggestions</span></a>
   <a href="series.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M4 4h4v16H4zm6 0h4v16h-4zm7 0 3.8 1 .2 15-4-1z"/></svg><span>Up Next</span></a>
-  <a href="/shelves" class="navlink ">
+  <a href="shelves.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M3 3h7v18H3zm9 0h3v18h-3zm5.5.3 3 .5L21 21l-3-.5z"/></svg><span>My shelves</span></a>
-  <a href="/upcoming" class="navlink ">
+  <a href="upcoming.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zm12 7v10H5V9zm-7 2v3H9v-3z"/></svg><span>Upcoming</span></a>
   <a href="requests.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm-1 13-3-2-3 2V4h6z"/></svg><span>Requests</span></a>
@@ -40,14 +40,14 @@
       <svg viewBox="0 0 24 24"><path d="M17 7l-1.4 1.4L18.2 11H8v2h10.2l-2.6 2.6L17 17l5-5zM4 5h8V3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8v-2H4z"/></svg>
       <span>demo</span></button>
   </form>
-  <div class="version-tag">v1.0 · demo</div>
+  <div class="version-tag">v1.6.0 · demo</div>
 </nav>
 
 <div class="shell">
   <header class="topbar">
     <form class="search" action="demo-info.html" method="get" role="search">
       <svg viewBox="0 0 24 24"><path d="M15.5 14h-.8l-.3-.3a6.5 6.5 0 1 0-.7.7l.3.3v.8l5 5 1.5-1.5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
-      <input name="q" id="topsearch" type="search" autocomplete="off" placeholder="Search audiobooks to add…" value="">
+      <input name="q" id="topsearch" type="search" autocomplete="off" placeholder="Search books to add…" value="">
       <div class="search-suggest" id="search-suggest"></div>
     </form>
     <div class="topbar-spacer"></div>
@@ -66,8 +66,8 @@
     <h1 class="book-title">The Shadow Rising</h1>
     <p class="book-subtitle">Book Four of &#39;The Wheel of Time&#39;</p>
     <p class="book-author">
-      <a class="author-link" href="/author/Robert%20Jordan">Robert Jordan</a>
-      <span class="subtle"> · narrated by </span><a class="author-link" href="/narrator/Rosamund%20Pike">Rosamund Pike</a>
+      <a class="author-link" href="author-robert-jordan.html">Robert Jordan</a>
+      <span class="subtle"> · narrated by </span><a class="author-link" href="narrator-rosamund-pike.html">Rosamund Pike</a>
     </p>
     <div class="book-meta">
       <span class="chip">The Wheel of Time #4</span>
@@ -75,19 +75,24 @@
       
       <span class="chip">★ 4.8 (225)</span>
       <span class="chip">📅 2024-09-17</span>
-      
+      <span class="chip">eBook</span>
       <span class="chip">English</span>
       <span class="chip subtle-chip">Macmillan Audio</span>
     </div>
     <div class="book-meta">
       <a class="chip subtle-chip" href="genre-science-fiction-fantasy.html">Science Fiction &amp; Fantasy</a><a class="chip subtle-chip" href="genre-fantasy.html">Fantasy</a><a class="chip subtle-chip" href="genre-action-adventure.html">Action &amp; Adventure</a><a class="chip subtle-chip" href="genre-epic.html">Epic</a>
     </div>
-    
-    
+    <div class="book-meta">
+      <a class="chip mood-chip" href="/browse?mood=fast-paced">fast-paced</a>
+      <a class="chip mood-chip" href="mood-epic.html">epic</a><a class="chip mood-chip" href="mood-dark.html">dark</a><a class="chip mood-chip" href="mood-adventurous.html">adventurous</a>
+    </div>
+    <details class="cw"><summary>⚠️ Content warnings (2)</summary>
+      <div class="cw-list"><span class="chip cw-chip">Violence</span><span class="chip cw-chip">Death/grief</span></div>
+      <p class="muted" style="font-size:12px">Auto-detected from catalogue subjects — may be incomplete.</p></details>
     
 
     
-    <div class="shelf-bar" data-key="" data-title="The Shadow Rising" data-author="Robert Jordan" data-cover="https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg" data-format="unabridged">
+    <div class="shelf-bar" data-key="B0D94V4ZVT" data-title="The Shadow Rising" data-author="Robert Jordan" data-cover="https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg" data-format="ebook">
       <span class="muted">Shelf:</span>
       
       <button class="btn small ghost shelf-btn " data-state="want" onclick="Stackarr.setShelf('want', this)">Want to read</button>
@@ -101,32 +106,35 @@
     <div class="book-actions">
       <button class="btn" disabled>In library</button>
       
-      <button class="btn ghost" onclick='Stackarr.bookMarkRead({"asin": "B0D94V4ZVT", "author": "Robert Jordan", "cover": "https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg", "format": "unabridged", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic"], "language": "English", "narrator": "Rosamund Pike", "num_ratings": 225, "publisher": "Macmillan Audio", "rating": 4.8, "release_date": "2024-09-17", "req_detail": null, "runtime_hours": 41, "sequence": "4", "series": "The Wheel of Time", "state": "available", "subtitle": "Book Four of \u0027The Wheel of Time\u0027", "summary": "", "title": "The Shadow Rising"}, this)'>Already read</button>
-      <button class="btn ghost" onclick='Stackarr.bookIgnore({"asin": "B0D94V4ZVT", "author": "Robert Jordan", "cover": "https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg", "format": "unabridged", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic"], "language": "English", "narrator": "Rosamund Pike", "num_ratings": 225, "publisher": "Macmillan Audio", "rating": 4.8, "release_date": "2024-09-17", "req_detail": null, "runtime_hours": 41, "sequence": "4", "series": "The Wheel of Time", "state": "available", "subtitle": "Book Four of \u0027The Wheel of Time\u0027", "summary": "", "title": "The Shadow Rising"}, this)'>Ignore</button>
-      
+      <button class="btn ghost" onclick='Stackarr.bookMarkRead({"asin": "B0D94V4ZVT", "author": "Robert Jordan", "cover": "https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg", "format": "ebook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic"], "language": "English", "narrator": "Rosamund Pike", "num_ratings": 225, "publisher": "Macmillan Audio", "rating": 4.8, "release_date": "2024-09-17", "req_detail": null, "runtime_hours": 41, "sequence": "4", "series": "The Wheel of Time", "state": "available", "subtitle": "Book Four of \u0027The Wheel of Time\u0027", "summary": "", "title": "The Shadow Rising"}, this)'>Already read</button>
+      <button class="btn ghost" onclick='Stackarr.bookIgnore({"asin": "B0D94V4ZVT", "author": "Robert Jordan", "cover": "https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg", "format": "ebook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic"], "language": "English", "narrator": "Rosamund Pike", "num_ratings": 225, "publisher": "Macmillan Audio", "rating": 4.8, "release_date": "2024-09-17", "req_detail": null, "runtime_hours": 41, "sequence": "4", "series": "The Wheel of Time", "state": "available", "subtitle": "Book Four of \u0027The Wheel of Time\u0027", "summary": "", "title": "The Shadow Rising"}, this)'>Ignore</button>
+      <button class="btn ghost" onclick='Stackarr.getOtherFormat({"asin": "B0D94V4ZVT", "author": "Robert Jordan", "cover": "https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg", "format": "ebook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic"], "language": "English", "narrator": "Rosamund Pike", "num_ratings": 225, "publisher": "Macmillan Audio", "rating": 4.8, "release_date": "2024-09-17", "req_detail": null, "runtime_hours": 41, "sequence": "4", "series": "The Wheel of Time", "state": "available", "subtitle": "Book Four of \u0027The Wheel of Time\u0027", "summary": "", "title": "The Shadow Rising"}, this)'
+        title="Also get this as an audiobook">
+        <svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9v4.5A2.5 2.5 0 0 0 5.5 19H7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5v-0a7 7 0 0 1 14 0v0h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.5A2.5 2.5 0 0 0 21 16.5V12a9 9 0 0 0-9-9z"/></svg> Get other format</button>
     </div>
     <div class="feedback-row">
-      <button class="btn small ghost" onclick='Stackarr.feedback({"asin": "B0D94V4ZVT", "author": "Robert Jordan", "cover": "https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg", "format": "unabridged", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic"], "language": "English", "narrator": "Rosamund Pike", "num_ratings": 225, "publisher": "Macmillan Audio", "rating": 4.8, "release_date": "2024-09-17", "req_detail": null, "runtime_hours": 41, "sequence": "4", "series": "The Wheel of Time", "state": "available", "subtitle": "Book Four of \u0027The Wheel of Time\u0027", "summary": "", "title": "The Shadow Rising"}, "more", this)'>👍 More like this</button>
-      <button class="btn small ghost" onclick='Stackarr.feedback({"asin": "B0D94V4ZVT", "author": "Robert Jordan", "cover": "https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg", "format": "unabridged", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic"], "language": "English", "narrator": "Rosamund Pike", "num_ratings": 225, "publisher": "Macmillan Audio", "rating": 4.8, "release_date": "2024-09-17", "req_detail": null, "runtime_hours": 41, "sequence": "4", "series": "The Wheel of Time", "state": "available", "subtitle": "Book Four of \u0027The Wheel of Time\u0027", "summary": "", "title": "The Shadow Rising"}, "less", this)'>👎 Less like this</button>
+      <button class="btn small ghost" onclick='Stackarr.feedback({"asin": "B0D94V4ZVT", "author": "Robert Jordan", "cover": "https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg", "format": "ebook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic"], "language": "English", "narrator": "Rosamund Pike", "num_ratings": 225, "publisher": "Macmillan Audio", "rating": 4.8, "release_date": "2024-09-17", "req_detail": null, "runtime_hours": 41, "sequence": "4", "series": "The Wheel of Time", "state": "available", "subtitle": "Book Four of \u0027The Wheel of Time\u0027", "summary": "", "title": "The Shadow Rising"}, "more", this)'>👍 More like this</button>
+      <button class="btn small ghost" onclick='Stackarr.feedback({"asin": "B0D94V4ZVT", "author": "Robert Jordan", "cover": "https://m.media-amazon.com/images/I/51u7EdCFNuL._SL1500_.jpg", "format": "ebook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic"], "language": "English", "narrator": "Rosamund Pike", "num_ratings": 225, "publisher": "Macmillan Audio", "rating": 4.8, "release_date": "2024-09-17", "req_detail": null, "runtime_hours": 41, "sequence": "4", "series": "The Wheel of Time", "state": "available", "subtitle": "Book Four of \u0027The Wheel of Time\u0027", "summary": "", "title": "The Shadow Rising"}, "less", this)'>👎 Less like this</button>
     </div>
   </div>
 </div>
 
 
 
-<section class="reviews" id="reviews" data-key="B0D94V4ZVT" data-title="The Shadow Rising" data-author="Robert Jordan" data-format="unabridged">
+<section class="reviews" id="reviews" data-key="B0D94V4ZVT" data-title="The Shadow Rising" data-author="Robert Jordan" data-format="ebook">
   <div class="reviews-head">
     <h3>Ratings &amp; reviews</h3>
-    
+    <span class="community-rating">★ 4.3
+      <span class="subtle">· 23 ratings</span></span>
   </div>
   <div class="my-review">
     <p class="muted">Your rating</p>
     <div class="rate-stars big" id="my-stars" data-asin="B0D94V4ZVT" data-title="The Shadow Rising" data-author="Robert Jordan">
-      <span class="star "
-        onclick="Stackarr.rate('B0D94V4ZVT',1,this)">★</span><span class="star "
-        onclick="Stackarr.rate('B0D94V4ZVT',2,this)">★</span><span class="star "
-        onclick="Stackarr.rate('B0D94V4ZVT',3,this)">★</span><span class="star "
-        onclick="Stackarr.rate('B0D94V4ZVT',4,this)">★</span><span class="star "
+      <span class="star on"
+        onclick="Stackarr.rate('B0D94V4ZVT',1,this)">★</span><span class="star on"
+        onclick="Stackarr.rate('B0D94V4ZVT',2,this)">★</span><span class="star on"
+        onclick="Stackarr.rate('B0D94V4ZVT',3,this)">★</span><span class="star on"
+        onclick="Stackarr.rate('B0D94V4ZVT',4,this)">★</span><span class="star on"
         onclick="Stackarr.rate('B0D94V4ZVT',5,this)">★</span>
     </div>
     <textarea id="my-review-text" class="review-input" rows="3" maxlength="1500"

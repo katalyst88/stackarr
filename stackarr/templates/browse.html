@@ -13,7 +13,7 @@
   {% for b in books %}
   <div class="media-card">
     <a class="media-poster" href="{{ url_for('main.book_page', asin=b.asin) }}">
-      <img src="{{ b.cover or url_for('static', filename='icon.svg') }}" loading="lazy" alt="">
+      <img src="{{ b.cover or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="">
       {% if b.state == 'available' %}<span class="corner-badge available">Available</span>
       {% elif b.state in ('handed','queued') %}<span class="corner-badge handed">Requested</span>{% endif %}
       <div class="media-overlay">

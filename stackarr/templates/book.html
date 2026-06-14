@@ -4,7 +4,7 @@
 <button class="btn small ghost back-btn" onclick="history.back()">‹ Back</button>
 <div class="book-detail">
   <div class="book-cover">
-    <img src="{{ b.cover or url_for('static', filename='icon.svg') }}" alt="">
+    <img src="{{ b.cover or url_for('static', filename='cover-placeholder.svg') }}" alt="">
     {% if b.state == 'available' %}<span class="corner-badge available">Available</span>
     {% elif b.state in ('handed','queued') %}<span class="corner-badge handed">Requested</span>{% endif %}
   </div>

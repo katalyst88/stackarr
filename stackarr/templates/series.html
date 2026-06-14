@@ -5,7 +5,9 @@
 <div class="page-head">
   <h2 class="page-title">Up Next
     <span class="subtle">{{ series|length }} series in your library{% if have_next %} · {{ have_next }} with a next book ready{% endif %}</span></h2>
-  <div class="page-head-actions">{{ fmt_filter() }}</div>
+  <div class="page-head-actions">{{ fmt_filter() }}
+    <button class="btn small ghost" onclick="Stackarr.checkLibrary(this)" title="Re-scan your libraries for newly added books">↻ Check library</button>
+  </div>
 </div>
 
 {% if not series %}
@@ -25,13 +27,17 @@
       <div class="series-books">
         {% for b in s.books %}<span class="series-chip" title="{{ b.title }}">{% if b.series_seq is not none %}#{{ seq(b.series_seq) }} {% endif %}{{ b.title }}</span>{% endfor %}
       </div>
-      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('{{ s.name|e }}', '{{ (s.books[0].author if s.books else '')|e }}', this)">＋ Get full series</button>
+      <div class="series-actions">
+        <button class="btn small ghost" onclick="Stackarr.findMissing('{{ s.name|e }}', this)">🔍 Find missing books</button>
+        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('{{ s.name|e }}', '{{ (s.books[0].author if s.books else '')|e }}', this)">＋ Get full series</button>
+      </div>
+      <div class="series-missing" hidden></div>
     </div>
     <div class="series-next">
       {% if s.next %}
       <a class="series-next-cover" href="{{ url_for('main.book_page', asin=s.next.asin) }}">
-        <img src="{{ (s.next.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt=""
-             onerror="this.src='{{ url_for('static', filename='icon.svg') }}'"></a>
+        <img src="{{ (s.next.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt=""
+             onerror="this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'"></a>
       <div class="series-next-info">
         <div class="series-next-label">Next up</div>
         <div class="series-next-title" title="{{ s.next.title }}">{{ s.next.title }}</div>

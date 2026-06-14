@@ -21,9 +21,9 @@
     <svg viewBox="0 0 24 24"><path d="M12 2 3 7v10l9 5 9-5V7zm0 2.2 6.5 3.6L12 11.4 5.5 7.8zM5 9.3l6 3.3v6.8l-6-3.3zm14 0v6.8l-6 3.3v-6.8z"/></svg><span>Suggestions</span></a>
   <a href="series.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M4 4h4v16H4zm6 0h4v16h-4zm7 0 3.8 1 .2 15-4-1z"/></svg><span>Up Next</span></a>
-  <a href="/shelves" class="navlink ">
+  <a href="shelves.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M3 3h7v18H3zm9 0h3v18h-3zm5.5.3 3 .5L21 21l-3-.5z"/></svg><span>My shelves</span></a>
-  <a href="/upcoming" class="navlink ">
+  <a href="upcoming.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zm12 7v10H5V9zm-7 2v3H9v-3z"/></svg><span>Upcoming</span></a>
   <a href="requests.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm-1 13-3-2-3 2V4h6z"/></svg><span>Requests</span></a>
@@ -40,14 +40,14 @@
       <svg viewBox="0 0 24 24"><path d="M17 7l-1.4 1.4L18.2 11H8v2h10.2l-2.6 2.6L17 17l5-5zM4 5h8V3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8v-2H4z"/></svg>
       <span>demo</span></button>
   </form>
-  <div class="version-tag">v1.0 · demo</div>
+  <div class="version-tag">v1.6.0 · demo</div>
 </nav>
 
 <div class="shell">
   <header class="topbar">
     <form class="search" action="demo-info.html" method="get" role="search">
       <svg viewBox="0 0 24 24"><path d="M15.5 14h-.8l-.3-.3a6.5 6.5 0 1 0-.7.7l.3.3v.8l5 5 1.5-1.5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"/></svg>
-      <input name="q" id="topsearch" type="search" autocomplete="off" placeholder="Search audiobooks to add…" value="">
+      <input name="q" id="topsearch" type="search" autocomplete="off" placeholder="Search books to add…" value="">
       <div class="search-suggest" id="search-suggest"></div>
     </form>
     <div class="topbar-spacer"></div>
@@ -65,8 +65,8 @@
     <h1 class="book-title">Rhythm of War</h1>
     <p class="book-subtitle">The Stormlight Archive, Book 4</p>
     <p class="book-author">
-      <a class="author-link" href="/author/Brandon%20Sanderson">Brandon Sanderson</a>
-      <span class="subtle"> · narrated by </span><a class="author-link" href="/narrator/Kate%20Reading">Kate Reading</a>
+      <a class="author-link" href="author-brandon-sanderson.html">Brandon Sanderson</a>
+      <span class="subtle"> · narrated by </span><a class="author-link" href="narrator-kate-reading.html">Kate Reading</a>
     </p>
     <div class="book-meta">
       <span class="chip">The Cosmere</span>
@@ -74,19 +74,24 @@
       
       <span class="chip">★ 4.8 (40)</span>
       <span class="chip">📅 2020-11-17</span>
-      
+      <span class="chip">Audiobook</span>
       <span class="chip">English</span>
       <span class="chip subtle-chip">Gollancz</span>
     </div>
     <div class="book-meta">
       <a class="chip subtle-chip" href="genre-literature-fiction.html">Literature &amp; Fiction</a><a class="chip subtle-chip" href="genre-action-adventure.html">Action &amp; Adventure</a><a class="chip subtle-chip" href="genre-science-fiction-fantasy.html">Science Fiction &amp; Fantasy</a><a class="chip subtle-chip" href="genre-fantasy.html">Fantasy</a><a class="chip subtle-chip" href="genre-epic.html">Epic</a>
     </div>
-    
-    
+    <div class="book-meta">
+      <a class="chip mood-chip" href="/browse?mood=fast-paced">fast-paced</a>
+      <a class="chip mood-chip" href="mood-epic.html">epic</a><a class="chip mood-chip" href="mood-dark.html">dark</a><a class="chip mood-chip" href="mood-adventurous.html">adventurous</a>
+    </div>
+    <details class="cw"><summary>⚠️ Content warnings (2)</summary>
+      <div class="cw-list"><span class="chip cw-chip">Violence</span><span class="chip cw-chip">Death/grief</span></div>
+      <p class="muted" style="font-size:12px">Auto-detected from catalogue subjects — may be incomplete.</p></details>
     
 
     
-    <div class="shelf-bar" data-key="" data-title="Rhythm of War" data-author="Brandon Sanderson" data-cover="https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg" data-format="unabridged">
+    <div class="shelf-bar" data-key="1473231051" data-title="Rhythm of War" data-author="Brandon Sanderson" data-cover="https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg" data-format="audiobook">
       <span class="muted">Shelf:</span>
       
       <button class="btn small ghost shelf-btn " data-state="want" onclick="Stackarr.setShelf('want', this)">Want to read</button>
@@ -98,32 +103,35 @@
     </div>
     
     <div class="book-actions">
-      <button class="btn" onclick='Stackarr.bookRequest({"asin": "1473231051", "author": "Brandon Sanderson", "cover": "https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg", "format": "unabridged", "genres": ["Literature \u0026 Fiction", "Action \u0026 Adventure", "Science Fiction \u0026 Fantasy", "Fantasy", "Epic"], "language": "English", "narrator": "Kate Reading", "num_ratings": 40, "publisher": "Gollancz", "rating": 4.8, "release_date": "2020-11-17", "req_detail": null, "runtime_hours": 57, "sequence": "", "series": "The Cosmere", "state": "new", "subtitle": "The Stormlight Archive, Book 4", "summary": "", "title": "Rhythm of War"}, this)'>Request</button>
-      <button class="btn ghost" onclick='Stackarr.bookMarkRead({"asin": "1473231051", "author": "Brandon Sanderson", "cover": "https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg", "format": "unabridged", "genres": ["Literature \u0026 Fiction", "Action \u0026 Adventure", "Science Fiction \u0026 Fantasy", "Fantasy", "Epic"], "language": "English", "narrator": "Kate Reading", "num_ratings": 40, "publisher": "Gollancz", "rating": 4.8, "release_date": "2020-11-17", "req_detail": null, "runtime_hours": 57, "sequence": "", "series": "The Cosmere", "state": "new", "subtitle": "The Stormlight Archive, Book 4", "summary": "", "title": "Rhythm of War"}, this)'>Already read</button>
-      <button class="btn ghost" onclick='Stackarr.bookIgnore({"asin": "1473231051", "author": "Brandon Sanderson", "cover": "https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg", "format": "unabridged", "genres": ["Literature \u0026 Fiction", "Action \u0026 Adventure", "Science Fiction \u0026 Fantasy", "Fantasy", "Epic"], "language": "English", "narrator": "Kate Reading", "num_ratings": 40, "publisher": "Gollancz", "rating": 4.8, "release_date": "2020-11-17", "req_detail": null, "runtime_hours": 57, "sequence": "", "series": "The Cosmere", "state": "new", "subtitle": "The Stormlight Archive, Book 4", "summary": "", "title": "Rhythm of War"}, this)'>Ignore</button>
-      
+      <button class="btn" onclick='Stackarr.bookRequest({"asin": "1473231051", "author": "Brandon Sanderson", "cover": "https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg", "format": "audiobook", "genres": ["Literature \u0026 Fiction", "Action \u0026 Adventure", "Science Fiction \u0026 Fantasy", "Fantasy", "Epic"], "language": "English", "narrator": "Kate Reading", "num_ratings": 40, "publisher": "Gollancz", "rating": 4.8, "release_date": "2020-11-17", "req_detail": null, "runtime_hours": 57, "sequence": "", "series": "The Cosmere", "state": "new", "subtitle": "The Stormlight Archive, Book 4", "summary": "", "title": "Rhythm of War"}, this)'>Request</button>
+      <button class="btn ghost" onclick='Stackarr.bookMarkRead({"asin": "1473231051", "author": "Brandon Sanderson", "cover": "https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg", "format": "audiobook", "genres": ["Literature \u0026 Fiction", "Action \u0026 Adventure", "Science Fiction \u0026 Fantasy", "Fantasy", "Epic"], "language": "English", "narrator": "Kate Reading", "num_ratings": 40, "publisher": "Gollancz", "rating": 4.8, "release_date": "2020-11-17", "req_detail": null, "runtime_hours": 57, "sequence": "", "series": "The Cosmere", "state": "new", "subtitle": "The Stormlight Archive, Book 4", "summary": "", "title": "Rhythm of War"}, this)'>Already read</button>
+      <button class="btn ghost" onclick='Stackarr.bookIgnore({"asin": "1473231051", "author": "Brandon Sanderson", "cover": "https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg", "format": "audiobook", "genres": ["Literature \u0026 Fiction", "Action \u0026 Adventure", "Science Fiction \u0026 Fantasy", "Fantasy", "Epic"], "language": "English", "narrator": "Kate Reading", "num_ratings": 40, "publisher": "Gollancz", "rating": 4.8, "release_date": "2020-11-17", "req_detail": null, "runtime_hours": 57, "sequence": "", "series": "The Cosmere", "state": "new", "subtitle": "The Stormlight Archive, Book 4", "summary": "", "title": "Rhythm of War"}, this)'>Ignore</button>
+      <button class="btn ghost" onclick='Stackarr.getOtherFormat({"asin": "1473231051", "author": "Brandon Sanderson", "cover": "https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg", "format": "audiobook", "genres": ["Literature \u0026 Fiction", "Action \u0026 Adventure", "Science Fiction \u0026 Fantasy", "Fantasy", "Epic"], "language": "English", "narrator": "Kate Reading", "num_ratings": 40, "publisher": "Gollancz", "rating": 4.8, "release_date": "2020-11-17", "req_detail": null, "runtime_hours": 57, "sequence": "", "series": "The Cosmere", "state": "new", "subtitle": "The Stormlight Archive, Book 4", "summary": "", "title": "Rhythm of War"}, this)'
+        title="Also get this as an eBook">
+        <svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5A2.5 2.5 0 0 1 5.5 2H11v18.2l-.9-.5a4 4 0 0 0-1.9-.5H3zM13 2h5.5A2.5 2.5 0 0 1 21 4.5v14.7h-5.2a4 4 0 0 0-1.9.5l-.9.5z"/></svg> Get other format</button>
     </div>
     <div class="feedback-row">
-      <button class="btn small ghost" onclick='Stackarr.feedback({"asin": "1473231051", "author": "Brandon Sanderson", "cover": "https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg", "format": "unabridged", "genres": ["Literature \u0026 Fiction", "Action \u0026 Adventure", "Science Fiction \u0026 Fantasy", "Fantasy", "Epic"], "language": "English", "narrator": "Kate Reading", "num_ratings": 40, "publisher": "Gollancz", "rating": 4.8, "release_date": "2020-11-17", "req_detail": null, "runtime_hours": 57, "sequence": "", "series": "The Cosmere", "state": "new", "subtitle": "The Stormlight Archive, Book 4", "summary": "", "title": "Rhythm of War"}, "more", this)'>👍 More like this</button>
-      <button class="btn small ghost" onclick='Stackarr.feedback({"asin": "1473231051", "author": "Brandon Sanderson", "cover": "https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg", "format": "unabridged", "genres": ["Literature \u0026 Fiction", "Action \u0026 Adventure", "Science Fiction \u0026 Fantasy", "Fantasy", "Epic"], "language": "English", "narrator": "Kate Reading", "num_ratings": 40, "publisher": "Gollancz", "rating": 4.8, "release_date": "2020-11-17", "req_detail": null, "runtime_hours": 57, "sequence": "", "series": "The Cosmere", "state": "new", "subtitle": "The Stormlight Archive, Book 4", "summary": "", "title": "Rhythm of War"}, "less", this)'>👎 Less like this</button>
+      <button class="btn small ghost" onclick='Stackarr.feedback({"asin": "1473231051", "author": "Brandon Sanderson", "cover": "https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg", "format": "audiobook", "genres": ["Literature \u0026 Fiction", "Action \u0026 Adventure", "Science Fiction \u0026 Fantasy", "Fantasy", "Epic"], "language": "English", "narrator": "Kate Reading", "num_ratings": 40, "publisher": "Gollancz", "rating": 4.8, "release_date": "2020-11-17", "req_detail": null, "runtime_hours": 57, "sequence": "", "series": "The Cosmere", "state": "new", "subtitle": "The Stormlight Archive, Book 4", "summary": "", "title": "Rhythm of War"}, "more", this)'>👍 More like this</button>
+      <button class="btn small ghost" onclick='Stackarr.feedback({"asin": "1473231051", "author": "Brandon Sanderson", "cover": "https://m.media-amazon.com/images/I/51FF+pax2vL._SL1500_.jpg", "format": "audiobook", "genres": ["Literature \u0026 Fiction", "Action \u0026 Adventure", "Science Fiction \u0026 Fantasy", "Fantasy", "Epic"], "language": "English", "narrator": "Kate Reading", "num_ratings": 40, "publisher": "Gollancz", "rating": 4.8, "release_date": "2020-11-17", "req_detail": null, "runtime_hours": 57, "sequence": "", "series": "The Cosmere", "state": "new", "subtitle": "The Stormlight Archive, Book 4", "summary": "", "title": "Rhythm of War"}, "less", this)'>👎 Less like this</button>
     </div>
   </div>
 </div>
 
 
 
-<section class="reviews" id="reviews" data-key="1473231051" data-title="Rhythm of War" data-author="Brandon Sanderson" data-format="unabridged">
+<section class="reviews" id="reviews" data-key="1473231051" data-title="Rhythm of War" data-author="Brandon Sanderson" data-format="audiobook">
   <div class="reviews-head">
     <h3>Ratings &amp; reviews</h3>
-    
+    <span class="community-rating">★ 4.5
+      <span class="subtle">· 34 ratings</span></span>
   </div>
   <div class="my-review">
     <p class="muted">Your rating</p>
     <div class="rate-stars big" id="my-stars" data-asin="1473231051" data-title="Rhythm of War" data-author="Brandon Sanderson">
-      <span class="star "
-        onclick="Stackarr.rate('1473231051',1,this)">★</span><span class="star "
-        onclick="Stackarr.rate('1473231051',2,this)">★</span><span class="star "
-        onclick="Stackarr.rate('1473231051',3,this)">★</span><span class="star "
+      <span class="star on"
+        onclick="Stackarr.rate('1473231051',1,this)">★</span><span class="star on"
+        onclick="Stackarr.rate('1473231051',2,this)">★</span><span class="star on"
+        onclick="Stackarr.rate('1473231051',3,this)">★</span><span class="star on"
         onclick="Stackarr.rate('1473231051',4,this)">★</span><span class="star "
         onclick="Stackarr.rate('1473231051',5,this)">★</span>
     </div>
@@ -132,7 +140,36 @@
     <label class="spoiler-toggle"><input type="checkbox" id="my-review-spoiler"> Contains spoilers</label>
     <button class="btn small" onclick="Stackarr.submitReview(this)">Save review</button>
   </div>
-  <p class="muted">No written reviews yet — be the first.</p>
+  
+  <div class="review-list">
+    
+    <div class="review-item">
+      <div class="review-meta"><strong>alex</strong>
+        <span class="review-stars"><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span></span>
+        <span class="subtle">2026-05-30</span>
+        <button class="vote-btn" onclick="Stackarr.voteReview(1, this)" title="Helpful">👍 <span class="vcount">12</span></button></div>
+      <p class="review-text">Could not put it down — the worldbuilding is unreal.</p>
+    </div>
+    
+    <div class="review-item">
+      <div class="review-meta"><strong>sam</strong>
+        <span class="review-stars"><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star ">★</span></span>
+        <span class="subtle">2026-05-22</span>
+        <button class="vote-btn" onclick="Stackarr.voteReview(2, this)" title="Helpful">👍 <span class="vcount">5</span></button></div>
+      <p class="review-text">Slow start but the payoff is worth it.</p>
+    </div>
+    
+    <div class="review-item">
+      <div class="review-meta"><strong>jo</strong>
+        <span class="review-stars"><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span></span>
+        <span class="subtle">2026-05-18</span>
+        <button class="vote-btn" onclick="Stackarr.voteReview(3, this)" title="Helpful">👍 <span class="vcount">8</span></button></div>
+      <p class="review-text spoiler" onclick="this.classList.remove('spoiler')"><span class="spoiler-label">Spoiler — tap to reveal</span><span class="spoiler-body">That twist near the end!</span></p>
+      
+    </div>
+    
+  </div>
+  
 </section>
 </main>
 </div>

@@ -6,7 +6,7 @@
 <div class="grid">
   {% for b in books %}
   <a class="media-card" href="{{ url_for('main.book_page', asin=b.asin) }}">
-    <div class="media-poster"><img src="{{ (b.cover|hires) or url_for('static', filename='icon.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}'">
+    <div class="media-poster"><img src="{{ (b.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
       {% if b.state == 'available' %}<span class="corner-badge available">In library</span>
       {% elif b.state in ('handed','queued') %}<span class="corner-badge handed">Requested</span>{% endif %}</div>
     <div class="media-foot"><div class="media-title" title="{{ b.title }}">{{ b.title }}</div><div class="media-author">{{ b.author }}</div></div>

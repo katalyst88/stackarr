@@ -538,6 +538,51 @@ def browse_page():
     return render_template("browse.html", books=uniq, title=title, kind=kind, author=author)
 
 
+@bp.route("/api/library/refresh", methods=["POST"])
+@auth.login_required
+def api_library_refresh():
+    """Re-scan all connected libraries (ABS/Kavita/Calibre/Komga/OPDS) so newly
+    added books + series show up. Used by the 'Check library' buttons."""
+    from . import scheduler
+    try:
+        scheduler.refresh_library()
+    except Exception as e:
+        return jsonify({"ok": False, "detail": str(e)})
+    with db.conn() as c:
+        n = c.execute("SELECT COUNT(*) n FROM library WHERE gone_at IS NULL").fetchone()["n"]
+    return jsonify({"ok": True, "detail": f"Library re-scanned — {n} books"})
+
+
+@bp.route("/api/series/missing")
+@auth.login_required
+def api_series_missing():
+    """For a series you own, fetch the full series from the catalogue and report
+    which entries you're missing (the gaps), so you can complete it."""
+    u = auth.current_user()
+    name = (request.args.get("series") or "").strip()
+    if not name:
+        return jsonify({"error": "series required"}), 400
+    with db.conn() as c:
+        owned = [dict(r) for r in c.execute(
+            "SELECT title, series_seq FROM library WHERE gone_at IS NULL AND lower(series)=?",
+            (name.lower(),))]
+    owned_seqs = {round(o["series_seq"], 1) for o in owned if o["series_seq"] is not None}
+    full = {}
+    for b in audible.search(name, num=40):
+        if recommend._norm(b.get("series")) == recommend._norm(name) and b.get("sequence") is not None:
+            seq = round(b["sequence"], 1)
+            if seq not in full or b.get("num_ratings", 0) > full[seq].get("num_ratings", 0):
+                full[seq] = b
+    entries = []
+    for seq in sorted(full):
+        b = full[seq]
+        entries.append({"seq": seq, "title": b["title"], "asin": b["asin"], "cover": b.get("cover", ""),
+                        "author": b.get("author", ""), "owned": seq in owned_seqs})
+    missing = [e for e in entries if not e["owned"]]
+    return jsonify({"ok": True, "series": name, "total": len(entries),
+                    "owned": len(entries) - len(missing), "missing": missing, "entries": entries})
+
+
 @bp.route("/api/series/add", methods=["POST"])
 @auth.login_required
 def api_series_add():
@@ -1171,6 +1216,25 @@ def api_requests_check():
     flipped = max(before - after, 0)
     return jsonify({"ok": True, "flipped": flipped,
                     "detail": f"{flipped} now available" if flipped else "No new matches in your libraries"})
+
+
+@bp.route("/api/requests/retry-all", methods=["POST"])
+@auth.login_required
+def api_retry_all():
+    """Re-send every failed request to Chaptarr in one go (the Wanted list)."""
+    u = auth.current_user()
+    with db.conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT * FROM requests WHERE user_id=? AND status='failed' ORDER BY id", (u["id"],))]
+    ok = 0
+    for row in rows:
+        with db.conn() as c:
+            c.execute("DELETE FROM requests WHERE id=?", (row["id"],))
+        res = _hand_to_chaptarr(u["id"], row, row.get("source", "manual"))
+        if res.get("ok"):
+            ok += 1
+    return jsonify({"ok": True, "retried": len(rows), "succeeded": ok,
+                    "detail": f"Retried {len(rows)} — {ok} sent to Chaptarr" if rows else "Nothing to retry"})
 
 
 @bp.route("/api/request/<int:rid>/retry", methods=["POST"])

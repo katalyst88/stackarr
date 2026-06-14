@@ -10,6 +10,9 @@
       <a class="btn small ghost {{ 'on' if wanted }}" href="?wanted=1">Wanted</a>
       {% if admin %}<a class="btn small ghost" href="?all=1">All users</a>{% endif %}
       <button class="btn small ghost" onclick="Stackarr.checkLibraries(this)" title="Re-scan your libraries for books added outside Chaptarr">↻ Check libraries</button>
+      {% if requests | selectattr('status', 'equalto', 'failed') | list | length %}
+      <button class="btn small" onclick="Stackarr.retryAll(this)">↻ Retry all failed</button>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -19,7 +22,7 @@
 <div class="req-list fmt-group">
   {% for r in requests %}
   <div class="req-row" data-id="{{ r.id }}" data-format="{{ r.format or 'audiobook' }}">
-    <img class="req-cover" src="{{ r.cover or url_for('static', filename='icon.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='icon.svg') }}'">
+    <img class="req-cover" src="{{ r.cover or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
     <div class="req-info">
       <div class="req-title">{% if multi_format %}<span class="req-fmt" title="{{ 'eBook' if r.format=='ebook' else 'Audiobook' }}">{{ fmt_icon(r.format) }}</span> {% endif %}{{ r.title }}{% if r.username %} <span class="subtle">· {{ r.username }}</span>{% endif %}</div>
       <div class="req-author">{{ r.author }}</div>

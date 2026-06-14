@@ -85,7 +85,30 @@ const Stackarr = (() => {
       document.body.classList.add("loaded");
       this.initSearchSuggest();
       this.fitCovers();
+      this.initCovers();
       this.wireStarHover();
+    },
+    // Robust cover loading: some Amazon images return an 11-byte BLANK at the
+    // upscaled (_SL1500_) size — which "loads" fine, so onerror never fires.
+    // Detect tiny/blank renders, retry the base (size-stripped) URL, then fall
+    // back to a clear book placeholder.
+    PLACEHOLDER: (window.URL_BASE || "") + "/static/cover-placeholder.svg",
+    fixCover(img) {
+      if (img.dataset.fbDone) { return; }
+      const src = img.getAttribute("src") || "";
+      const base = src.replace(/\._S[XYL]\d+_\./, ".");
+      if (base !== src && !img.dataset.fbBase) { img.dataset.fbBase = "1"; img.src = base; return; }
+      img.dataset.fbDone = "1"; img.src = this.PLACEHOLDER; img.classList.add("cover-ph");
+    },
+    initCovers(root) {
+      const sel = ".media-poster img, .req-cover, .book-cover img, .rate-cover img, .series-next-cover img, .onboard-cover";
+      (root || document).querySelectorAll(sel).forEach(img => {
+        if (img.dataset.cw) return; img.dataset.cw = "1";
+        const check = () => { if (img.naturalWidth && img.naturalWidth < 10) this.fixCover(img); };
+        img.addEventListener("error", () => this.fixCover(img));
+        img.addEventListener("load", check);
+        if (img.complete) check();
+      });
     },
     // Hover-preview: light up stars from the left up to the cursor (CSS can't
     // select preceding siblings, so do it here).
@@ -295,6 +318,32 @@ const Stackarr = (() => {
       if (r.flipped) setTimeout(() => location.reload(), 600);
       else if (btn) { btn.disabled = false; btn.textContent = "↻ Check libraries"; }
     },
+    async checkLibrary(btn) {
+      if (btn) { btn.disabled = true; btn.textContent = "Scanning…"; }
+      const r = await api("/api/library/refresh", { method: "POST", body: "{}" });
+      toast(r.detail || "Scanned.");
+      setTimeout(() => location.reload(), 700);
+    },
+    async retryAll(btn) {
+      if (btn) { btn.disabled = true; btn.textContent = "Retrying…"; }
+      const r = await api("/api/requests/retry-all", { method: "POST", body: "{}" });
+      toast(r.detail || "Retried.");
+      setTimeout(() => location.reload(), 900);
+    },
+    async findMissing(series, btn) {
+      const box = btn.closest(".series-info").querySelector(".series-missing");
+      btn.disabled = true; btn.textContent = "Checking…";
+      const r = await api("/api/series/missing?series=" + encodeURIComponent(series));
+      btn.disabled = false; btn.textContent = "🔍 Find missing books";
+      if (!box) return;
+      box.hidden = false;
+      if (!r.ok || !r.total) { box.innerHTML = '<p class="muted">Couldn\'t map this series in the catalogue.</p>'; return; }
+      if (!r.missing.length) { box.innerHTML = `<p class="muted">You have all ${r.total} books in this series. 🎉</p>`; return; }
+      box.innerHTML = `<p class="muted">You have ${r.owned} of ${r.total} — missing ${r.missing.length}:</p>` +
+        '<div class="missing-list">' + r.missing.map(m =>
+          `<a class="missing-item" href="${(window.URL_BASE||'')}/book/${m.asin}"><span class="missing-seq">#${m.seq}</span> ${m.title}</a>`
+        ).join("") + "</div>";
+    },
     async follow(btn) {
       const r = await api("/api/follow", { method: "POST", body: JSON.stringify({ author: btn.dataset.author }) });
       btn.classList.toggle("on", r.following);
@@ -473,6 +522,7 @@ const Stackarr = (() => {
         if (!b || !b.length) { done = true; if (sentinel) sentinel.textContent = ""; return; }
         disc.insertAdjacentHTML("beforeend", b.map(mediaCard).join(""));
         this.fitCovers();
+        this.initCovers(disc);
         page++;
       };
       if (sentinel && "IntersectionObserver" in window)

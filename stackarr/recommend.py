@@ -260,13 +260,16 @@ def run(user_id: int, max_new: int | None = None) -> int:
             elif h >= 20:
                 consider(b, config.W_RATING * 0.8, "epic", f"An epic listen ({h:.0f}h) in {g}")
 
-    # new & upcoming from authors you love (incl. not-yet-released)
-    for a in list(read_authors)[:8]:
-        for b in audible.by_author(a, num=8):
+    # new & upcoming from authors you read — both not-yet-released AND recently
+    # released (last ~120 days) so the Upcoming page is well-stocked.
+    recent_cut = str(datetime.date.today() - datetime.timedelta(days=120))
+    for a in list(read_authors)[:18]:
+        for b in audible.by_author(a, num=10):
             rd = b.get("release_date") or ""
-            if rd and rd > today:
+            if rd and rd >= recent_cut:
+                label = (f"Coming {rd}" if rd > today else f"Newly out ({rd})")
                 consider(b, config.W_AUTHOR_BACKLIST, "upcoming",
-                         f"Coming {rd} from {(b['author'] or a).split(',')[0]}", extra=rd, floor=False)
+                         f"{label} from {(b['author'] or a).split(',')[0]}", extra=rd, floor=False)
 
     # from your reading list (Goodreads / Hardcover "want to read")
     for it in importlists.all_for_user():

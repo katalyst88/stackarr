@@ -14,6 +14,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault("STACKARR_DATA", os.path.join(ROOT, "audit", "_demo_data"))
 os.makedirs(os.environ["STACKARR_DATA"], exist_ok=True)
 os.environ.setdefault("STACKARR_NO_SCHED", "1")
+os.environ.setdefault("STACKARR_FORMATS", "both")   # demo shows the full multi-format UI
 # dummy backend creds so create_app() boots with no real services
 os.environ.setdefault("ABS_URL", "http://demo.invalid")
 os.environ.setdefault("ABS_ADMIN_TOKEN", "demo")
@@ -22,6 +23,7 @@ os.environ.setdefault("CHAPTARR_API_KEY", "demo")
 
 import sys; sys.path.insert(0, ROOT)
 from stackarr import create_app, config            # noqa: E402
+from stackarr import tagging as _tagging           # noqa: E402
 from flask import render_template, render_template_string, url_for  # noqa: E402
 
 OUT = os.path.join(ROOT, "docs")
@@ -29,6 +31,10 @@ BOOKS = json.load(open(os.path.join(ROOT, "audit", "demo_books.json"), encoding=
 for i, b in enumerate(BOOKS):
     b["_id"] = i + 1
 app = create_app()
+# stamp a format on every sample book so the 'both'-mode UI (badges/filters)
+# has real content — alternate so audiobooks + ebooks both appear.
+for b in BOOKS:
+    b["format"] = "ebook" if (b["_id"] % 3 == 0) else "audiobook"
 
 GH = "https://github.com/katalyst88/stackarr"
 
@@ -73,7 +79,7 @@ def reason_for(lane, b):
 
 def card(b, lane, available=False, extra=None):
     return {"id": b["_id"], "asin": b["asin"], "cover": b["cover"], "title": b["title"],
-            "author": b["author"], "reason": reason_for(lane, b),
+            "author": b["author"], "reason": reason_for(lane, b), "format": b.get("format", "audiobook"),
             "available": available, "extra": extra}
 
 
@@ -110,12 +116,13 @@ for b in sorted(BOOKS, key=lambda x: (x.get("rating") or 0) * (x.get("num_rating
 rec_authors = rec_authors[:14]
 
 recently_added = [{"item_id": f"demo{b['_id']}", "asin": b["asin"], "title": b["title"],
-                   "author": b["author"], "cover": b["cover"]} for b in BOOKS[3:12]]
+                   "author": b["author"], "cover": b["cover"], "format": b.get("format", "audiobook")}
+                  for b in BOOKS[3:12]]
 cover_map = {r["item_id"]: r["cover"] for r in recently_added}
 
 _st = ["available", "queued", "handed", "failed", "available", "queued"]
 recent_requests = [{"asin": b["asin"], "cover": b["cover"], "title": b["title"],
-                    "author": b["author"], "status": _st[k % len(_st)]}
+                    "author": b["author"], "status": _st[k % len(_st)], "format": b.get("format", "audiobook")}
                    for k, b in enumerate(BOOKS[:6])]
 
 
@@ -154,18 +161,34 @@ for b in BOOKS:
     a = first_author(b)
     afreq[a] = afreq.get(a, 0) + 1
 top_authors = sorted(afreq.items(), key=lambda kv: -kv[1])[:8]
+# a sample activity heatmap (53 weeks x 7 days) with a believable pattern
+import datetime as _dt
+_today = _dt.date(2026, 6, 14)
+_start = _today - _dt.timedelta(days=_today.weekday() + 1 + 52 * 7)
+_weeks, _cur = [], _start
+for _w in range(53):
+    _week = []
+    for _d in range(7):
+        _n = (_cur.toordinal() * 7 + _cur.day) % 13
+        _cnt = 0 if _n < 7 else (_n - 6)
+        _week.append({"date": _cur.isoformat(), "count": _cnt, "future": _cur > _today})
+        _cur += _dt.timedelta(days=1)
+    _weeks.append(_week)
 insights_ctx = dict(
     hours=412, finished=87, in_progress=4, req_avail=23, top_authors=top_authors,
+    by_format={"audiobook": 61, "ebook": 26}, year=2026, goal=40, read_year=26,
+    heat={"weeks": _weeks, "total": 87, "max": 6},
+    top_moods=[("epic", 22), ("dark", 18), ("adventurous", 14), ("fast-paced", 11), ("reflective", 7)],
     facts=[("🎧", "412 hours", "about 17 full days of audio"),
            ("📚", "87 books", "finished cover to cover"),
-           ("🏆", top_authors[0][0], "your most-listened author"),
-           ("⚡", "11 series", "followed to the latest book")],
+           ("🏆", top_authors[0][0], "your most-read author"),
+           ("🎭", "epic", "your most-read mood")],
 )
 
 
 # ---- render -----------------------------------------------------------------
 def base_ctx():
-    return dict(app_name=config.APP_NAME, accent=config.ACCENT, version="1.0",
+    return dict(app_name=config.APP_NAME, accent=config.ACCENT, version=config.VERSION,
                 stage="demo", url_base="", user={"username": "demo"})
 
 
@@ -197,6 +220,8 @@ with app.test_request_context("/"):
             url_for("main.insights_page"): "insights.html",
             url_for("main.history_page"): "history.html",
             url_for("main.series_page"): "series.html",
+            url_for("main.shelves_page"): "shelves.html",
+            url_for("main.upcoming_page"): "upcoming.html",
             url_for("main.taste_page"): "taste.html",
             url_for("main.requests_page"): "requests.html",
             url_for("main.settings_page"): "demo-info.html",
@@ -210,8 +235,18 @@ with app.test_request_context("/"):
         repl[url_for("main.book_page", asin=b["asin"])] = f"book-{b['asin']}.html"
     for g in all_genres:
         repl[url_for("main.browse_page", genre=g)] = f"genre-{slug(g)}.html"
+    for m in _tagging.ALL_MOODS:
+        repl[url_for("main.browse_page", mood=m)] = f"mood-{slug(m)}.html"
     for a in all_authors:
         repl[url_for("main.browse_page", author=a)] = f"author-{slug(a)}.html"
+        repl[url_for("main.author_page", name=a)] = f"author-{slug(a)}.html"
+    _narrators = []
+    for b in BOOKS:
+        for nm in (b.get("narrator") or "").split(","):
+            nm = nm.strip()
+            if nm and nm not in _narrators:
+                _narrators.append(nm)
+                repl[url_for("main.narrator_page", name=nm)] = f"narrator-{slug(nm)}.html"
     for lane in lanes:
         repl[url_for("main.lane_grid", lane=lane)] = f"lane-{lane}.html"
     for it, cov in cover_map.items():
@@ -254,14 +289,32 @@ def write(name, htmlstr):
 pages = 0
 write("index.html", render("suggestions.html", "/suggestions", lanes=lanes,
       lane_titles=LANE_TITLES, genres=home_genres, rec_authors=rec_authors,
-      recently_added=recently_added, recent_requests=recent_requests, abs_base="#")); pages += 1
+      recently_added=recently_added, recent_requests=recent_requests, abs_base="#",
+      show_vibes=True, all_moods=_tagging.ALL_MOODS)); pages += 1
 write("insights.html", render("insights.html", "/insights", **insights_ctx)); pages += 1
+
+# My shelves (with reading goal ring) + Upcoming
+def _shelfitem(b, state):
+    return {"rkey": b["asin"], "title": b["title"], "author": b["author"],
+            "cover": b["cover"], "format": b.get("format", "audiobook"), "state": state}
+_shelves = {"reading": [_shelfitem(b, "reading") for b in BOOKS[:3]],
+            "want": [_shelfitem(b, "want") for b in BOOKS[3:11]],
+            "read": [_shelfitem(b, "read") for b in BOOKS[11:23]]}
+write("shelves.html", render("shelves.html", "/shelves", shelves=_shelves,
+      counts={"reading": 3, "want": 8, "read": 26}, goal=40, read_this_year=26, year=2026)); pages += 1
+_upcoming = [card(b, "upcoming", extra="2026-1%d" % (k + 1)) for k, b in enumerate(BOOKS[:8])]
+write("upcoming.html", render("upcoming.html", "/upcoming", rows=_upcoming, today="2026-06-14")); pages += 1
 _read = [{"asin": b["asin"], "rkey": b["asin"], "title": b["title"], "author": b["author"],
           "cover": b["cover"], "stars": [5, 4, 5, 3, 4, 5, 4][k % 7]} for k, b in enumerate(BOOKS[:24])]
 write("history.html", render("history.html", "/history", books=_read,
       rated_n=sum(1 for b in _read if b["stars"]))); pages += 1
-write("requests.html", render("browse.html", "/requests", kind="genre",
-      title="Your requests", author=None, books=genre_books(all_genres[0]))); pages += 1
+_req_rows = [{"id": k + 1, "asin": b["asin"], "cover": b["cover"], "title": b["title"],
+              "author": b["author"], "format": b.get("format", "audiobook"), "username": None,
+              "status": ["available", "handed", "queued", "failed", "available", "handed"][k % 6],
+              "detail": ("No release found yet — Chaptarr will keep trying." if k % 6 == 3 else "")}
+             for k, b in enumerate(BOOKS[:9])]
+write("requests.html", render("requests.html", "/requests", requests=_req_rows,
+      admin=False, wanted=False)); pages += 1
 
 # Up Next (series tracker) — group sample books by series
 _series_groups = {}
@@ -297,17 +350,35 @@ write("demo-info.html", render_info("/settings")); pages += 1
 for lane, cards in lanes.items():
     write(f"lane-{lane}.html", render("lane.html", f"/lane/{lane}",
           title=LANE_TITLES[lane], lane=lane, rows=cards)); pages += 1
-states = {}
+_demo_reviews = [
+    {"id": 1, "username": "alex", "stars": 5, "review": "Could not put it down — the worldbuilding is unreal.", "spoiler": 0, "votes": 12, "created_at": "2026-05-30"},
+    {"id": 2, "username": "sam", "stars": 4, "review": "Slow start but the payoff is worth it.", "spoiler": 0, "votes": 5, "created_at": "2026-05-22"},
+    {"id": 3, "username": "jo", "stars": 5, "review": "That twist near the end!", "spoiler": 1, "votes": 8, "created_at": "2026-05-18"},
+]
+_demo_tags = {"genre": ["Epic Fantasy", "Adventure"], "mood": ["epic", "dark", "adventurous"],
+              "pace": ["fast-paced"], "warning": ["Violence", "Death/grief"]}
 for k, b in enumerate(BOOKS):
     st = ["new", "new", "new", "available", "new", "queued", "new", "failed"][k % 8]
     write(f"book-{b['asin']}.html", render("book.html", f"/book/{b['asin']}",
-          b=book_detail(b, st))); pages += 1
+          b=book_detail(b, st), rate_key=b["asin"], tags=_demo_tags, shelf=("read" if k % 5 == 0 else ""),
+          community={"avg": round(4.1 + (k % 9) * 0.1, 1), "count": 12 + (k % 40)},
+          reviews=(_demo_reviews if k % 2 == 0 else []),
+          my_stars=([0, 5, 4, 0, 3][k % 5]), my_review="")); pages += 1
 for g in all_genres:
     write(f"genre-{slug(g)}.html", render("browse.html", "/browse", kind="genre",
           title=g, author=None, books=genre_books(g))); pages += 1
+for m in _tagging.ALL_MOODS:
+    write(f"mood-{slug(m)}.html", render("browse.html", "/browse", kind="mood",
+          title=m, author=None, books=genre_books(all_genres[hash(m) % len(all_genres)]))); pages += 1
 for a in all_authors:
-    write(f"author-{slug(a)}.html", render("browse.html", "/browse", kind="author",
-          title=a, author=a, books=author_books(a))); pages += 1
+    write(f"author-{slug(a)}.html", render("author.html", f"/author/{a}",
+          author=a, books=author_books(a), following=False)); pages += 1
+for nm in _narrators:
+    _nbooks = [{"asin": b["asin"], "cover": b["cover"], "title": b["title"], "author": b["author"],
+                "state": "available" if b["_id"] % 11 == 0 else "new"}
+               for b in BOOKS if nm.lower() in (b.get("narrator") or "").lower()]
+    write(f"narrator-{slug(nm)}.html", render("narrator.html", f"/narrator/{nm}",
+          narrator=nm, books=_nbooks[:24])); pages += 1
 
 # minimal PWA manifest for the demo
 json.dump({"name": "Stackarr (demo)", "short_name": "Stackarr", "start_url": "index.html",
