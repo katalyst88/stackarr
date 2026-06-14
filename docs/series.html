@@ -17,21 +17,21 @@
 <nav class="sidebar">
   <div class="brand"><img src="static/icon.svg" alt=""><span>Stackarr</span>
     <button class="nav-collapse" onclick="Stackarr.toggleNav()" title="Collapse menu" aria-label="Collapse menu">«</button></div>
-  <a href="index.html" class="navlink ">
-    <svg viewBox="0 0 24 24"><path d="M12 2 3 7v10l9 5 9-5V7zm0 2.2 6.5 3.6L12 11.4 5.5 7.8zM5 9.3l6 3.3v6.8l-6-3.3zm14 0v6.8l-6 3.3v-6.8z"/></svg><span>Suggestions</span></a>
-  <a href="series.html" class="navlink active">
-    <svg viewBox="0 0 24 24"><path d="M4 4h4v16H4zm6 0h4v16h-4zm7 0 3.8 1 .2 15-4-1z"/></svg><span>Up Next</span></a>
-  <a href="shelves.html" class="navlink ">
-    <svg viewBox="0 0 24 24"><path d="M3 3h7v18H3zm9 0h3v18h-3zm5.5.3 3 .5L21 21l-3-.5z"/></svg><span>My shelves</span></a>
-  <a href="upcoming.html" class="navlink ">
-    <svg viewBox="0 0 24 24"><path d="M7 2v2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2zm12 7v10H5V9zm-7 2v3H9v-3z"/></svg><span>Upcoming</span></a>
-  <a href="requests.html" class="navlink ">
-    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm-1 13-3-2-3 2V4h6z"/></svg><span>Requests</span></a>
-  <a href="history.html" class="navlink ">
-    <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 0 8.9 10.5h-2.05A7 7 0 1 1 13 5v5l4.3 2.5.75-1.3L14.5 9V3z"/></svg><span>History &amp; ratings</span></a>
-  <a href="taste.html" class="navlink ">
-    <svg viewBox="0 0 24 24"><path d="M3 17h2v4H3zm0-6h2v4H3zm0-8h2v4H3zm8 14h2v2h-2zm0-12h2v10h-2zm0-4h2v2h-2zm8 10h2v6h-2zm0-8h2v4h-2zm0-4h2v2h-2z"/></svg><span>Taste</span></a>
-  <a href="insights.html" class="navlink ">
+  <a href="index.html" class="navlink " title="Home">
+    <svg viewBox="0 0 24 24"><path d="M12 3 2 12h3v8h5v-6h4v6h5v-8h3z"/></svg><span>Home</span></a>
+  <a href="suggestions.html" class="navlink " title="Suggestions">
+    <svg viewBox="0 0 24 24"><path d="M9 21h6v-2H9zm3-19a7 7 0 0 0-4 12.7V16a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2zm-1 5h2v2h2v2h-2v2h-2v-2H9V9h2z"/></svg><span>Suggestions</span></a>
+  <a href="series.html" class="navlink active" title="Up Next">
+    <svg viewBox="0 0 24 24"><path d="M3 6h11v2H3zm0 5h11v2H3zm0 5h7v2H3zM16 7l6 4-6 4z"/></svg><span>Up Next</span></a>
+  <a href="shelves.html" class="navlink " title="My shelves">
+    <svg viewBox="0 0 24 24"><path d="M3 4h2v15H3zm3 1h2v14H6zm3 0h2v14H9zm4.4.3 1.9-.3 2.3 13.8-1.9.3zM3 20h18v1.5H3z"/></svg><span>My shelves</span></a>
+  <a href="requests.html" class="navlink " title="Requests">
+    <svg viewBox="0 0 24 24"><path d="M11 3h2v8h3l-4 4-4-4h3zM4 18h16v2H4z"/></svg><span>Requests</span></a>
+  <a href="demo-info.html" class="navlink " title="Discover">
+    <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.2 5.8-2.3 5.9-5.9 2.3 2.3-5.9zM12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg><span>Discover</span></a>
+  <a href="history.html" class="navlink " title="History">
+    <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 0 8.9 10.5h-2.05A7 7 0 1 1 13 5v5l4.3 2.5.75-1.3L14.5 9V3z"/></svg><span>History</span></a>
+  <a href="insights.html" class="navlink " title="Insights">
     <svg viewBox="0 0 24 24"><path d="M4 20V10h4v10zm6 0V4h4v16zm6 0v-7h4v7z"/></svg><span>Insights</span></a>
   <a href="demo-info.html" class="navlink ">
     <svg viewBox="0 0 24 24"><path d="M19.4 13a7.8 7.8 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1l-.4-2.6H10.8l-.4 2.6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L4.6 11a7.8 7.8 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h3.4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/></svg><span>Settings</span></a>
@@ -51,7 +51,8 @@
       <div class="search-suggest" id="search-suggest"></div>
     </form>
     <div class="topbar-spacer"></div>
-    <button class="icon-btn" onclick="Stackarr.surprise()" title="Surprise me — one pick">🎲</button>
+    <button class="icon-btn" onclick="Stackarr.surprise()" title="Surprise me — one pick" aria-label="Surprise me">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 2.5l1.6 4.1 4.4.3-3.4 2.8 1.1 4.3L12 11.9 8.3 14l1.1-4.3L6 6.9l4.4-.3zM5 15l.8 2 2 .8-2 .8L5 21l-.8-2-2-.8 2-.8zm13 0l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg></button>
     <button class="icon-btn" onclick="Stackarr.toggleTheme()" title="Light / dark">◑</button>
   </header>
   <main>
@@ -59,10 +60,12 @@
   <h2 class="page-title">Up Next
     <span class="subtle">11 series in your library · 6 with a next book ready</span></h2>
   <div class="page-head-actions"><span class="fmt-filter" id="fmt-filter">
-  <button class="fmt-pill active" type="button" data-fmt="all" title="All" aria-label="All" onclick="Stackarr.filterFormat('all',this)"><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h12v2H4zm0 4h12v2H4zm0 4h12v2H4zM18 7h2v10h-2z"/></svg></button>
+  <button class="fmt-pill active" type="button" data-fmt="all" title="All" aria-label="All" onclick="Stackarr.filterFormat('all',this)"><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5zM2 12l10 5 10-5-2.2-1.1L12 14.7 4.2 10.9zM2 17l10 5 10-5-2.2-1.1L12 19.7 4.2 15.9z"/></svg></button>
   <button class="fmt-pill" type="button" data-fmt="audiobook" title="Audiobooks" aria-label="Audiobooks" onclick="Stackarr.filterFormat('audiobook',this)"><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9v4.5A2.5 2.5 0 0 0 5.5 19H7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5v-0a7 7 0 0 1 14 0v0h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.5A2.5 2.5 0 0 0 21 16.5V12a9 9 0 0 0-9-9z"/></svg></button>
   <button class="fmt-pill" type="button" data-fmt="ebook" title="eBooks" aria-label="eBooks" onclick="Stackarr.filterFormat('ebook',this)"><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5A2.5 2.5 0 0 1 5.5 2H11v18.2l-.9-.5a4 4 0 0 0-1.9-.5H3zM13 2h5.5A2.5 2.5 0 0 1 21 4.5v14.7h-5.2a4 4 0 0 0-1.9.5l-.9.5z"/></svg></button>
-</span></div>
+</span>
+    <button class="btn small ghost" onclick="Stackarr.checkLibrary(this)" title="Re-scan your libraries for newly added books">↻ Check library</button>
+  </div>
 </div>
 
 
@@ -72,20 +75,33 @@
   <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">Red Rising</div>
-      <div class="series-meta">4 books in your library
-        · you're up to #4</div>
+      <div class="series-meta">📚 <b>In your library:</b> 4 books (up to #4)</div>
+      <div class="series-meta read-meta">
+        🎧 <b>You've read up to:</b> #2 <span class="ahead">· 2 more already downloaded &amp; waiting</span>
+        
+      </div>
       
-      <div class="series-progress" title="4 of the first 4"><span style="width: 100%"></span></div>
+      <div class="series-progress" title="Read #2 of #4 downloaded">
+        <span style="width: 50.0%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Light Bringer">#1 Light Bringer</span><span class="series-chip" title="Dark Age (1 of 3) [Dramatized Adaptation]">#2 Dark Age (1 of 3) [Dramatized Adaptation]</span><span class="series-chip" title="Dark Age (2 of 3) [Dramatized Adaptation]">#3 Dark Age (2 of 3) [Dramatized Adaptation]</span><span class="series-chip" title="Dark Age (3 of 3) [Dramatized Adaptation]">#4 Dark Age (3 of 3) [Dramatized Adaptation]</span>
       </div>
-      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Red Rising', 'Pierce Brown', this)">＋ Get full series</button>
+      
+      <div class="series-meta gap-note">⚠️ You have this series across formats but not completely in each.</div>
+      
+      <div class="series-actions">
+        <button class="btn small ghost" onclick="Stackarr.findMissing('Red Rising', this)">🔍 Find missing books</button>
+        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Red Rising', 'Pierce Brown', this)">＋ Get full series</button>
+        <button class="btn small ghost" onclick="Stackarr.getSeries('Red Rising', 'Pierce Brown', this, 'audiobook')"><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9v4.5A2.5 2.5 0 0 0 5.5 19H7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5v-0a7 7 0 0 1 14 0v0h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.5A2.5 2.5 0 0 0 21 16.5V12a9 9 0 0 0-9-9z"/></svg> Get missing audiobooks</button>
+        <button class="btn small ghost" onclick="Stackarr.getSeries('Red Rising', 'Pierce Brown', this, 'ebook')"><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5A2.5 2.5 0 0 1 5.5 2H11v18.2l-.9-.5a4 4 0 0 0-1.9-.5H3zM13 2h5.5A2.5 2.5 0 0 1 21 4.5v14.7h-5.2a4 4 0 0 0-1.9.5l-.9.5z"/></svg> Get missing eBooks</button>
+      </div>
+      <div class="series-missing" hidden></div>
     </div>
     <div class="series-next">
       
       <a class="series-next-cover" href="book-B0GS513Q2W.html">
         <img src="https://m.media-amazon.com/images/I/51uLq2O6OKL._SL1500_.jpg" loading="lazy" alt=""
-             onerror="this.src='static/icon.svg'"></a>
+             onerror="this.src='static/cover-placeholder.svg'"></a>
       <div class="series-next-info">
         <div class="series-next-label">Next up</div>
         <div class="series-next-title" title="Dark Age (3 of 3) [Dramatized Adaptation]">Dark Age (3 of 3) [Dramatized Adaptation]</div>
@@ -100,14 +116,25 @@
   <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">The Cosmere</div>
-      <div class="series-meta">4 books in your library
-        · you're up to #4</div>
+      <div class="series-meta">📚 <b>In your library:</b> 4 books (up to #4)</div>
+      <div class="series-meta read-meta">
+        🎧 <b>You've read up to:</b> #2 <span class="ahead">· 2 more already downloaded &amp; waiting</span>
+        
+      </div>
       
-      <div class="series-progress" title="4 of the first 4"><span style="width: 100%"></span></div>
+      <div class="series-progress" title="Read #2 of #4 downloaded">
+        <span style="width: 50.0%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Rhythm of War">#1 Rhythm of War</span><span class="series-chip" title="Warbreaker (2 of 3) [Dramatized Adaptation]">#2 Warbreaker (2 of 3) [Dramatized Adaptation]</span><span class="series-chip" title="Warbreaker: Tenth Anniversary Edition (Part 1 of 2) (Dramatized Adaptation)">#3 Warbreaker: Tenth Anniversary Edition (Part 1 of 2) (Dramatized Adaptation)</span><span class="series-chip" title="Warbreaker: Tenth Anniversary Edition (2 of 2) [Dramatized Adaptation]">#4 Warbreaker: Tenth Anniversary Edition (2 of 2) [Dramatized Adaptation]</span>
       </div>
-      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('The Cosmere', 'Brandon Sanderson', this)">＋ Get full series</button>
+      
+      <div class="series-actions">
+        <button class="btn small ghost" onclick="Stackarr.findMissing('The Cosmere', this)">🔍 Find missing books</button>
+        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('The Cosmere', 'Brandon Sanderson', this)">＋ Get full series</button>
+        
+        
+      </div>
+      <div class="series-missing" hidden></div>
     </div>
     <div class="series-next">
       
@@ -116,23 +143,34 @@
     </div>
   </div>
   
-  <div class="series-card" data-format="audiobook">
+  <div class="series-card" data-format="ebook">
     <div class="series-info">
       <div class="series-name">Secret Projects</div>
-      <div class="series-meta">3 books in your library
-        · you're up to #3</div>
+      <div class="series-meta">📚 <b>In your library:</b> 3 books (up to #3)</div>
+      <div class="series-meta read-meta">
+        🎧 <b>You've read up to:</b> #1 <span class="ahead">· 2 more already downloaded &amp; waiting</span>
+        
+      </div>
       
-      <div class="series-progress" title="3 of the first 3"><span style="width: 100%"></span></div>
+      <div class="series-progress" title="Read #1 of #3 downloaded">
+        <span style="width: 33.0%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Isles of the Emberdark">#1 Isles of the Emberdark</span><span class="series-chip" title="Yumi and the Nightmare Painter">#2 Yumi and the Nightmare Painter</span><span class="series-chip" title="Yumi and the Nightmare Painter (Dramatized Adaptation)">#3 Yumi and the Nightmare Painter (Dramatized Adaptation)</span>
       </div>
-      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Secret Projects', 'Brandon Sanderson', this)">＋ Get full series</button>
+      
+      <div class="series-actions">
+        <button class="btn small ghost" onclick="Stackarr.findMissing('Secret Projects', this)">🔍 Find missing books</button>
+        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Secret Projects', 'Brandon Sanderson', this)">＋ Get full series</button>
+        
+        
+      </div>
+      <div class="series-missing" hidden></div>
     </div>
     <div class="series-next">
       
       <a class="series-next-cover" href="book-B0DJN1BCLS.html">
         <img src="https://m.media-amazon.com/images/I/51nidelfhPL._SL1500_.jpg" loading="lazy" alt=""
-             onerror="this.src='static/icon.svg'"></a>
+             onerror="this.src='static/cover-placeholder.svg'"></a>
       <div class="series-next-info">
         <div class="series-next-label">Next up</div>
         <div class="series-next-title" title="Yumi and the Nightmare Painter (Dramatized Adaptation)">Yumi and the Nightmare Painter (Dramatized Adaptation)</div>
@@ -147,14 +185,27 @@
   <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">The Wheel of Time</div>
-      <div class="series-meta">3 books in your library
-        · you're up to #3</div>
+      <div class="series-meta">📚 <b>In your library:</b> 3 books (up to #3)</div>
+      <div class="series-meta read-meta">
+        🎧 <b>You've read up to:</b> #1 <span class="ahead">· 2 more already downloaded &amp; waiting</span>
+        
+      </div>
       
-      <div class="series-progress" title="3 of the first 3"><span style="width: 100%"></span></div>
+      <div class="series-progress" title="Read #1 of #3 downloaded">
+        <span style="width: 33.0%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="The Dragon Reborn">#1 The Dragon Reborn</span><span class="series-chip" title="The Shadow Rising">#2 The Shadow Rising</span><span class="series-chip" title="Origins of The Wheel of Time">#3 Origins of The Wheel of Time</span>
       </div>
-      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('The Wheel of Time', 'Robert Jordan', this)">＋ Get full series</button>
+      
+      <div class="series-meta gap-note">⚠️ You have this series across formats but not completely in each.</div>
+      
+      <div class="series-actions">
+        <button class="btn small ghost" onclick="Stackarr.findMissing('The Wheel of Time', this)">🔍 Find missing books</button>
+        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('The Wheel of Time', 'Robert Jordan', this)">＋ Get full series</button>
+        <button class="btn small ghost" onclick="Stackarr.getSeries('The Wheel of Time', 'Robert Jordan', this, 'audiobook')"><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9v4.5A2.5 2.5 0 0 0 5.5 19H7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5v-0a7 7 0 0 1 14 0v0h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.5A2.5 2.5 0 0 0 21 16.5V12a9 9 0 0 0-9-9z"/></svg> Get missing audiobooks</button>
+        
+      </div>
+      <div class="series-missing" hidden></div>
     </div>
     <div class="series-next">
       
@@ -166,20 +217,33 @@
   <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">Liveship Traders</div>
-      <div class="series-meta">3 books in your library
-        · you're up to #3</div>
+      <div class="series-meta">📚 <b>In your library:</b> 3 books (up to #3)</div>
+      <div class="series-meta read-meta">
+        🎧 <b>You've read up to:</b> #1 <span class="ahead">· 2 more already downloaded &amp; waiting</span>
+        
+      </div>
       
-      <div class="series-progress" title="3 of the first 3"><span style="width: 100%"></span></div>
+      <div class="series-progress" title="Read #1 of #3 downloaded">
+        <span style="width: 33.0%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Ship of Destiny">#1 Ship of Destiny</span><span class="series-chip" title="Ship of Magic">#2 Ship of Magic</span><span class="series-chip" title="The Mad Ship">#3 The Mad Ship</span>
       </div>
-      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Liveship Traders', 'Robin Hobb', this)">＋ Get full series</button>
+      
+      <div class="series-meta gap-note">⚠️ You have this series across formats but not completely in each.</div>
+      
+      <div class="series-actions">
+        <button class="btn small ghost" onclick="Stackarr.findMissing('Liveship Traders', this)">🔍 Find missing books</button>
+        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Liveship Traders', 'Robin Hobb', this)">＋ Get full series</button>
+        
+        <button class="btn small ghost" onclick="Stackarr.getSeries('Liveship Traders', 'Robin Hobb', this, 'ebook')"><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5A2.5 2.5 0 0 1 5.5 2H11v18.2l-.9-.5a4 4 0 0 0-1.9-.5H3zM13 2h5.5A2.5 2.5 0 0 1 21 4.5v14.7h-5.2a4 4 0 0 0-1.9.5l-.9.5z"/></svg> Get missing eBooks</button>
+      </div>
+      <div class="series-missing" hidden></div>
     </div>
     <div class="series-next">
       
       <a class="series-next-cover" href="book-B0G5T12K6W.html">
         <img src="https://m.media-amazon.com/images/I/51VC-MLdawL._SL1500_.jpg" loading="lazy" alt=""
-             onerror="this.src='static/icon.svg'"></a>
+             onerror="this.src='static/cover-placeholder.svg'"></a>
       <div class="series-next-info">
         <div class="series-next-label">Next up</div>
         <div class="series-next-title" title="The Mad Ship">The Mad Ship</div>
@@ -194,14 +258,25 @@
   <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">Farseer Trilogy</div>
-      <div class="series-meta">3 books in your library
-        · you're up to #3</div>
+      <div class="series-meta">📚 <b>In your library:</b> 3 books (up to #3)</div>
+      <div class="series-meta read-meta">
+        🎧 <b>You've read up to:</b> #1 <span class="ahead">· 2 more already downloaded &amp; waiting</span>
+        
+      </div>
       
-      <div class="series-progress" title="3 of the first 3"><span style="width: 100%"></span></div>
+      <div class="series-progress" title="Read #1 of #3 downloaded">
+        <span style="width: 33.0%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Assassin’s Quest">#1 Assassin’s Quest</span><span class="series-chip" title="Assassin’s Apprentice">#2 Assassin’s Apprentice</span><span class="series-chip" title="Royal Assassin">#3 Royal Assassin</span>
       </div>
-      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Farseer Trilogy', 'Robin Hobb', this)">＋ Get full series</button>
+      
+      <div class="series-actions">
+        <button class="btn small ghost" onclick="Stackarr.findMissing('Farseer Trilogy', this)">🔍 Find missing books</button>
+        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Farseer Trilogy', 'Robin Hobb', this)">＋ Get full series</button>
+        
+        
+      </div>
+      <div class="series-missing" hidden></div>
     </div>
     <div class="series-next">
       
@@ -210,23 +285,36 @@
     </div>
   </div>
   
-  <div class="series-card" data-format="audiobook">
+  <div class="series-card" data-format="ebook">
     <div class="series-info">
       <div class="series-name">Cradle</div>
-      <div class="series-meta">2 books in your library
-        · you're up to #2</div>
+      <div class="series-meta">📚 <b>In your library:</b> 2 books (up to #2)</div>
+      <div class="series-meta read-meta">
+        🎧 <b>You've read up to:</b> #1 <span class="ahead">· 1 more already downloaded &amp; waiting</span>
+        
+      </div>
       
-      <div class="series-progress" title="2 of the first 2"><span style="width: 100%"></span></div>
+      <div class="series-progress" title="Read #1 of #2 downloaded">
+        <span style="width: 50.0%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Waybound">#1 Waybound</span><span class="series-chip" title="Threshold">#2 Threshold</span>
       </div>
-      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Cradle', 'Will Wight', this)">＋ Get full series</button>
+      
+      <div class="series-meta gap-note">⚠️ You have this series across formats but not completely in each.</div>
+      
+      <div class="series-actions">
+        <button class="btn small ghost" onclick="Stackarr.findMissing('Cradle', this)">🔍 Find missing books</button>
+        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Cradle', 'Will Wight', this)">＋ Get full series</button>
+        <button class="btn small ghost" onclick="Stackarr.getSeries('Cradle', 'Will Wight', this, 'audiobook')"><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9v4.5A2.5 2.5 0 0 0 5.5 19H7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5v-0a7 7 0 0 1 14 0v0h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.5A2.5 2.5 0 0 0 21 16.5V12a9 9 0 0 0-9-9z"/></svg> Get missing audiobooks</button>
+        
+      </div>
+      <div class="series-missing" hidden></div>
     </div>
     <div class="series-next">
       
       <a class="series-next-cover" href="book-B0DN34J845.html">
         <img src="https://m.media-amazon.com/images/I/51jrvs9ZuiL._SL1500_.jpg" loading="lazy" alt=""
-             onerror="this.src='static/icon.svg'"></a>
+             onerror="this.src='static/cover-placeholder.svg'"></a>
       <div class="series-next-info">
         <div class="series-next-label">Next up</div>
         <div class="series-next-title" title="Threshold">Threshold</div>
@@ -241,14 +329,25 @@
   <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">The Expanse</div>
-      <div class="series-meta">2 books in your library
-        · you're up to #2</div>
+      <div class="series-meta">📚 <b>In your library:</b> 2 books (up to #2)</div>
+      <div class="series-meta read-meta">
+        🎧 <b>You've read up to:</b> #1 <span class="ahead">· 1 more already downloaded &amp; waiting</span>
+        
+      </div>
       
-      <div class="series-progress" title="2 of the first 2"><span style="width: 100%"></span></div>
+      <div class="series-progress" title="Read #1 of #2 downloaded">
+        <span style="width: 50.0%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Leviathan Wakes">#1 Leviathan Wakes</span><span class="series-chip" title="Leviathan Wakes">#2 Leviathan Wakes</span>
       </div>
-      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('The Expanse', 'James S. A. Corey', this)">＋ Get full series</button>
+      
+      <div class="series-actions">
+        <button class="btn small ghost" onclick="Stackarr.findMissing('The Expanse', this)">🔍 Find missing books</button>
+        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('The Expanse', 'James S. A. Corey', this)">＋ Get full series</button>
+        
+        
+      </div>
+      <div class="series-missing" hidden></div>
     </div>
     <div class="series-next">
       
@@ -257,23 +356,36 @@
     </div>
   </div>
   
-  <div class="series-card" data-format="audiobook">
+  <div class="series-card" data-format="ebook">
     <div class="series-info">
       <div class="series-name">Inkbound</div>
-      <div class="series-meta">2 books in your library
-        · you're up to #2</div>
+      <div class="series-meta">📚 <b>In your library:</b> 2 books (up to #2)</div>
+      <div class="series-meta read-meta">
+        🎧 <b>You've read up to:</b> #1 <span class="ahead">· 1 more already downloaded &amp; waiting</span>
+        
+      </div>
       
-      <div class="series-progress" title="2 of the first 2"><span style="width: 100%"></span></div>
+      <div class="series-progress" title="Read #1 of #2 downloaded">
+        <span style="width: 50.0%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Inked in Onyx">#1 Inked in Onyx</span><span class="series-chip" title="Inked in Emeralds">#2 Inked in Emeralds</span>
       </div>
-      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Inkbound', 'Shannon Mayer', this)">＋ Get full series</button>
+      
+      <div class="series-meta gap-note">⚠️ You have this series across formats but not completely in each.</div>
+      
+      <div class="series-actions">
+        <button class="btn small ghost" onclick="Stackarr.findMissing('Inkbound', this)">🔍 Find missing books</button>
+        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Inkbound', 'Shannon Mayer', this)">＋ Get full series</button>
+        
+        <button class="btn small ghost" onclick="Stackarr.getSeries('Inkbound', 'Shannon Mayer', this, 'ebook')"><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5A2.5 2.5 0 0 1 5.5 2H11v18.2l-.9-.5a4 4 0 0 0-1.9-.5H3zM13 2h5.5A2.5 2.5 0 0 1 21 4.5v14.7h-5.2a4 4 0 0 0-1.9.5l-.9.5z"/></svg> Get missing eBooks</button>
+      </div>
+      <div class="series-missing" hidden></div>
     </div>
     <div class="series-next">
       
       <a class="series-next-cover" href="book-B0F5D43ZMP.html">
         <img src="https://m.media-amazon.com/images/I/51Ip8DK3K8L._SL1500_.jpg" loading="lazy" alt=""
-             onerror="this.src='static/icon.svg'"></a>
+             onerror="this.src='static/cover-placeholder.svg'"></a>
       <div class="series-next-info">
         <div class="series-next-label">Next up</div>
         <div class="series-next-title" title="Inked in Emeralds">Inked in Emeralds</div>
@@ -288,14 +400,27 @@
   <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">Elantris</div>
-      <div class="series-meta">2 books in your library
-        · you're up to #2</div>
+      <div class="series-meta">📚 <b>In your library:</b> 2 books (up to #2)</div>
+      <div class="series-meta read-meta">
+        🎧 <b>You've read up to:</b> #1 <span class="ahead">· 1 more already downloaded &amp; waiting</span>
+        
+      </div>
       
-      <div class="series-progress" title="2 of the first 2"><span style="width: 100%"></span></div>
+      <div class="series-progress" title="Read #1 of #2 downloaded">
+        <span style="width: 50.0%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Elantris: Tenth Anniversary Author&#39;s Definitive Edition (Part 1 of 2) (Dramatized Adaptation)">#1 Elantris: Tenth Anniversary Author&#39;s Definitive Edition (Part 1 of 2) (Dramatized Adaptation)</span><span class="series-chip" title="Elantris: Tenth Anniversary Author&#39;s Definitive Edition (Part 2 of 2) (Dramatized Adaptation)">#2 Elantris: Tenth Anniversary Author&#39;s Definitive Edition (Part 2 of 2) (Dramatized Adaptation)</span>
       </div>
-      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Elantris', 'Brandon Sanderson', this)">＋ Get full series</button>
+      
+      <div class="series-meta gap-note">⚠️ You have this series across formats but not completely in each.</div>
+      
+      <div class="series-actions">
+        <button class="btn small ghost" onclick="Stackarr.findMissing('Elantris', this)">🔍 Find missing books</button>
+        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Elantris', 'Brandon Sanderson', this)">＋ Get full series</button>
+        <button class="btn small ghost" onclick="Stackarr.getSeries('Elantris', 'Brandon Sanderson', this, 'audiobook')"><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9v4.5A2.5 2.5 0 0 0 5.5 19H7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5v-0a7 7 0 0 1 14 0v0h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.5A2.5 2.5 0 0 0 21 16.5V12a9 9 0 0 0-9-9z"/></svg> Get missing audiobooks</button>
+        
+      </div>
+      <div class="series-missing" hidden></div>
     </div>
     <div class="series-next">
       
@@ -307,20 +432,31 @@
   <div class="series-card" data-format="audiobook">
     <div class="series-info">
       <div class="series-name">Soloing the System</div>
-      <div class="series-meta">2 books in your library
-        · you're up to #2</div>
+      <div class="series-meta">📚 <b>In your library:</b> 2 books (up to #2)</div>
+      <div class="series-meta read-meta">
+        🎧 <b>You've read up to:</b> #1 <span class="ahead">· 1 more already downloaded &amp; waiting</span>
+        
+      </div>
       
-      <div class="series-progress" title="2 of the first 2"><span style="width: 100%"></span></div>
+      <div class="series-progress" title="Read #1 of #2 downloaded">
+        <span style="width: 50.0%"></span></div>
       <div class="series-books">
         <span class="series-chip" title="Soloing the System: Book 3">#1 Soloing the System: Book 3</span><span class="series-chip" title="Soloing the System: Book 2">#2 Soloing the System: Book 2</span>
       </div>
-      <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Soloing the System', 'Arland Grace', this)">＋ Get full series</button>
+      
+      <div class="series-actions">
+        <button class="btn small ghost" onclick="Stackarr.findMissing('Soloing the System', this)">🔍 Find missing books</button>
+        <button class="btn small ghost series-getall" onclick="Stackarr.getSeries('Soloing the System', 'Arland Grace', this)">＋ Get full series</button>
+        
+        
+      </div>
+      <div class="series-missing" hidden></div>
     </div>
     <div class="series-next">
       
       <a class="series-next-cover" href="book-B0H2TLWZR7.html">
         <img src="https://m.media-amazon.com/images/I/51SL3A21RoL._SL1500_.jpg" loading="lazy" alt=""
-             onerror="this.src='static/icon.svg'"></a>
+             onerror="this.src='static/cover-placeholder.svg'"></a>
       <div class="series-next-info">
         <div class="series-next-label">Next up</div>
         <div class="series-next-title" title="Soloing the System: Book 2">Soloing the System: Book 2</div>

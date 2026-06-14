@@ -216,7 +216,8 @@ def render_info(path):
 
 # build replacement map
 with app.test_request_context("/"):
-    repl = {url_for("main.suggestions_page"): "index.html",
+    repl = {url_for("main.home_page"): "index.html",
+            url_for("main.suggestions_page"): "suggestions.html",
             url_for("main.insights_page"): "insights.html",
             url_for("main.history_page"): "history.html",
             url_for("main.series_page"): "series.html",
@@ -287,7 +288,15 @@ def write(name, htmlstr):
 
 
 pages = 0
-write("index.html", render("suggestions.html", "/suggestions", lanes=lanes,
+# Home dashboard (the landing)
+_reading = [{"rkey": b["asin"], "title": b["title"], "author": b["author"], "cover": b["cover"],
+             "format": b.get("format", "audiobook")} for b in BOOKS[:5]]
+_fresh = [card(b, "enjoyed") for b in BOOKS[5:13]]
+_home_up = [{"asin": b["asin"], "title": b["title"], "author": b["author"], "cover": b["cover"],
+             "format": b.get("format", "audiobook")} for b in BOOKS[13:19]]
+write("index.html", render("home.html", "/home", reading=_reading, fresh=_fresh, upcoming=_home_up,
+      goal=40, read_year=26, year=2026, want_n=8, avail_n=23)); pages += 1
+write("suggestions.html", render("suggestions.html", "/suggestions", lanes=lanes,
       lane_titles=LANE_TITLES, genres=home_genres, rec_authors=rec_authors,
       recently_added=recently_added, recent_requests=recent_requests, abs_base="#",
       show_vibes=True, all_moods=_tagging.ALL_MOODS)); pages += 1
@@ -333,6 +342,9 @@ for _i, (name, bks) in enumerate(sorted(_series_groups.items(), key=lambda kv: -
         nxt = {"id": nb["_id"], "title": nb["title"], "author": nb["author"],
                "asin": nb["asin"], "cover": nb["cover"], "reason": ""}
     _series_cards.append({"name": name, "owned": len(bks), "highest": len(bks),
+                          "read_to": max(1, len(bks) - 2), "read_count": max(1, len(bks) - 2),
+                          "missing_audio": (_i % 3 == 0), "missing_ebook": (_i % 4 == 0),
+                          "author": first_author(bks[0]), "format": bks[0].get("format", "audiobook"),
                           "books": books_c, "next": nxt, "next_status": None})
 write("series.html", render("series.html", "/series", series=_series_cards,
       have_next=sum(1 for c in _series_cards if c["next"]))); pages += 1
