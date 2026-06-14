@@ -1,4 +1,19 @@
-/* Stackarr front-end — vanilla JS, no build step. */
+/* Stackarr front-end — vanilla JS, no build step.
+ *
+ * One global object, `Stackarr`, exposes the methods that templates call from
+ * inline `onclick=` handlers (e.g. `onclick="Stackarr.rate(...)"`). That is the
+ * template↔JS contract: add a UI action by adding a method here and calling it
+ * from the template. Templates pass data into handlers with Jinja's `|tojson`
+ * (never `'{{ x }}'`) so untrusted strings can't break out of the JS context.
+ *
+ * Shared helpers (private to the IIFE):
+ *   api(path, opts)  — fetch JSON; on 401 it redirects to /login and returns null,
+ *                      so every caller must null-check the result before using it.
+ *   toast(msg)       — transient status message.
+ *   esc(str)         — HTML-escape for strings injected into innerHTML.
+ *   B()              — URL_BASE prefix for sub-path deployments.
+ * `Stackarr.boot()` wires up page-load behaviour; call it from a page's scripts block.
+ */
 const Stackarr = (() => {
   const B = () => window.URL_BASE || "";
   const toast = (m) => {
@@ -218,11 +233,14 @@ const Stackarr = (() => {
     },
 
     async decide(id, verdict, btn) {
-      btn.closest(".ov-actions").querySelectorAll("button").forEach(b => b.disabled = true);
+      // works whether the button is on a suggestion overlay (.ov-actions/.media-card)
+      // or elsewhere (e.g. the Up Next "Next up" card, which has neither).
+      (btn.closest(".ov-actions") || btn.parentElement)?.querySelectorAll("button").forEach(b => b.disabled = true);
       const res = await api(`/api/suggestion/${id}/${verdict}`, { method: "POST" });
       if (!res) return;
       const card = btn.closest(".media-card");
-      card.style.transition = "opacity .3s, transform .3s"; card.style.opacity = .25; card.style.transform = "scale(.9)";
+      if (card) { card.style.transition = "opacity .3s, transform .3s"; card.style.opacity = .25; card.style.transform = "scale(.9)"; }
+      else setTimeout(() => location.reload(), 600);
       toast(verdict === "approve"
         ? (res.ok ? "Approved — sent to Chaptarr." : "Approved, but: " + (res.detail || "handoff failed"))
         : verdict === "read" ? "Marked as read — your picks will improve."
@@ -358,6 +376,7 @@ const Stackarr = (() => {
     },
     async follow(btn) {
       const r = await api("/api/follow", { method: "POST", body: JSON.stringify({ author: btn.dataset.author }) });
+      if (!r) return;
       btn.classList.toggle("on", r.following);
       btn.textContent = r.following ? "✓ Following" : "＋ Follow";
       toast(r.following ? "Following — you're on the radar." : "Unfollowed.");
@@ -653,4 +672,3 @@ const Stackarr = (() => {
   };
 })();
 Stackarr.boot();
-if ("serviceWorker" in navigator) navigator.serviceWorker.register((window.URL_BASE || "") + "/sw.js").catch(() => {});

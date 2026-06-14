@@ -23,14 +23,12 @@
     <svg viewBox="0 0 24 24"><path d="M9 21h6v-2H9zm3-19a7 7 0 0 0-4 12.7V16a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2zm-1 5h2v2h2v2h-2v2h-2v-2H9V9h2z"/></svg><span>Suggestions</span></a>
   <a href="series.html" class="navlink " title="Up Next">
     <svg viewBox="0 0 24 24"><path d="M3 6h11v2H3zm0 5h11v2H3zm0 5h7v2H3zM16 7l6 4-6 4z"/></svg><span>Up Next</span></a>
-  <a href="shelves.html" class="navlink " title="My shelves">
-    <svg viewBox="0 0 24 24"><path d="M3 4h2v15H3zm3 1h2v14H6zm3 0h2v14H9zm4.4.3 1.9-.3 2.3 13.8-1.9.3zM3 20h18v1.5H3z"/></svg><span>My shelves</span></a>
   <a href="requests.html" class="navlink " title="Requests">
     <svg viewBox="0 0 24 24"><path d="M11 3h2v8h3l-4 4-4-4h3zM4 18h16v2H4z"/></svg><span>Requests</span></a>
   <a href="demo-info.html" class="navlink " title="Discover">
     <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.2 5.8-2.3 5.9-5.9 2.3 2.3-5.9zM12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg><span>Discover</span></a>
-  <a href="history.html" class="navlink active" title="History">
-    <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 0 8.9 10.5h-2.05A7 7 0 1 1 13 5v5l4.3 2.5.75-1.3L14.5 9V3z"/></svg><span>History</span></a>
+  <a href="history.html" class="navlink active" title="History &amp; ratings">
+    <svg viewBox="0 0 24 24"><path d="M12 2.3l2.95 5.98 6.6.96-4.77 4.65 1.12 6.57L12 17.35l-5.9 3.1 1.12-6.57L2.45 9.24l6.6-.96z"/></svg><span>History</span></a>
   <a href="insights.html" class="navlink " title="Insights">
     <svg viewBox="0 0 24 24"><path d="M4 20V10h4v10zm6 0V4h4v16zm6 0v-7h4v7z"/></svg><span>Insights</span></a>
   <a href="demo-info.html" class="navlink ">
@@ -52,7 +50,7 @@
     </form>
     <div class="topbar-spacer"></div>
     <button class="icon-btn" onclick="Stackarr.surprise()" title="Surprise me — one pick" aria-label="Surprise me">
-      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 2.5l1.6 4.1 4.4.3-3.4 2.8 1.1 4.3L12 11.9 8.3 14l1.1-4.3L6 6.9l4.4-.3zM5 15l.8 2 2 .8-2 .8L5 21l-.8-2-2-.8 2-.8zm13 0l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg></button>
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill-rule="evenodd" d="M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4Zm1 3.6a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Zm8 0a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Zm-4 4a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Zm-4 4a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Zm8 0a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Z"/></svg></button>
     <button class="icon-btn" onclick="Stackarr.toggleTheme()" title="Light / dark">◑</button>
   </header>
   <main>
@@ -132,52 +130,52 @@
       <div class="tune-row" data-key="B0GDPWQSR3">
         <span class="tune-stars"><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span></span>
         <span class="tune-label">The Four Agreements <span class="muted">· Don Miguel Ruiz, Janet Mills</span></span>
-        <button class="tune-undo" onclick="Stackarr.clearRating('B0GDPWQSR3', this)">Clear</button></div>
+        <button class="tune-undo" onclick="Stackarr.clearRating("B0GDPWQSR3", this)">Clear</button></div>
       
       <div class="tune-row" data-key="B0C28WLQP1">
         <span class="tune-stars"><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star ">★</span></span>
         <span class="tune-label">Light Bringer <span class="muted">· Pierce Brown</span></span>
-        <button class="tune-undo" onclick="Stackarr.clearRating('B0C28WLQP1', this)">Clear</button></div>
+        <button class="tune-undo" onclick="Stackarr.clearRating("B0C28WLQP1", this)">Clear</button></div>
       
       <div class="tune-row" data-key="B0BXQN4QB9">
         <span class="tune-stars"><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span></span>
         <span class="tune-label">Waybound <span class="muted">· Will Wight</span></span>
-        <button class="tune-undo" onclick="Stackarr.clearRating('B0BXQN4QB9', this)">Clear</button></div>
+        <button class="tune-undo" onclick="Stackarr.clearRating("B0BXQN4QB9", this)">Clear</button></div>
       
       <div class="tune-row" data-key="B073H9PF2D">
         <span class="tune-stars"><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star ">★</span><span class="star ">★</span></span>
         <span class="tune-label">Leviathan Wakes <span class="muted">· James S. A. Corey</span></span>
-        <button class="tune-undo" onclick="Stackarr.clearRating('B073H9PF2D', this)">Clear</button></div>
+        <button class="tune-undo" onclick="Stackarr.clearRating("B073H9PF2D", this)">Clear</button></div>
       
       <div class="tune-row" data-key="1526622416">
         <span class="tune-stars"><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star ">★</span></span>
         <span class="tune-label">Piranesi <span class="muted">· Susanna Clarke</span></span>
-        <button class="tune-undo" onclick="Stackarr.clearRating('1526622416', this)">Clear</button></div>
+        <button class="tune-undo" onclick="Stackarr.clearRating("1526622416", this)">Clear</button></div>
       
       <div class="tune-row" data-key="B0F4RQQC4N">
         <span class="tune-stars"><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span></span>
         <span class="tune-label">Isles of the Emberdark <span class="muted">· Brandon Sanderson</span></span>
-        <button class="tune-undo" onclick="Stackarr.clearRating('B0F4RQQC4N', this)">Clear</button></div>
+        <button class="tune-undo" onclick="Stackarr.clearRating("B0F4RQQC4N", this)">Clear</button></div>
       
       <div class="tune-row" data-key="B0B7KHQL2C">
         <span class="tune-stars"><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star ">★</span></span>
         <span class="tune-label">The Dragon Reborn <span class="muted">· Robert Jordan</span></span>
-        <button class="tune-undo" onclick="Stackarr.clearRating('B0B7KHQL2C', this)">Clear</button></div>
+        <button class="tune-undo" onclick="Stackarr.clearRating("B0B7KHQL2C", this)">Clear</button></div>
       
       <div class="tune-row" data-key="B0D18CT2VY">
         <span class="tune-stars"><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span></span>
         <span class="tune-label">Yumi and the Nightmare Painter <span class="muted">· Brandon Sanderson</span></span>
-        <button class="tune-undo" onclick="Stackarr.clearRating('B0D18CT2VY', this)">Clear</button></div>
+        <button class="tune-undo" onclick="Stackarr.clearRating("B0D18CT2VY", this)">Clear</button></div>
       
       <div class="tune-row" data-key="B0FQPMSN8D">
         <span class="tune-stars"><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star ">★</span><span class="star ">★</span></span>
         <span class="tune-label">God&#39;s Junk Drawer <span class="muted">· Peter Clines</span></span>
-        <button class="tune-undo" onclick="Stackarr.clearRating('B0FQPMSN8D', this)">Clear</button></div>
+        <button class="tune-undo" onclick="Stackarr.clearRating("B0FQPMSN8D", this)">Clear</button></div>
       
       <div class="tune-row" data-key="B0GJ6MQLKJ">
         <span class="tune-stars"><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star on">★</span><span class="star ">★</span></span>
         <span class="tune-label">Platform Decay <span class="muted">· Martha Wells</span></span>
-        <button class="tune-undo" onclick="Stackarr.clearRating('B0GJ6MQLKJ', this)">Clear</button></div>
+        <button class="tune-undo" onclick="Stackarr.clearRating("B0GJ6MQLKJ", this)">Clear</button></div>
       
     </div>
   </div>

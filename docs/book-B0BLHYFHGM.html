@@ -23,14 +23,12 @@
     <svg viewBox="0 0 24 24"><path d="M9 21h6v-2H9zm3-19a7 7 0 0 0-4 12.7V16a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2zm-1 5h2v2h2v2h-2v2h-2v-2H9V9h2z"/></svg><span>Suggestions</span></a>
   <a href="series.html" class="navlink " title="Up Next">
     <svg viewBox="0 0 24 24"><path d="M3 6h11v2H3zm0 5h11v2H3zm0 5h7v2H3zM16 7l6 4-6 4z"/></svg><span>Up Next</span></a>
-  <a href="shelves.html" class="navlink " title="My shelves">
-    <svg viewBox="0 0 24 24"><path d="M3 4h2v15H3zm3 1h2v14H6zm3 0h2v14H9zm4.4.3 1.9-.3 2.3 13.8-1.9.3zM3 20h18v1.5H3z"/></svg><span>My shelves</span></a>
   <a href="requests.html" class="navlink " title="Requests">
     <svg viewBox="0 0 24 24"><path d="M11 3h2v8h3l-4 4-4-4h3zM4 18h16v2H4z"/></svg><span>Requests</span></a>
   <a href="demo-info.html" class="navlink " title="Discover">
     <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.2 5.8-2.3 5.9-5.9 2.3 2.3-5.9zM12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg><span>Discover</span></a>
-  <a href="history.html" class="navlink " title="History">
-    <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 0 8.9 10.5h-2.05A7 7 0 1 1 13 5v5l4.3 2.5.75-1.3L14.5 9V3z"/></svg><span>History</span></a>
+  <a href="history.html" class="navlink " title="History &amp; ratings">
+    <svg viewBox="0 0 24 24"><path d="M12 2.3l2.95 5.98 6.6.96-4.77 4.65 1.12 6.57L12 17.35l-5.9 3.1 1.12-6.57L2.45 9.24l6.6-.96z"/></svg><span>History</span></a>
   <a href="insights.html" class="navlink " title="Insights">
     <svg viewBox="0 0 24 24"><path d="M4 20V10h4v10zm6 0V4h4v16zm6 0v-7h4v7z"/></svg><span>Insights</span></a>
   <a href="demo-info.html" class="navlink ">
@@ -52,10 +50,11 @@
     </form>
     <div class="topbar-spacer"></div>
     <button class="icon-btn" onclick="Stackarr.surprise()" title="Surprise me — one pick" aria-label="Surprise me">
-      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 2.5l1.6 4.1 4.4.3-3.4 2.8 1.1 4.3L12 11.9 8.3 14l1.1-4.3L6 6.9l4.4-.3zM5 15l.8 2 2 .8-2 .8L5 21l-.8-2-2-.8 2-.8zm13 0l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg></button>
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill-rule="evenodd" d="M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4Zm1 3.6a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Zm8 0a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Zm-4 4a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Zm-4 4a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Zm8 0a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Z"/></svg></button>
     <button class="icon-btn" onclick="Stackarr.toggleTheme()" title="Light / dark">◑</button>
   </header>
   <main>
+
 <button class="btn small ghost back-btn" onclick="history.back()">‹ Back</button>
 <div class="book-detail">
   <div class="book-cover">
@@ -90,6 +89,21 @@
       <div class="cw-list"><span class="chip cw-chip">Violence</span><span class="chip cw-chip">Death/grief</span></div>
       <p class="muted" style="font-size:12px">Auto-detected from catalogue subjects — may be incomplete.</p></details>
     
+    <div class="book-actions">
+      
+      
+  
+    
+    <div class="grab-pair">
+      <button class="btn grab-half" title="Add audiobook" onclick='Stackarr.grabFormat({"asin": "B0BLHYFHGM", "author": "Jack Bryce", "cover": "https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg", "format": "audiobook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic", "Paranormal \u0026 Urban"], "language": "English", "narrator": "Erin Bateman", "num_ratings": 28, "publisher": "Royal Guard Publishing LLC", "rating": 4.3, "release_date": "2022-12-05", "req_detail": null, "runtime_hours": 7, "sequence": "1", "series": "Aerda Online Series", "state": "new", "subtitle": "A LitRPG Progression Fantasy Adventure Series", "summary": "", "title": "Phylomancer"}, "audiobook", this)'><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9v4.5A2.5 2.5 0 0 0 5.5 19H7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5v-0a7 7 0 0 1 14 0v0h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.5A2.5 2.5 0 0 0 21 16.5V12a9 9 0 0 0-9-9z"/></svg> Add</button>
+      <button class="btn grab-half" title="Add eBook" onclick='Stackarr.grabFormat({"asin": "B0BLHYFHGM", "author": "Jack Bryce", "cover": "https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg", "format": "audiobook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic", "Paranormal \u0026 Urban"], "language": "English", "narrator": "Erin Bateman", "num_ratings": 28, "publisher": "Royal Guard Publishing LLC", "rating": 4.3, "release_date": "2022-12-05", "req_detail": null, "runtime_hours": 7, "sequence": "1", "series": "Aerda Online Series", "state": "new", "subtitle": "A LitRPG Progression Fantasy Adventure Series", "summary": "", "title": "Phylomancer"}, "ebook", this)'><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5A2.5 2.5 0 0 1 5.5 2H11v18.2l-.9-.5a4 4 0 0 0-1.9-.5H3zM13 2h5.5A2.5 2.5 0 0 1 21 4.5v14.7h-5.2a4 4 0 0 0-1.9.5l-.9.5z"/></svg> Add</button>
+    </div>
+  
+
+      <button class="btn ghost" onclick='Stackarr.bookIgnore({"asin": "B0BLHYFHGM", "author": "Jack Bryce", "cover": "https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg", "format": "audiobook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic", "Paranormal \u0026 Urban"], "language": "English", "narrator": "Erin Bateman", "num_ratings": 28, "publisher": "Royal Guard Publishing LLC", "rating": 4.3, "release_date": "2022-12-05", "req_detail": null, "runtime_hours": 7, "sequence": "1", "series": "Aerda Online Series", "state": "new", "subtitle": "A LitRPG Progression Fantasy Adventure Series", "summary": "", "title": "Phylomancer"}, this)'>Not interested</button>
+    </div>
+
+    
 
     
     <div class="shelf-bar" data-key="B0BLHYFHGM" data-title="Phylomancer" data-author="Jack Bryce" data-cover="https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg" data-format="audiobook">
@@ -105,20 +119,6 @@
     
     
     
-    <div class="book-actions">
-      
-      
-      
-        
-        <div class="grab-pair">
-          <button class="btn grab-half" title="Add audiobook" onclick='Stackarr.grabFormat({"asin": "B0BLHYFHGM", "author": "Jack Bryce", "cover": "https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg", "format": "audiobook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic", "Paranormal \u0026 Urban"], "language": "English", "narrator": "Erin Bateman", "num_ratings": 28, "publisher": "Royal Guard Publishing LLC", "rating": 4.3, "release_date": "2022-12-05", "req_detail": null, "runtime_hours": 7, "sequence": "1", "series": "Aerda Online Series", "state": "new", "subtitle": "A LitRPG Progression Fantasy Adventure Series", "summary": "", "title": "Phylomancer"}, "audiobook", this)'><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9v4.5A2.5 2.5 0 0 0 5.5 19H7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5v-0a7 7 0 0 1 14 0v0h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.5A2.5 2.5 0 0 0 21 16.5V12a9 9 0 0 0-9-9z"/></svg> Add</button>
-          <button class="btn grab-half" title="Add eBook" onclick='Stackarr.grabFormat({"asin": "B0BLHYFHGM", "author": "Jack Bryce", "cover": "https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg", "format": "audiobook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic", "Paranormal \u0026 Urban"], "language": "English", "narrator": "Erin Bateman", "num_ratings": 28, "publisher": "Royal Guard Publishing LLC", "rating": 4.3, "release_date": "2022-12-05", "req_detail": null, "runtime_hours": 7, "sequence": "1", "series": "Aerda Online Series", "state": "new", "subtitle": "A LitRPG Progression Fantasy Adventure Series", "summary": "", "title": "Phylomancer"}, "ebook", this)'><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5A2.5 2.5 0 0 1 5.5 2H11v18.2l-.9-.5a4 4 0 0 0-1.9-.5H3zM13 2h5.5A2.5 2.5 0 0 1 21 4.5v14.7h-5.2a4 4 0 0 0-1.9.5l-.9.5z"/></svg> Add</button>
-        </div>
-      
-    
-      <button class="btn ghost" onclick='Stackarr.bookIgnore({"asin": "B0BLHYFHGM", "author": "Jack Bryce", "cover": "https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg", "format": "audiobook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic", "Paranormal \u0026 Urban"], "language": "English", "narrator": "Erin Bateman", "num_ratings": 28, "publisher": "Royal Guard Publishing LLC", "rating": 4.3, "release_date": "2022-12-05", "req_detail": null, "runtime_hours": 7, "sequence": "1", "series": "Aerda Online Series", "state": "new", "subtitle": "A LitRPG Progression Fantasy Adventure Series", "summary": "", "title": "Phylomancer"}, this)'>Not interested</button>
-    </div>
-    
     <div class="feedback-row">
       <button class="icon-pill" title="More like this" onclick='Stackarr.feedback({"asin": "B0BLHYFHGM", "author": "Jack Bryce", "cover": "https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg", "format": "audiobook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic", "Paranormal \u0026 Urban"], "language": "English", "narrator": "Erin Bateman", "num_ratings": 28, "publisher": "Royal Guard Publishing LLC", "rating": 4.3, "release_date": "2022-12-05", "req_detail": null, "runtime_hours": 7, "sequence": "1", "series": "Aerda Online Series", "state": "new", "subtitle": "A LitRPG Progression Fantasy Adventure Series", "summary": "", "title": "Phylomancer"}, "more", this)'>👍</button>
       <button class="icon-pill" title="Less like this" onclick='Stackarr.feedback({"asin": "B0BLHYFHGM", "author": "Jack Bryce", "cover": "https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg", "format": "audiobook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic", "Paranormal \u0026 Urban"], "language": "English", "narrator": "Erin Bateman", "num_ratings": 28, "publisher": "Royal Guard Publishing LLC", "rating": 4.3, "release_date": "2022-12-05", "req_detail": null, "runtime_hours": 7, "sequence": "1", "series": "Aerda Online Series", "state": "new", "subtitle": "A LitRPG Progression Fantasy Adventure Series", "summary": "", "title": "Phylomancer"}, "less", this)'>👎</button>
@@ -130,14 +130,14 @@
 
 <div class="book-actions-bottom">
   
-      
-        
-        <div class="grab-pair">
-          <button class="btn grab-half" title="Add audiobook" onclick='Stackarr.grabFormat({"asin": "B0BLHYFHGM", "author": "Jack Bryce", "cover": "https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg", "format": "audiobook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic", "Paranormal \u0026 Urban"], "language": "English", "narrator": "Erin Bateman", "num_ratings": 28, "publisher": "Royal Guard Publishing LLC", "rating": 4.3, "release_date": "2022-12-05", "req_detail": null, "runtime_hours": 7, "sequence": "1", "series": "Aerda Online Series", "state": "new", "subtitle": "A LitRPG Progression Fantasy Adventure Series", "summary": "", "title": "Phylomancer"}, "audiobook", this)'><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9v4.5A2.5 2.5 0 0 0 5.5 19H7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5v-0a7 7 0 0 1 14 0v0h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.5A2.5 2.5 0 0 0 21 16.5V12a9 9 0 0 0-9-9z"/></svg> Add</button>
-          <button class="btn grab-half" title="Add eBook" onclick='Stackarr.grabFormat({"asin": "B0BLHYFHGM", "author": "Jack Bryce", "cover": "https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg", "format": "audiobook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic", "Paranormal \u0026 Urban"], "language": "English", "narrator": "Erin Bateman", "num_ratings": 28, "publisher": "Royal Guard Publishing LLC", "rating": 4.3, "release_date": "2022-12-05", "req_detail": null, "runtime_hours": 7, "sequence": "1", "series": "Aerda Online Series", "state": "new", "subtitle": "A LitRPG Progression Fantasy Adventure Series", "summary": "", "title": "Phylomancer"}, "ebook", this)'><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5A2.5 2.5 0 0 1 5.5 2H11v18.2l-.9-.5a4 4 0 0 0-1.9-.5H3zM13 2h5.5A2.5 2.5 0 0 1 21 4.5v14.7h-5.2a4 4 0 0 0-1.9.5l-.9.5z"/></svg> Add</button>
-        </div>
-      
+  
     
+    <div class="grab-pair">
+      <button class="btn grab-half" title="Add audiobook" onclick='Stackarr.grabFormat({"asin": "B0BLHYFHGM", "author": "Jack Bryce", "cover": "https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg", "format": "audiobook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic", "Paranormal \u0026 Urban"], "language": "English", "narrator": "Erin Bateman", "num_ratings": 28, "publisher": "Royal Guard Publishing LLC", "rating": 4.3, "release_date": "2022-12-05", "req_detail": null, "runtime_hours": 7, "sequence": "1", "series": "Aerda Online Series", "state": "new", "subtitle": "A LitRPG Progression Fantasy Adventure Series", "summary": "", "title": "Phylomancer"}, "audiobook", this)'><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9v4.5A2.5 2.5 0 0 0 5.5 19H7a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H5v-0a7 7 0 0 1 14 0v0h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1.5A2.5 2.5 0 0 0 21 16.5V12a9 9 0 0 0-9-9z"/></svg> Add</button>
+      <button class="btn grab-half" title="Add eBook" onclick='Stackarr.grabFormat({"asin": "B0BLHYFHGM", "author": "Jack Bryce", "cover": "https://m.media-amazon.com/images/I/51rcZYxYefL._SL1500_.jpg", "format": "audiobook", "genres": ["Science Fiction \u0026 Fantasy", "Fantasy", "Action \u0026 Adventure", "Epic", "Paranormal \u0026 Urban"], "language": "English", "narrator": "Erin Bateman", "num_ratings": 28, "publisher": "Royal Guard Publishing LLC", "rating": 4.3, "release_date": "2022-12-05", "req_detail": null, "runtime_hours": 7, "sequence": "1", "series": "Aerda Online Series", "state": "new", "subtitle": "A LitRPG Progression Fantasy Adventure Series", "summary": "", "title": "Phylomancer"}, "ebook", this)'><svg class="fmt-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4.5A2.5 2.5 0 0 1 5.5 2H11v18.2l-.9-.5a4 4 0 0 0-1.9-.5H3zM13 2h5.5A2.5 2.5 0 0 1 21 4.5v14.7h-5.2a4 4 0 0 0-1.9.5l-.9.5z"/></svg> Add</button>
+    </div>
+  
+
   <button class="btn ghost" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑ Back to top</button>
 </div>
 
@@ -148,11 +148,11 @@
     <p class="muted">Your rating <span class="community-inline">· community ★ 4.2 (40)</span></p>
     <div class="rate-stars big" id="my-stars" data-asin="B0BLHYFHGM" data-title="Phylomancer" data-author="Jack Bryce">
       <span class="star "
-        onclick="Stackarr.rate('B0BLHYFHGM',1,this)">★</span><span class="star "
-        onclick="Stackarr.rate('B0BLHYFHGM',2,this)">★</span><span class="star "
-        onclick="Stackarr.rate('B0BLHYFHGM',3,this)">★</span><span class="star "
-        onclick="Stackarr.rate('B0BLHYFHGM',4,this)">★</span><span class="star "
-        onclick="Stackarr.rate('B0BLHYFHGM',5,this)">★</span>
+        onclick="Stackarr.rate("B0BLHYFHGM",1,this)">★</span><span class="star "
+        onclick="Stackarr.rate("B0BLHYFHGM",2,this)">★</span><span class="star "
+        onclick="Stackarr.rate("B0BLHYFHGM",3,this)">★</span><span class="star "
+        onclick="Stackarr.rate("B0BLHYFHGM",4,this)">★</span><span class="star "
+        onclick="Stackarr.rate("B0BLHYFHGM",5,this)">★</span>
     </div>
     <p class="muted" style="font-size:12.5px;margin-top:6px">A quick rating sharpens your recommendations.</p>
   </div>
