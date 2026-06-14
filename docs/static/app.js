@@ -56,10 +56,10 @@ const Stackarr = (() => {
         ${tag ? `<span class="corner-badge ${tag[1]}">${tag[0]}</span>` : ""}
         <div class="media-overlay">
           <div class="ov-reason">${esc(reason)}</div>
-          <div class="media-stars" data-asin="${esc(b.asin)}">${[1,2,3,4,5].map(n => `<span onclick="Stackarr.rate('${esc(b.asin)}',${n},this)">★</span>`).join("")}</div>
+          <div class="media-stars" data-asin="${esc(b.asin)}" data-title="${esc(b.title)}" data-author="${esc(b.author)}">${[1,2,3,4,5].map(n => `<span onclick="Stackarr.rate('${esc(b.asin)}',${n},this)">★</span>`).join("")}</div>
           <div class="ov-actions">
             <button class="btn" ${canReq ? "" : "disabled"} onclick='Stackarr.request(${j(b)}, this)'>${esc(reqLabel)}</button>
-            <button class="btn ghost" onclick='Stackarr.markReadBook(${j({title:b.title,author:b.author})}, this)'>Read it</button>
+            <button class="btn ghost" onclick='Stackarr.markReadBook(${j({title:b.title,author:b.author,cover:b.cover,asin:b.asin,format:b.format})}, this)'>Read it</button>
           </div>
         </div>
       </div>
@@ -210,6 +210,7 @@ const Stackarr = (() => {
       const label = btn ? btn.textContent : "";
       if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
       const r = await api("/api/series/add", { method: "POST", body: JSON.stringify({ series: name, author, format }) });
+      if (!r) { if (btn) { btn.disabled = false; btn.textContent = label || "＋ Get full series"; } return; }   // 401 → api() redirected
       toast(r.detail || (r.ok ? "Sent to Chaptarr." : "Couldn't add right now."));
       if (btn) { btn.disabled = false; btn.textContent = r.ok ? "✓ Requested" : (label || "＋ Get full series"); }
     },
@@ -305,12 +306,14 @@ const Stackarr = (() => {
     async grabFormat(book, fmt, btn) {
       if (btn) { btn.disabled = true; }
       const r = await api("/api/request", { method: "POST", body: JSON.stringify(Object.assign({}, book, { format: fmt })) });
+      if (!r) { if (btn) btn.disabled = false; return; }                 // 401 → api() redirected
       toast(r.detail || (r.ok ? `Grabbing the ${fmt === "ebook" ? "eBook" : "audiobook"}…` : "Couldn't add right now."));
       if (btn) { btn.disabled = false; }
     },
     async getOtherFormat(book, btn) {
       if (btn) { btn.disabled = true; }
       const r = await api("/api/get-other-format", { method: "POST", body: JSON.stringify(book) });
+      if (!r) { if (btn) btn.disabled = false; return; }                 // 401 → api() redirected
       toast(r.detail || (r.ok ? "Requested." : "Couldn't add."));
       if (btn) { btn.disabled = false; }
     },
