@@ -1717,7 +1717,7 @@ def manifest():
 def service_worker():
     base = config.URL_BASE or ""
     js = (
-        "const C='stackarr-v4';\n"
+        "const C='stackarr-v5';\n"
         f"const SHELL=['{base}/','{base}/static/style.css','{base}/static/app.js','{base}/static/icon.svg'];\n"
         "self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()))});\n"
         "self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});\n"
