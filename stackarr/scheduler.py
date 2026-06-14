@@ -47,6 +47,7 @@ def import_users() -> dict:
 
 def refresh_library():
     seen = set()
+    ok_sources = set()                # backends that reported successfully this cycle
     with db.conn() as c:
         # aggregate the library snapshot across every connected source backend
         # of an *active* format (ABS today; Kavita/Calibre-Web once connected and
@@ -58,6 +59,7 @@ def refresh_library():
             except Exception as e:
                 log.warning("library refresh failed for %s: %s", backend.id, e)
                 continue
+            ok_sources.add(backend.id)
             for m in items:
                 if not m.get("item_id"):
                     continue
@@ -74,18 +76,27 @@ def refresh_library():
                      m.get("series", ""), m.get("series_seq"), m.get("narrator", ""),
                      m.get("format", "audiobook"), m.get("source", "abs")))
 
-        # deletions -> "delete habit" negative signal for every user
-        user_ids = [r["id"] for r in c.execute("SELECT id FROM users")]
-        for row in c.execute("SELECT item_id,title,author,asin FROM library WHERE gone_at IS NULL"):
-            if row["item_id"] in seen:
-                continue
-            c.execute("UPDATE library SET gone_at=datetime('now','localtime') WHERE item_id=?", (row["item_id"],))
-            if row["asin"]:
-                for uid in user_ids:
-                    c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) "
-                              "VALUES (?,?,?,?,?)",
-                              (uid, "asin", row["asin"], -5, f"deleted from library: {row['title']}"))
-            log.info("library item gone -> negative: %s", row["title"])
+        # deletions -> "delete habit" negative signal for every user. ONLY sweep
+        # items belonging to a source that reported successfully this cycle — a
+        # transient backend error (timeout/5xx/429) must NOT mass-delete its books
+        # and permanently poison every user's taste with un-retractable -5 signals.
+        if seen and ok_sources:
+            user_ids = [r["id"] for r in c.execute("SELECT id FROM users")]
+            for row in c.execute("SELECT item_id,title,author,asin,source FROM library WHERE gone_at IS NULL"):
+                if row["item_id"] in seen:
+                    continue
+                if (row["source"] or "abs") not in ok_sources:
+                    continue                      # its source didn't (successfully) report — leave it
+                c.execute("UPDATE library SET gone_at=datetime('now','localtime') WHERE item_id=?", (row["item_id"],))
+                if row["asin"]:
+                    for uid in user_ids:
+                        # upsert: a prior asin signal (e.g. a positive like) must be
+                        # overridden to -5, else INSERT OR IGNORE drops it and the
+                        # liked-then-deleted book never gets hard-excluded.
+                        c.execute("INSERT INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?) "
+                                  "ON CONFLICT(user_id,kind,value) DO UPDATE SET weight=-5, why=excluded.why",
+                                  (uid, "asin", row["asin"], -5, f"deleted from library: {row['title']}"))
+                log.info("library item gone -> negative: %s", row["title"])
 
         # requests -> available when their book shows up
         newly_available = []
@@ -130,16 +141,20 @@ def run_for_user(user_id: int, force: bool = False) -> int:
     last = db.get_meta(key)
     if not force and last and (time.time() - float(last)) / 3600 < interval_hours():
         return 0
-    db.set_meta(key, str(time.time()))
-    with db.conn() as c:
-        pending = c.execute("SELECT COUNT(*) n FROM suggestions WHERE user_id=? AND status='pending'",
-                            (user_id,)).fetchone()["n"]
-    room = max(config.SUGGEST_MAX_PENDING - pending, 0)
-    if not room:
+    # Atomically claim the run so a double-tap of /api/run-now (force=True skips
+    # the due-check) or an overlap with the background cycle can't run two
+    # recommenders concurrently and blow past the per-lane/author caps.
+    if not db.claim_run(user_id):
         return 0
-    db.set_meta(f"running_{user_id}", "1")
     added = 0
     try:
+        db.set_meta(key, str(time.time()))     # inside try so finally always releases the lock
+        with db.conn() as c:
+            pending = c.execute("SELECT COUNT(*) n FROM suggestions WHERE user_id=? AND status='pending'",
+                                (user_id,)).fetchone()["n"]
+        room = max(config.SUGGEST_MAX_PENDING - pending, 0)
+        if not room:
+            return 0
         active = formats.active()
         # audiobook first (it's primary and dedupes against nothing), ebook
         # second so it skips any title already picked as an audiobook. Split the
@@ -157,13 +172,20 @@ def run_for_user(user_id: int, force: bool = False) -> int:
             except Exception as e:
                 log.warning("ebook recommend failed for user %s: %s", user_id, e)
     finally:
-        db.set_meta(f"running_{user_id}", "0")
+        db.release_run(user_id)
     if added:
         with db.conn() as c:
             rows = [dict(r) for r in c.execute(
                 "SELECT title,author,reason,cover FROM suggestions "
                 "WHERE user_id=? AND status='pending' ORDER BY score DESC", (user_id,))]
-        notify.suggestion_digest(rows, base_url=db.get_meta("public_url", ""))
+        # per-user recipient + per-user throttle so each user gets their own list
+        # and one user's digest can't suppress everyone else's (multi-user safe).
+        u = db.get_user(user_id) or {}
+        # global SMTP 'to' is an acceptable recipient only on a single-user install;
+        # in multi-user it would leak this user's private list to the admin mailbox.
+        notify.suggestion_digest(rows, base_url=db.get_meta("public_url", ""),
+                                 to=u.get("email") or None, throttle_key=f"last_email_ts_{user_id}",
+                                 allow_global=(db.user_count() == 1))
     return added
 
 
@@ -199,19 +221,24 @@ def auto_approve(user_id: int) -> int:
             continue
         if lanes is not None and r["lane"] not in lanes:
             continue
+        fmt = r.get("format") or "audiobook"
         with db.conn() as c:
-            if _owned(c, r["asin"], r["title"], r["author"]):
+            if _owned(c, r["asin"], r["title"], r["author"], fmt=fmt):
                 c.execute("UPDATE suggestions SET status='approved' WHERE id=?", (r["id"],))
                 continue
-        res = chaptarr.add_and_search(r["title"], r.get("author", ""), r.get("asin", ""))
+        res = chaptarr.add_and_search(r["title"], r.get("author", ""), r.get("asin", ""), fmt=fmt)
         if not res.get("ok"):
-            log.info("auto-add paused: Chaptarr not adding right now (%s)", res.get("detail", ""))
-            break
+            if res.get("retry"):       # true outage/rate-limit → stop the cycle, nothing piles up
+                log.info("auto-add paused: Chaptarr unavailable (%s)", res.get("detail", ""))
+                break
+            log.info("auto-add skip (%s): %s", res.get("detail", ""), r["title"])
+            continue                    # per-item catalogue miss → skip it, keep going
+
         with db.conn() as c:
-            c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source) "
-                      "VALUES (?,?,?,?,?,?,?,?,?)",
+            c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?)",
                       (user_id, r.get("asin", ""), r["title"], r.get("author", ""),
-                       r.get("cover", ""), "handed", res.get("detail", ""), res.get("ref", ""), "auto"))
+                       r.get("cover", ""), "handed", res.get("detail", ""), res.get("ref", ""), "auto", fmt))
             c.execute("UPDATE suggestions SET status='approved',decided_at=datetime('now','localtime') WHERE id=?",
                       (r["id"],))
         added += 1
@@ -269,12 +296,12 @@ def new_release_radar():
             key = f"nr:{(b.get('asin') or b.get('id') or b.get('title',''))}"
             if db.get_meta(key):
                 continue
-            db.set_meta(key, str(today))
             b.setdefault("format", fmt)
             try:
                 notify.new_release(b, base_url=base)
-                log.info("new-release radar: %s — %s", b.get("title"), author)
-            except Exception as e:
+                db.set_meta(key, str(today))     # mark done only AFTER a successful notify,
+                log.info("new-release radar: %s — %s", b.get("title"), author)  # else a transient
+            except Exception as e:               # failure would suppress the alert forever
                 log.warning("new-release notify failed: %s", e)
 
 

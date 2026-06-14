@@ -100,14 +100,17 @@ def libraries() -> list[dict]:
 
 def items(library_id: str) -> list[dict]:
     out, page = [], 0
-    while True:
+    while page < 200:                                    # hard safety cap (40k items)
         d = _user_get(admin_token(), f"/api/libraries/{library_id}/items",
                       {"limit": 200, "page": page})
         batch = d.get("results", [])
         out.extend(batch)
         page += 1
-        if not batch or len(out) >= d.get("total", 0):
+        # Stop on a short/empty page — NOT on total: ABS sometimes omits/zeroes
+        # 'total', and `len(out) >= 0` would truncate a >200-item library to page 0.
+        if len(batch) < 200:
             return out
+    return out
 
 
 def recent_added(limit: int = 14) -> list[dict]:
@@ -176,6 +179,42 @@ def item_detail(item_id: str) -> dict:
         return item_meta(_user_get(admin_token(), f"/api/items/{item_id}"))
     except Exception:
         return {"item_id": item_id, "title": "", "author": "", "asin": ""}
+
+
+def find_item(title: str, author: str = "") -> str:
+    """Resolve a title (+optional author) to a library item id, edition-insensitive.
+    Empty string if it isn't in any tracked book library. Used so 'mark as read'
+    can write the finished flag back to ABS."""
+    wt, wa = _dedup_key(title, author)
+    if not wt:
+        return ""
+    exact, prefix = [], []
+    for lib in libraries():
+        try:
+            for it in items(lib["id"]):
+                m = item_meta(it)
+                kt, ka = _dedup_key(m["title"], m["author"])
+                if not kt:
+                    continue
+                if kt == wt and (not wa or not ka or ka == wa):
+                    exact.append(m["item_id"])
+                # A subtitle-tolerant prefix match ("Rocket Men" vs "Rocket Men:
+                # The Daring Odyssey…") is only safe when the author matches on BOTH
+                # sides — otherwise "Mistborn"/"Children" hit several books and we'd
+                # mark the wrong one finished. Collect, don't return on first hit.
+                elif (len(wt) >= 8 and len(kt) >= 8 and wa and ka and ka == wa
+                      and (kt.startswith(wt) or wt.startswith(kt))):
+                    # BOTH sides must clear the floor — else a short library title
+                    # ("Dune") is a prefix of a longer query ("Dune Messiah") and we
+                    # mark the wrong book finished.
+                    prefix.append(m["item_id"])
+        except Exception as e:
+            log.debug("find_item scan failed for %s: %s", lib.get("name"), e)
+    # trust a match only when it's unambiguous — a blank author can make several
+    # same-titled items "exact", and marking an arbitrary one finished is wrong.
+    if len(set(exact)) == 1:
+        return exact[0]
+    return prefix[0] if len(prefix) == 1 else ""
 
 
 def set_finished(token: str, item_id: str, finished: bool = True) -> bool:

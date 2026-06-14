@@ -131,8 +131,8 @@ CREATE TABLE IF NOT EXISTS book_tags (
   tag TEXT NOT NULL,
   kind TEXT NOT NULL DEFAULT 'genre',          -- genre | mood | pace | warning
   source TEXT NOT NULL DEFAULT 'auto',         -- auto | user
-  PRIMARY KEY (rkey, tag)
-);
+  PRIMARY KEY (rkey, tag, kind)                -- kind is part of identity: the
+);                                             -- same word can be genre AND mood
 CREATE TABLE IF NOT EXISTS review_votes (
   user_id INTEGER NOT NULL,
   rating_id INTEGER NOT NULL,
@@ -203,10 +203,30 @@ def init():
                     " decided_at TEXT, UNIQUE(user_id, asin, format));"
                     f" INSERT OR IGNORE INTO suggestions_mig ({cols}) SELECT {cols} FROM suggestions;"
                     " DROP TABLE suggestions;"
-                    " ALTER TABLE suggestions_mig RENAME TO suggestions;")
+                    " ALTER TABLE suggestions_mig RENAME TO suggestions;"
+                    # DROP TABLE above also dropped ix_sugg_user_status (created by
+                    # SCHEMA); recreate it or status queries run unindexed till restart.
+                    " CREATE INDEX IF NOT EXISTS ix_sugg_user_status ON suggestions(user_id, status);")
                 c.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('sugg_fmt_uniq','1')")
         except sqlite3.OperationalError as e:
             logging.getLogger("stackarr.db").warning("suggestions migration skipped: %s", e)
+        # migrate book_tags PK (rkey,tag) -> (rkey,tag,kind) so the same word can
+        # be both a genre and a mood instead of one silently dropping the other.
+        try:
+            if not c.execute("SELECT v FROM meta WHERE k='tags_pk_kind'").fetchone():
+                c.executescript(
+                    "CREATE TABLE IF NOT EXISTS book_tags_mig ("
+                    " rkey TEXT NOT NULL, tag TEXT NOT NULL,"
+                    " kind TEXT NOT NULL DEFAULT 'genre', source TEXT NOT NULL DEFAULT 'auto',"
+                    " PRIMARY KEY (rkey, tag, kind));"
+                    " INSERT OR IGNORE INTO book_tags_mig (rkey,tag,kind,source)"
+                    " SELECT rkey,tag,kind,source FROM book_tags;"
+                    " DROP TABLE book_tags;"
+                    " ALTER TABLE book_tags_mig RENAME TO book_tags;"
+                    " CREATE INDEX IF NOT EXISTS ix_tags_kind ON book_tags(kind);")
+                c.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('tags_pk_kind','1')")
+        except sqlite3.OperationalError as e:
+            logging.getLogger("stackarr.db").warning("book_tags migration skipped: %s", e)
         # seed link rows for pre-existing ABS users so they keep their account
         # after the multi-provider switch (match by their stored abs_user_id).
         try:
@@ -381,6 +401,39 @@ def link_set(provider: str, external_id: str, user_id: int, token: str = ""):
                   "token=excluded.token", (provider, str(external_id), user_id, token or ""))
 
 
+def link_claim(provider: str, external_id: str, user_id: int, token: str = "") -> bool:
+    """Atomically link a provider identity to user_id, refusing to reassign it if
+    another account already owns it (only the token is refreshed for the owner).
+    Returns True if user_id owns the link afterward. Fixes the check-then-set race
+    where two concurrent links could steal an identity from each other."""
+    with conn() as c:
+        c.execute("INSERT INTO user_links (provider, external_id, user_id, token) VALUES (?,?,?,?) "
+                  "ON CONFLICT(provider, external_id) DO UPDATE SET token=excluded.token "
+                  "WHERE user_links.user_id=excluded.user_id",
+                  (provider, str(external_id), user_id, token or ""))
+        r = c.execute("SELECT user_id FROM user_links WHERE provider=? AND external_id=?",
+                      (provider, str(external_id))).fetchone()
+        return bool(r and r["user_id"] == user_id)
+
+
+def claim_run(user_id: int, stale_seconds: int = 3600) -> bool:
+    """Atomically claim the per-user recommender run. True = claimed (proceed);
+    False = another run holds it. Self-heals a crashed run after stale_seconds.
+    Replaces the read-then-write flag that let concurrent runs both proceed."""
+    import time as _t
+    k = f"running_{user_id}"
+    with conn() as c:
+        c.execute("INSERT OR IGNORE INTO meta (k,v) VALUES (?, '0')", (k,))
+        cur = c.execute(
+            "UPDATE meta SET v=? WHERE k=? AND (v='' OR v='0' OR CAST(v AS REAL) < ?)",
+            (str(_t.time()), k, _t.time() - stale_seconds))
+        return cur.rowcount > 0
+
+
+def release_run(user_id: int):
+    set_meta(f"running_{user_id}", "0")
+
+
 def link_remove(provider: str, user_id: int):
     with conn() as c:
         c.execute("DELETE FROM user_links WHERE provider=? AND user_id=?", (provider, user_id))
@@ -414,9 +467,17 @@ def provision_provider_user(provider: str, external_id: str, username: str,
         name = _unique_username(c, username)
         c.execute("INSERT INTO users (username, role, last_login) "
                   "VALUES (?,?, datetime('now','localtime'))", (name, role))
-        u = dict(c.execute("SELECT * FROM users WHERE username=? COLLATE NOCASE", (name,)).fetchone())
-    link_set(provider, external_id, u["id"], token)
-    return u
+        new_uid = c.execute("SELECT id FROM users WHERE username=? COLLATE NOCASE", (name,)).fetchone()["id"]
+        # Claim the link without clobbering a concurrent first-login that beat us
+        # to it; if we lost the race, discard our orphan account and return theirs.
+        c.execute("INSERT INTO user_links (provider, external_id, user_id, token) VALUES (?,?,?,?) "
+                  "ON CONFLICT(provider, external_id) DO NOTHING",
+                  (provider, str(external_id), new_uid, token or ""))
+        owner = c.execute("SELECT user_id FROM user_links WHERE provider=? AND external_id=?",
+                          (provider, str(external_id))).fetchone()["user_id"]
+        if owner != new_uid:
+            c.execute("DELETE FROM users WHERE id=?", (new_uid,))
+    return get_user(owner)
 
 
 # --- shared ratings & reviews (community signal across all Stackarr users) ---

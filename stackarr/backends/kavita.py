@@ -33,7 +33,10 @@ def _parse_dt(s: str) -> int:
     if not s or s.startswith("0001"):
         return 0
     try:
-        return int(datetime.datetime.fromisoformat(s[:26]).timestamp() * 1000)
+        dt = datetime.datetime.fromisoformat(s[:26])
+        if dt.tzinfo is None:                       # Kavita/.NET emits offset-less UTC;
+            dt = dt.replace(tzinfo=datetime.timezone.utc)   # don't read it as host-local
+        return int(dt.timestamp() * 1000)
     except (ValueError, TypeError):
         return 0
 
@@ -123,18 +126,31 @@ class KavitaBackend(Backend):
             return False
 
     # --- data -------------------------------------------------------------
-    def _all_series(self) -> list[dict]:
-        try:
-            r = self._post("/api/series/all-v2", params={"PageNumber": 1, "PageSize": 2000}, json={})
-            r.raise_for_status()
-            return r.json() or []
-        except Exception as e:
-            log.warning("kavita series list failed: %s", e)
-            return []
+    def _all_series(self, raise_on_error: bool = False) -> list[dict]:
+        # Paginate — a single PageSize=2000 silently drops series past the first
+        # page in large libraries. When raise_on_error, propagate so a transient
+        # failure surfaces as an error (refresh_library skips the backend) rather
+        # than an empty list that reads as "zero books" and mass-deletes them.
+        out, page = [], 1
+        while page <= 50:                       # safety cap (~100k series)
+            try:
+                r = self._post("/api/series/all-v2", params={"PageNumber": page, "PageSize": 2000}, json={})
+                r.raise_for_status()
+                batch = r.json() or []
+            except Exception as e:
+                log.warning("kavita series list failed (page %s): %s", page, e)
+                if raise_on_error:
+                    raise
+                return out
+            out.extend(batch)
+            if len(batch) < 2000:
+                break
+            page += 1
+        return out
 
     def library_items(self) -> list[dict]:
         out = []
-        for s in self._all_series():
+        for s in self._all_series(raise_on_error=True):
             sid = s.get("id")
             if sid is None:
                 continue
@@ -151,6 +167,10 @@ class KavitaBackend(Backend):
     def reading_history(self, user: dict) -> list[dict]:
         """Series with reading progress, recent first. Finished = read to the
         last page. (Uses the connected Kavita account, see module docstring.)"""
+        # multi-user: one shared API key can't be attributed per-user — don't leak
+        # this account's reads into every user's seeds/Insights (matches komga/calibreweb).
+        if db.user_count() > 1:
+            return []
         out = []
         for s in self._all_series():
             read = s.get("pagesRead") or 0
@@ -161,7 +181,9 @@ class KavitaBackend(Backend):
                 "item_id": f"kavita:{s.get('id')}",
                 "finished": bool(pages and read >= pages),
                 "progress": (read / pages) if pages else 0.0,
-                "last_update": _parse_dt(s.get("latestReadDate") or s.get("lastChapterAddedUtc") or ""),
+                # only a real read timestamp — NOT lastChapterAddedUtc (a library-add
+                # time), which would mis-date the read and skew recency/heatmap.
+                "last_update": _parse_dt(s.get("latestReadDate") or ""),
             })
         out.sort(key=lambda x: x["last_update"], reverse=True)
         return out

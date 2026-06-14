@@ -47,6 +47,12 @@ def login():
     def _page(err="", code=200):
         return render_template("login.html", error=err, **ctx), code
 
+    def _safe_next():
+        # only a local, relative path — reject "//evil", "/\evil" (browsers
+        # normalise \ → /), and absolute URLs (open redirect).
+        nxt = request.args.get("next") or ""
+        return nxt if re.match(r"^/[^/\\]", nxt) else url_for("main.index")
+
     if request.method == "POST":
         cnt, first = _LOGIN_FAILS.get(ip, (0, 0.0))
         if cnt >= _LOCK_AFTER and (time.time() - first) < _LOCK_WINDOW:
@@ -70,7 +76,7 @@ def login():
                 u = auth.register_local(username, password, request.form.get("email", "").strip())
                 if u:
                     _LOGIN_FAILS.pop(ip, None)
-                    return redirect(request.args.get("next") or url_for("main.index"))
+                    return redirect(_safe_next())
                 error = "That username is taken."
         else:
             if provider == "local":
@@ -79,7 +85,7 @@ def login():
                 u = auth.do_login_provider(provider, username, password)
             if u:
                 _LOGIN_FAILS.pop(ip, None)
-                return redirect(request.args.get("next") or url_for("main.index"))
+                return redirect(_safe_next())
             error = "Wrong username or password."
 
         _LOGIN_FAILS[ip] = (cnt + 1, first or time.time())
@@ -149,7 +155,7 @@ def home_page():
             "WHERE user_id=? AND status='pending' AND lane NOT IN ('upcoming') ORDER BY score DESC LIMIT 8", (u["id"],))]
         upcoming = [dict(r) for r in c.execute(
             "SELECT id,title,author,cover,reason,format,asin,extra FROM suggestions "
-            "WHERE user_id=? AND lane='upcoming' AND status='pending' ORDER BY extra DESC LIMIT 6", (u["id"],))]
+            "WHERE user_id=? AND lane='upcoming' AND status='pending' ORDER BY extra LIMIT 6", (u["id"],))]  # ASC: soonest first (match Upcoming page)
         want_n = c.execute("SELECT COUNT(*) n FROM shelf WHERE user_id=? AND state='want'", (u["id"],)).fetchone()["n"]
         avail_n = c.execute("SELECT COUNT(*) n FROM requests WHERE user_id=? AND status='available'", (u["id"],)).fetchone()["n"]
     year = datetime.date.today().year
@@ -779,22 +785,53 @@ def api_series_missing():
     name = (request.args.get("series") or "").strip()
     if not name:
         return jsonify({"error": "series required"}), 400
+    from collections import Counter
     with db.conn() as c:
         owned = [dict(r) for r in c.execute(
-            "SELECT title, series_seq FROM library WHERE gone_at IS NULL AND lower(series)=?",
+            "SELECT title, series_seq, author FROM library WHERE gone_at IS NULL AND lower(series)=?",
             (name.lower(),))]
     owned_seqs = {round(o["series_seq"], 1) for o in owned if o["series_seq"] is not None}
+    owned_titles = {recommend._norm(o["title"]) for o in owned}
+    # The author who writes this series (the most common among the books you own).
+    # Used to (a) scope a fuller catalogue fetch and (b) reject a same-named series
+    # by a different author — CompleteSeries' "layered evidence" idea.
+    authors = Counter((o.get("author") or "").split(",")[0].strip()
+                      for o in owned if o.get("author"))
+    series_author = authors.most_common(1)[0][0] if authors else ""
+    nn = recommend._norm(name)
+
+    def _author_ok(cand_author: str) -> bool:
+        if not series_author or not cand_author:
+            return True                      # can't disambiguate -> don't drop it
+        sa, ca = series_author.lower(), cand_author.lower()
+        return sa in ca or ca.split(",")[0] in sa
+
+    # A single keyword search misses long series and entries the name search doesn't
+    # surface. Pool the author's catalogue (most reliable for a series) with keyword
+    # searches, then dedupe — far more complete than one 40-result query.
+    pool = []
+    if series_author:
+        pool += audible.by_author(series_author, num=50)
+    pool += audible.search(name, num=50)
+    if series_author:
+        pool += audible.search(f"{name} {series_author}", num=50)
     full = {}
-    for b in audible.search(name, num=40):
-        if recommend._norm(b.get("series")) == recommend._norm(name) and b.get("sequence") is not None:
-            seq = round(b["sequence"], 1)
-            if seq not in full or b.get("num_ratings", 0) > full[seq].get("num_ratings", 0):
-                full[seq] = b
+    for b in pool:
+        if recommend._norm(b.get("series")) != nn or b.get("sequence") is None:
+            continue
+        if not _author_ok(b.get("author", "")):
+            continue
+        seq = round(b["sequence"], 1)
+        if seq not in full or b.get("num_ratings", 0) > full[seq].get("num_ratings", 0):
+            full[seq] = b
     entries = []
     for seq in sorted(full):
         b = full[seq]
+        # owned if we hold that position OR a library title matches (series_seq is
+        # often null in ABS, so a seq-only check would over-report missing books).
+        owned_flag = seq in owned_seqs or recommend._norm(b["title"]) in owned_titles
         entries.append({"seq": seq, "title": b["title"], "asin": b["asin"], "cover": b.get("cover", ""),
-                        "author": b.get("author", ""), "owned": seq in owned_seqs})
+                        "author": b.get("author", ""), "owned": owned_flag})
     missing = [e for e in entries if not e["owned"]]
     return jsonify({"ok": True, "series": name, "total": len(entries),
                     "owned": len(entries) - len(missing), "missing": missing, "entries": entries})
@@ -848,15 +885,22 @@ def api_series_add():
     if _needs_approval(u):
         return jsonify(_queue_for_approval(u, {"title": name, "author": author, "format": fmt}, "series"))
     fmts = ["audiobook", "ebook"] if fmt == "both" else [fmt]
-    res = {"ok": False, "detail": "Nothing to add."}
-    for f in fmts:
-        res = chaptarr.add_and_search(name, author, fmt=f)
-    if fmt == "both" and res.get("ok"):
-        res = {"ok": True, "detail": f"Sent “{name}” to Chaptarr as audiobook + eBook."}
+    results = {f: chaptarr.add_and_search(name, author, fmt=f) for f in fmts}
+    # one request row per format so a partial success (e.g. audiobook ok, ebook
+    # fail) isn't overwritten and hidden by the last iteration's result.
     with db.conn() as c:
-        c.execute("INSERT INTO requests (user_id,title,author,status,detail,source) VALUES (?,?,?,?,?,?)",
-                  (u["id"], f"Full series: {name}", author,
-                   "handed" if res["ok"] else "failed", res.get("detail", ""), "series"))
+        for f in fmts:
+            rf = results[f]
+            c.execute("INSERT INTO requests (user_id,title,author,status,detail,source,format) VALUES (?,?,?,?,?,?,?)",
+                      (u["id"], f"Full series: {name}", author,
+                       "handed" if rf.get("ok") else "failed", rf.get("detail", ""), "series", f))
+    oks = [f for f in fmts if results[f].get("ok")]
+    if fmt == "both":
+        res = {"ok": bool(oks),
+               "detail": (f"Sent “{name}” to Chaptarr as {' + '.join(oks)}." if oks
+                          else results[fmts[-1]].get("detail", "Couldn't add this series right now."))}
+    else:
+        res = results[fmts[0]]
     return jsonify(res)
 
 
@@ -866,10 +910,22 @@ def _shelves_data(u):
     Hardcover), merged with anything set manually. Returns (shelves, counts)."""
     shelves = {s: db.shelf_list(u["id"], s) for s in ("reading", "want", "read")}
     seen_titles = {(it.get("title") or "").strip().lower() for it in shelves["reading"]}
+    # A book you've finished (on the 'read' shelf) must not resurface as
+    # "currently reading" just because an external source still reports progress.
+    # Match on the shelf's stored rkey AND the title+author slug, since the auto
+    # sources key on the library asin while the read shelf often keys on the slug.
+    read_keys = set()
+    for r in shelves["read"]:
+        if r.get("rkey"):
+            read_keys.add(r["rkey"])
+        if r.get("title"):
+            read_keys.add(db.rating_key("", r["title"], r.get("author", "")))
 
     def _add_reading(title, author, cover, fmt, rkey=""):
         t = (title or "").strip()
         if not t or t.lower() in seen_titles:
+            return
+        if (rkey and rkey in read_keys) or db.rating_key("", t, author) in read_keys:
             return
         seen_titles.add(t.lower())
         shelves["reading"].append({"rkey": rkey or db.rating_key("", t, author), "title": t,
@@ -1254,7 +1310,10 @@ def _state_for(asin, title, author):
 @bp.route("/api/discover")
 @auth.login_required
 def api_discover():
-    pg = int(request.args.get("page", "0") or 0)
+    try:
+        pg = int(request.args.get("page", "0") or 0)
+    except (ValueError, TypeError):
+        pg = 0
     books = discover.page(pg)
     for b in books:
         b["state"] = _state_for(b["asin"], b["title"], b["author"])
@@ -1320,7 +1379,22 @@ def api_markread_book():
                       (u["id"], "asin", asin, -1, f"already read: {title}"))
             c.execute("UPDATE suggestions SET status='rejected' WHERE user_id=? AND asin=? AND status='pending'",
                       (u["id"], asin))
-    return jsonify({"ok": True, "matched": title})
+    # Propagate: mark finished in ABS (if in this user's library) + unmonitor in Chaptarr.
+    abs_finished, chaptarr_unmonitored = False, False
+    tok = u.get("abs_token")
+    if tok and title:
+        try:
+            item_id = absclient.find_item(title, author)
+            if item_id:
+                abs_finished = absclient.set_finished(tok, item_id, True)
+        except Exception:
+            pass
+    try:
+        chaptarr_unmonitored = chaptarr.mark_read(title, author)
+    except Exception:
+        pass
+    return jsonify({"ok": True, "matched": title,
+                    "abs_finished": abs_finished, "chaptarr_unmonitored": chaptarr_unmonitored})
 
 
 @bp.route("/api/search")
@@ -1417,13 +1491,15 @@ def api_suggestion(sid, verdict):
         if not row:
             return jsonify({"error": "not found"}), 404
         row = dict(row)
-        new_status = "approved" if verdict == "approve" else "rejected"
-        c.execute("UPDATE suggestions SET status=?,decided_at=datetime('now','localtime') WHERE id=?",
-                  (new_status, sid))
         # a suggestion can have no ASIN (ebook/inferred picks) — fall back to the
         # title/author key so the negative signal is never silently dropped (the
         # signals.value column is NOT NULL) and the title sticks as "don't show".
         sig_val = row.get("asin") or db.rating_key("", row.get("title", ""), row.get("author", ""))
+        # 'approve' is NOT committed here — we hand off first (below) and only
+        # consume the suggestion on success, so a failed grab leaves it re-approvable.
+        if verdict in ("reject", "read"):
+            c.execute("UPDATE suggestions SET status='rejected',decided_at=datetime('now','localtime') WHERE id=?",
+                      (sid,))
         if verdict == "reject":
             c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
                       (u["id"], "asin", sig_val, -3, f"passed: {row['title']}"))
@@ -1439,15 +1515,24 @@ def api_suggestion(sid, verdict):
             c.execute("INSERT OR IGNORE INTO signals (user_id,kind,value,weight,why) VALUES (?,?,?,?,?)",
                       (u["id"], "asin", sig_val, -1, f"already read: {row['title']}"))
     if verdict == "approve":
-        return jsonify(_hand_to_chaptarr(u["id"], row, "suggestion"))
-    return jsonify({"status": new_status})
+        res = _hand_to_chaptarr(u["id"], row, "suggestion")
+        # consume the suggestion ONLY on a real handoff — not when it was merely
+        # queued for admin approval (ok:True, pending:True); else a later denial
+        # leaves the pick 'approved' and it silently vanishes from the user's lane.
+        if res.get("ok") and not res.get("pending"):
+            with db.conn() as c:
+                c.execute("UPDATE suggestions SET status='approved',decided_at=datetime('now','localtime') WHERE id=?",
+                          (sid,))
+        return jsonify(res)
+    return jsonify({"status": "rejected"})
 
 
 @bp.route("/api/mark-read", methods=["POST"])
 @auth.login_required
 def api_mark_read():
     """Manually tell Stackarr you've already read a title — positive taste
-    seed, no download. Optionally writes finished to ABS if it's in library."""
+    seed, no download. Also writes finished to ABS (if it's in this user's
+    library) and unmonitors it in Chaptarr so it won't be grabbed."""
     u = auth.current_user()
     body = request.get_json(force=True)
     title, authr = body.get("title", "").strip(), body.get("author", "").strip()
@@ -1468,8 +1553,28 @@ def api_mark_read():
                   (u["id"], "asin", bid or title, -1, f"already read: {b['title']}", fmt))
     # also put it on the 'read' shelf so it counts toward goal + heatmap
     rk = db.rating_key(bid if not bid.startswith(("gb:", "ol:")) else "", b.get("title", title), b.get("author", authr))
-    db.shelf_set(u["id"], rk, "read", b.get("title", title), b.get("author", authr), b.get("cover", ""), fmt)
-    return jsonify({"ok": True, "matched": b.get("title", title)})
+    # prefer the on-screen cover the client sent over the (often coverless) re-search
+    # hit, so the read shelf stores a real cover instead of needing a /coverart lookup.
+    cover = b.get("cover") or body.get("cover", "")
+    db.shelf_set(u["id"], rk, "read", b.get("title", title), b.get("author", authr), cover, fmt)
+    # Propagate outward: mark finished in ABS (if it's in this user's library) and
+    # unmonitor it in Chaptarr (don't grab what you've already read).
+    abs_finished, chaptarr_unmonitored = False, False
+    mt, ma = b.get("title", title), b.get("author", authr)
+    tok = u.get("abs_token")
+    if tok:
+        try:
+            item_id = absclient.find_item(mt, ma)
+            if item_id:
+                abs_finished = absclient.set_finished(tok, item_id, True)
+        except Exception:
+            pass
+    try:
+        chaptarr_unmonitored = chaptarr.mark_read(mt, ma)
+    except Exception:
+        pass
+    return jsonify({"ok": True, "matched": mt,
+                    "abs_finished": abs_finished, "chaptarr_unmonitored": chaptarr_unmonitored})
 
 
 @bp.route("/api/rate", methods=["POST"])
@@ -1478,9 +1583,13 @@ def api_rate():
     """Rate a read book 1-5 stars to sharpen suggestions."""
     u = auth.current_user()
     body = request.get_json(force=True)
-    asin, stars = body.get("asin", ""), int(body.get("stars", 0))
-    if not asin or not 1 <= stars <= 5:
-        return jsonify({"error": "asin and stars 1-5 required"}), 400
+    asin = (body.get("asin") or "").strip()
+    try:
+        stars = int(body.get("stars", 0))
+    except (TypeError, ValueError):
+        stars = 0
+    if not 1 <= stars <= 5:
+        return jsonify({"error": "stars 1-5 required"}), 400
     # The client sends title/author for library books (which usually have no
     # real ASIN); only look them up on Audible for genuine ASINs. The author is
     # what the recommender boosts on, so we must capture it either way.
@@ -1488,14 +1597,17 @@ def api_rate():
     review = (body.get("review") or "").strip()[:1500]
     spoiler = 1 if body.get("spoiler") else 0
     fmt = body.get("format") or ("ebook" if asin.startswith(("gb:", "ol:")) else "audiobook")
-    if (not title or not author) and not asin.startswith(("t-", "gb:", "ol:")):
+    if (not title or not author) and asin and not asin.startswith(("t-", "gb:", "ol:")):
         meta = audible.by_asin(asin) or {}
         title = title or meta.get("title", "")
         author = author or meta.get("author", "")
-    # Store under the canonical rating key so writes and reads agree. eBooks with
-    # a gb:/ol: id rate under the same title-slug the book page reads (book_page
-    # strips those ids), instead of a separate key that would hide the rating.
-    key = db.rating_key("", title, author) if (asin.startswith(("gb:", "ol:")) and title and author) else asin
+    # Canonical rating key so writes and reads agree: a real ASIN when we have one,
+    # else the title+author slug. Most ABS library books (and ebooks) have NO ASIN —
+    # the old code rejected those outright, so star ratings on them never saved.
+    real_asin = asin if (asin and not asin.startswith(("t-", "gb:", "ol:"))) else ""
+    key = db.rating_key(real_asin, title, author)
+    if not key or key == "t-":
+        return jsonify({"error": "need an asin or title + author"}), 400
     with db.conn() as c:
         # a blank review on an update must not wipe an existing one
         c.execute("INSERT INTO ratings (user_id,asin,title,author,stars,review,spoiler,format,updated_at) "
@@ -1633,15 +1745,32 @@ def api_webhook_chaptarr():
 def api_request_approve(rid):
     with db.conn() as c:
         row = c.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
-    if not row:
-        return jsonify({"error": "not found"}), 404
-    row = dict(row)
-    if row["status"] != "pending_approval":
-        return jsonify({"error": "not awaiting approval"}), 400
+        if not row:
+            return jsonify({"error": "not found"}), 404
+        row = dict(row)
+        if row["status"] != "pending_approval":
+            return jsonify({"error": "not awaiting approval"}), 400
+        # compare-and-swap: only the writer that flips it out of pending_approval
+        # proceeds, so two concurrent admin approvals can't both grab it.
+        claimed = c.execute("UPDATE requests SET status='approving' WHERE id=? AND status='pending_approval'",
+                            (rid,)).rowcount
+    if not claimed:
+        return jsonify({"error": "already being processed"}), 409
     book = {"asin": row["asin"], "title": row["title"], "author": row["author"],
             "cover": row["cover"], "format": row["format"]}
-    res = chaptarr.add_and_search(book["title"], book["author"], book["asin"], fmt=book["format"])
-    status = "handed" if res["ok"] else "failed"
+    # a 'both' request must hand off BOTH formats — chaptarr maps 'both'→audiobook,
+    # so the approval path silently dropped the ebook half (the direct path splits).
+    fmts = ["audiobook", "ebook"] if book["format"] == "both" else [book["format"]]
+    rmap = {f: chaptarr.add_and_search(book["title"], book["author"], book["asin"], fmt=f) for f in fmts}
+    ok_any = any(r.get("ok") for r in rmap.values())
+    oks = [f for f in fmts if rmap[f].get("ok")]
+    res = (rmap[fmts[0]] if len(fmts) == 1
+           else {"ok": ok_any, "ref": "", "detail": (f"Sent as {' + '.join(oks)}." if oks
+                  else rmap[fmts[-1]].get("detail", "Couldn't add right now."))})
+    # a transient Chaptarr outage (retry) must keep the row re-approvable, not
+    # burn the admin's approval into a 'failed' state that can't be re-approved.
+    retryable = not ok_any and any(r.get("retry") for r in rmap.values())
+    status = "handed" if ok_any else ("pending_approval" if retryable else "failed")
     with db.conn() as c:
         c.execute("UPDATE requests SET status=?,detail=?,chaptarr_ref=?,updated_at=datetime('now','localtime') WHERE id=?",
                   (status, res.get("detail", ""), res.get("ref", ""), rid))
@@ -1682,15 +1811,18 @@ def api_requests_check():
     if its book has appeared (e.g. the user added it outside Chaptarr). Returns
     how many flipped."""
     from . import scheduler
+    u = auth.current_user()
     before = after = 0
     with db.conn() as c:
-        before = c.execute("SELECT COUNT(*) n FROM requests WHERE status IN ('queued','handed','failed')").fetchone()["n"]
+        before = c.execute("SELECT COUNT(*) n FROM requests WHERE user_id=? AND status IN ('queued','handed','failed')",
+                          (u["id"],)).fetchone()["n"]
     try:
         scheduler.refresh_library()
     except Exception as e:
         return jsonify({"ok": False, "detail": str(e)})
     with db.conn() as c:
-        after = c.execute("SELECT COUNT(*) n FROM requests WHERE status IN ('queued','handed','failed')").fetchone()["n"]
+        after = c.execute("SELECT COUNT(*) n FROM requests WHERE user_id=? AND status IN ('queued','handed','failed')",
+                         (u["id"],)).fetchone()["n"]
     flipped = max(before - after, 0)
     return jsonify({"ok": True, "flipped": flipped,
                     "detail": f"{flipped} now available" if flipped else "No new matches in your libraries"})
@@ -1980,30 +2112,37 @@ def api_admin_user(uid):
 @auth.admin_required
 def api_test(service):
     body = request.get_json(silent=True) or {}
-    # let the user test values typed in the form before saving them
-    for k, v in body.items():
-        if k in SETTING_KEYS:
-            db.set_meta(k, str(v).strip())
+    # Apply the values typed in the form ONLY for the duration of the test, then
+    # restore them — a failed or abandoned test must not silently overwrite the
+    # working saved credentials/URLs (the user still clicks Save to persist).
+    overrides = {k: str(v).strip() for k, v in body.items() if k in SETTING_KEYS}
+    prev = {k: db.get_meta(k, "") for k in overrides}
+    for k, v in overrides.items():
+        db.set_meta(k, v)
     try:
-        if service == "chaptarr":
-            import requests as rq
-            r = rq.get(f"{chaptarr.url()}/api/v1/system/status",
-                       headers={"X-Api-Key": chaptarr.api_key()}, timeout=15)
-            if not r.ok:
-                return jsonify({"ok": False, "detail": f"HTTP {r.status_code}"})
-            warns = chaptarr.health()
-            msg = "Connected"
-            if warns:
-                msg += " — heads up: " + "; ".join(w["message"][:80] for w in warns[:2])
-            return jsonify({"ok": True, "detail": msg, "warnings": warns})
-        # every library source backend (abs / kavita / calibreweb) self-tests
-        from . import backends
-        b = backends.by_id(service)
-        if b is not None:
-            return jsonify(b.test())
-    except Exception as e:
-        return jsonify({"ok": False, "detail": str(e)})
-    return jsonify({"ok": False, "detail": "unknown service"}), 404
+        try:
+            if service == "chaptarr":
+                import requests as rq
+                r = rq.get(f"{chaptarr.url()}/api/v1/system/status",
+                           headers={"X-Api-Key": chaptarr.api_key()}, timeout=15)
+                if not r.ok:
+                    return jsonify({"ok": False, "detail": f"HTTP {r.status_code}"})
+                warns = chaptarr.health()
+                msg = "Connected"
+                if warns:
+                    msg += " — heads up: " + "; ".join(w["message"][:80] for w in warns[:2])
+                return jsonify({"ok": True, "detail": msg, "warnings": warns})
+            # every library source backend (abs / kavita / calibreweb) self-tests
+            from . import backends
+            b = backends.by_id(service)
+            if b is not None:
+                return jsonify(b.test())
+        except Exception as e:
+            return jsonify({"ok": False, "detail": str(e)})
+        return jsonify({"ok": False, "detail": "unknown service"}), 404
+    finally:
+        for k, v in prev.items():
+            db.set_meta(k, v)
 
 
 @bp.route("/api/email/preview/<theme>")
@@ -2050,12 +2189,15 @@ def _read_logs(min_level: str, limit: int) -> list[str]:
     if not os.path.exists(config.LOG_FILE):
         return []
     thresh = LOG_LEVELS.get(min_level, 20)
-    out = []
+    out, last_lvl = [], 20
     with open(config.LOG_FILE, encoding="utf-8", errors="replace") as f:
         for line in f:
-            m = re.search(r"\[(\w+)\]", line)
-            lvl = LOG_LEVELS.get(m.group(1), 20) if m else 20
-            if lvl >= thresh:
+            m = re.match(r"^[\d\-]+ [\d:]+ \[(\w+)\]", line)   # the leading "date time [LEVEL]"
+            if m:
+                last_lvl = LOG_LEVELS.get(m.group(1), 20)
+            # unbracketed continuation/traceback lines inherit the prior level so a
+            # filtered view keeps the traceback body, not just the bare message.
+            if last_lvl >= thresh:
                 out.append(line.rstrip())
     return out[-limit:]
 
@@ -2064,7 +2206,11 @@ def _read_logs(min_level: str, limit: int) -> list[str]:
 @auth.admin_required
 def api_logs():
     level = request.args.get("level", "INFO").upper()
-    return jsonify({"lines": _read_logs(level, int(request.args.get("limit", "300")))})
+    try:
+        limit = int(request.args.get("limit", "300"))
+    except (ValueError, TypeError):
+        limit = 300
+    return jsonify({"lines": _read_logs(level, limit)})
 
 
 @bp.route("/api/logs/download")
@@ -2122,7 +2268,7 @@ def coverart():
     cached = db.get_meta(cache_key, "")
     if cached:
         return redirect(placeholder if cached == "none" else cached)
-    cover = ""
+    cover, failed = "", False
     try:
         if asin.startswith("B0"):
             cover = (audible.by_asin(asin) or {}).get("cover", "")
@@ -2132,8 +2278,14 @@ def coverart():
             if hits:
                 cover = hits[0].get("cover", "")
     except Exception as e:
+        failed = True
         log.debug("coverart lookup failed for %s: %s", title, e)
-    db.set_meta(cache_key, cover or "none")
+    # Cache only a real hit. The metadata helpers SWALLOW timeouts/429s and return
+    # empty without raising, so `failed` can't be trusted — caching "none" on a
+    # swallowed rate-limit would blank the cover forever. A genuine miss simply
+    # retries on the next render (cheap) rather than persisting a permanent blank.
+    if cover:
+        db.set_meta(cache_key, cover)
     return redirect(cover or placeholder)
 
 
@@ -2248,7 +2400,7 @@ def manifest():
 def service_worker():
     base = config.URL_BASE or ""
     js = (
-        "const C='stackarr-v18';\n"
+        f"const C='stackarr-{config.VERSION}';\n"      # tie cache to version so app.js/css auto-bust each release
         # Only static assets are precached/cached. Authenticated HTML pages (home,
         # settings, requests — which contain per-user data) are NEVER cached, so a
         # shared device can't serve one user's page to the next.

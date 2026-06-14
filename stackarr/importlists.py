@@ -47,12 +47,16 @@ def hardcover(token: str) -> list[dict]:
                   "{ book { title contributions { author { name } } } } } }"}
     try:
         r = requests.post("https://api.hardcover.app/v1/graphql",
-                          headers={"Authorization": token.replace("Bearer ", "Bearer "),
+                          headers={"Authorization": token if token.lower().startswith("bearer ") else f"Bearer {token}",
                                    "Content-Type": "application/json"},
                           json=q, timeout=20)
         r.raise_for_status()
+        j = r.json()
+        if j.get("errors"):              # Hardcover returns errors with HTTP 200 + data:null
+            log.warning("hardcover import GraphQL error: %s", j["errors"])
+            return []
         out = []
-        for ub in (((r.json().get("data") or {}).get("me") or [{}])[0] or {}).get("user_books", []):
+        for ub in (((j.get("data") or {}).get("me") or [{}])[0] or {}).get("user_books", []):
             bk = ub.get("book") or {}
             authors = [c.get("author", {}).get("name", "")
                        for c in bk.get("contributions") or []]

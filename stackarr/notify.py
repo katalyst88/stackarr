@@ -19,16 +19,22 @@ def _clean_subject(s: str) -> str:
     return (s or "").replace("\r", " ").replace("\n", " ")
 
 
-def _email_due() -> bool:
-    """Throttle digests to the configured frequency (immediate/daily/weekly)."""
+def _email_due(throttle_key: str = "last_email_ts") -> bool:
+    """Throttle digests to the configured frequency (immediate/daily/weekly).
+    `throttle_key` is per-user so one user's send can't suppress another's."""
     freq = db.get_meta("email_frequency", "immediate")
     if freq == "immediate":
         return True
-    last = db.get_meta("last_email_ts")
+    last = db.get_meta(throttle_key)
     if not last:
         return True
-    window = {"daily": 86400, "weekly": 604800}.get(freq, 0)
-    return (time.time() - float(last)) >= window
+    try:
+        # an unknown/legacy frequency must NOT collapse the window to 0 (which
+        # would send every cycle) — default to daily.
+        window = {"daily": 86400, "weekly": 604800}.get(freq, 86400)
+        return (time.time() - float(last)) >= window
+    except ValueError:
+        return True
 
 log = logging.getLogger("stackarr.notify")
 
@@ -292,30 +298,50 @@ def new_release(book: dict, base_url: str = ""):
     title, author = book.get("title", "a book"), book.get("author", "")
     fmt = "eBook" if book.get("format") == "ebook" else "audiobook"
     base = base_url or db.get_meta("public_url", "")
-    subject = f"{config.APP_NAME}: new from {author} — “{title}”"
-    body = (f"{author} just released a new {fmt}: “{title}”"
-            + (f" ({book['release_date']})" if book.get("release_date") else "") + ".")
+    rd = book.get("release_date") or ""
+    subject = _clean_subject(f"{config.APP_NAME}: new from {author} — “{title}”")
+    body = f"{author} just released a new {fmt}: “{title}”" + (f" ({rd})" if rd else "") + "."
     _discord(f"🆕 **{author}** released **{title}**" + (f" {base}" if base else ""))
     _apprise(subject, body)
     _custom_webhook({"event": "new_release", "title": title, "author": author,
                      "format": book.get("format", "audiobook"), "url": base})
     if email_enabled():
-        _send_email(subject, body, f"<p style='font-family:sans-serif;font-size:15px'>{body}</p>")
+        # escape external catalog strings so a crafted title/author can't inject
+        # markup into the HTML mail (every sibling mail already does this).
+        html_body = (f"{_esc(author)} just released a new {fmt}: “{_esc(title)}”"
+                     + (f" ({_esc(rd)})" if rd else "") + ".")
+        _send_email(subject, body, f"<p style='font-family:sans-serif;font-size:15px'>{html_body}</p>")
 
 
-def suggestion_digest(pending: list[dict], base_url: str = "") -> bool:
+def suggestion_digest(pending: list[dict], base_url: str = "", to: str | None = None,
+                      throttle_key: str = "last_email_ts", allow_global: bool = False) -> bool:
+    """Email/notify a user's pending picks. `to` is the owning user's address (so
+    each user gets their own private list, not the install-wide mailbox) and
+    `throttle_key` is per-user so one user's send doesn't gate everyone else's.
+    The install-wide SMTP 'to' is used ONLY when `allow_global` (single-user
+    install) — never silently for a user who simply has no email set, which would
+    leak their private list to the admin mailbox."""
     n = len(pending)
     text = f"{n} audiobook suggestion(s) waiting for approval:\n" + \
            "\n".join(f"  - {s['title']} — {s['author']}  ({s['reason']})" for s in pending)
     sent = False
-    if email_enabled() and _email_due():
-        sent = _send_email(f"{config.APP_NAME}: {n} suggestion{'s' if n!=1 else ''} awaiting approval",
-                           text, render_digest(pending, base_url=base_url))
-        if sent:
-            db.set_meta("last_email_ts", str(time.time()))
-    _apprise(f"{config.APP_NAME}: {n} suggestion(s) to review", text)
-    _discord(f"**{config.APP_NAME}** — {n} suggestion(s) waiting for approval"
-             + (f": {base_url}/suggestions" if base_url else ""))
-    _custom_webhook({"event": "suggestions", "count": n,
-                     "url": f"{base_url}/suggestions" if base_url else ""})
+    # host-only gate (NOT email_enabled, which demands a global smtp_to): a
+    # multi-user install where each user has their own email but no global mailbox
+    # must still send per-user digests.
+    if smtp_ready() and db.get_meta("email_enabled", "0") == "1" and _email_due(throttle_key):
+        recipient = (to or "").strip() or (smtp_settings()["to"].strip() if allow_global else "")
+        if recipient:
+            sent = _send_email(f"{config.APP_NAME}: {n} suggestion{'s' if n!=1 else ''} awaiting approval",
+                               text, render_digest(pending, base_url=base_url), to=recipient)
+            if sent:
+                db.set_meta(throttle_key, str(time.time()))
+    # The global Discord/Apprise/webhook channels are install-wide (admin). Only
+    # fan a per-user digest out to them on a single-user install — in multi-user
+    # they'd fire once per active user and leak each user's pending count.
+    if allow_global:
+        _apprise(f"{config.APP_NAME}: {n} suggestion(s) to review", text)
+        _discord(f"**{config.APP_NAME}** — {n} suggestion(s) waiting for approval"
+                 + (f": {base_url}/suggestions" if base_url else ""))
+        _custom_webhook({"event": "suggestions", "count": n,
+                         "url": f"{base_url}/suggestions" if base_url else ""})
     return sent

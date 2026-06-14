@@ -49,17 +49,22 @@ class ABSBackend(Backend):
 
     # --- data -------------------------------------------------------------
     def library_items(self) -> list[dict]:
+        from . import abs_ebooks
         out = []
         for lib in absclient.libraries():
-            try:
-                for it in absclient.items(lib["id"]):
-                    m = absclient.item_meta(it)
-                    if not m.get("item_id"):
-                        continue
-                    m["library_id"] = lib["id"]
-                    out.append(self._tag(m))
-            except Exception:
-                continue
+            for it in absclient.items(lib["id"]):
+                # pure-ebook items belong to the ebook source — without this guard
+                # an epub/pdf-only title is mislabeled format='audiobook' and seeds
+                # the audiobook recommender. (The ebook backend has the mirror guard.)
+                if abs_ebooks._has_ebook(it) and not abs_ebooks._has_audio(it):
+                    continue
+                m = absclient.item_meta(it)
+                if not m.get("item_id"):
+                    continue
+                m["library_id"] = lib["id"]
+                out.append(self._tag(m))
+        # NB: a per-library error now propagates (not swallowed per-lib) so
+        # refresh_library skips ABS this cycle instead of deleting the unseen items.
         return out
 
     def reading_history(self, user: dict) -> list[dict]:

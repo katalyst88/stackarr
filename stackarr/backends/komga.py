@@ -75,13 +75,15 @@ class KomgaBackend(Backend):
         except Exception as e:
             return {"ok": False, "detail": str(e)}
 
-    def _books(self) -> list[dict]:
+    def _books(self, raise_on_error: bool = False) -> list[dict]:
         out, page = [], 0
         while page < 60:                       # safety cap (~36k books)
             try:
                 d = self._get("/api/v1/books", page=page, size=600, sort="metadata.title,asc")
             except Exception as e:
-                log.warning("komga books failed: %s", e)
+                log.warning("komga books failed (page %s): %s", page, e)
+                if raise_on_error:
+                    raise          # let refresh_library skip Komga, not delete it
                 break
             out.extend(d.get("content", []))
             if d.get("last", True):
@@ -91,7 +93,7 @@ class KomgaBackend(Backend):
 
     def library_items(self) -> list[dict]:
         items = []
-        for b in self._books():
+        for b in self._books(raise_on_error=True):
             md = b.get("metadata") or {}
             title = md.get("title") or b.get("name") or ""
             if not title:
@@ -106,6 +108,19 @@ class KomgaBackend(Backend):
         return items
 
     def reading_history(self, user: dict) -> list[dict]:
+        # multi-user: progress comes from one shared account that can't be
+        # attributed to the requesting user — don't seed everyone from it.
+        if db.user_count() > 1:
+            return []
+        import datetime
+
+        def _ts(s):
+            if not s:
+                return 0
+            try:
+                return int(datetime.datetime.fromisoformat(str(s).replace("Z", "+00:00")).timestamp() * 1000)
+            except (ValueError, TypeError):
+                return 0
         out = []
         for b in self._books():
             rp = b.get("readProgress") or {}
@@ -117,5 +132,6 @@ class KomgaBackend(Backend):
             if completed or read > 0:
                 out.append({"item_id": f"komga:{b.get('id')}", "finished": completed,
                             "progress": (read / pages) if pages else (1.0 if completed else 0.0),
-                            "last_update": 0})
+                            # real read time so recency ordering works (was hard-coded 0)
+                            "last_update": _ts(rp.get("readDate") or rp.get("lastModified"))})
         return out

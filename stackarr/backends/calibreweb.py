@@ -75,14 +75,15 @@ class CalibreWebBackend(Backend):
     def _feed_entries(self, start_path: str, max_pages: int = 60) -> list[dict]:
         """Crawl an OPDS acquisition feed, following rel=next. Returns
         [{item_id, title, author}]."""
-        out, path, pages = [], start_path, 0
-        while path and pages < max_pages:
+        from urllib.parse import urljoin
+        out, url, pages = [], f"{_url()}{start_path}", 0
+        while url and pages < max_pages:
             try:
-                r = requests.get(f"{_url()}{path}", auth=_auth(), timeout=30)
+                r = requests.get(url, auth=_auth(), timeout=30)
                 r.raise_for_status()
                 root = ET.fromstring(r.content)
             except Exception as e:
-                log.warning("calibre-web feed %s failed: %s", path, e)
+                log.warning("calibre-web feed %s failed: %s", url, e)
                 break
             for e in root.findall("a:entry", NS):
                 eid = (e.findtext("a:id", default="", namespaces=NS) or "").strip()
@@ -92,22 +93,48 @@ class CalibreWebBackend(Backend):
                 if eid and title:
                     out.append({"item_id": "calibreweb:" + eid, "title": title, "author": author})
             nxt = [l.get("href") for l in root.findall("a:link", NS) if l.get("rel") == "next"]
-            path = nxt[0] if nxt else None
+            # urljoin handles absolute, root-relative and path-relative next hrefs;
+            # the old f"{_url()}{path}" doubled the host on an absolute href.
+            url = urljoin(url, nxt[0]) if nxt else None
             pages += 1
         return out
 
     # --- data -------------------------------------------------------------
     def library_items(self) -> list[dict]:
-        items = self._feed_entries("/opds/books/letter/00")     # the "All" feed
-        return [self._tag({
-            "item_id": it["item_id"], "library_id": "calibreweb",
-            "title": it["title"], "author": it["author"], "asin": "",
-            "series": "", "series_seq": None, "narrator": "",
-        }) for it in items]
+        # Calibre-Web's OPDS has no flat "all books" feed — books are split into
+        # first-letter buckets. The old single "/letter/00" captured almost nothing,
+        # which then let refresh_library delete the whole library. Crawl every
+        # bucket and merge; if NONE returned (server down/unreachable), raise so the
+        # scheduler skips this source instead of treating empty as "all gone".
+        import string
+        seen, items, got_any = set(), [], False
+        for bk in ["00"] + list(string.ascii_uppercase):
+            try:
+                entries = self._feed_entries(f"/opds/books/letter/{bk}")
+            except Exception:
+                continue
+            if entries:
+                got_any = True
+            for it in entries:
+                if it["item_id"] in seen:
+                    continue
+                seen.add(it["item_id"])
+                items.append(self._tag({
+                    "item_id": it["item_id"], "library_id": "calibreweb",
+                    "title": it["title"], "author": it["author"], "asin": "",
+                    "series": "", "series_seq": None, "narrator": "",
+                }))
+        if not got_any:
+            raise RuntimeError("calibre-web: no OPDS buckets returned a feed")
+        return items
 
     def reading_history(self, user: dict) -> list[dict]:
         """Binary read flag from /opds/readbooks (configured account only).
-        Every entry counts as finished; there is no progress %."""
+        Every entry counts as finished; there is no progress %. In a multi-user
+        install this one shared account CAN'T be attributed to the requesting user,
+        so return nothing rather than seed everyone's recs from one person's reads."""
+        if db.user_count() > 1:
+            return []
         out = []
         for it in self._feed_entries("/opds/readbooks"):
             out.append({"item_id": it["item_id"], "finished": True,

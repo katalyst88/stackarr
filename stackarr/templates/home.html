@@ -2,9 +2,10 @@
 {% from "_fmt.html" import fmt_badge with context %}
 {% macro bookcard(b, link=True) %}
 {% set asin = b.asin or b.rkey %}
-{% set canlink = asin and (asin.startswith('B') or asin.startswith('gb:') or asin.startswith('ol:') or asin.startswith('t-')) %}
+{# auto 'currently reading' cards aren't persisted, so a t- link would hit a dead "Unknown" page — only link real (non-auto) entries #}
+{% set canlink = asin and (asin.startswith('B') or asin.startswith('gb:') or asin.startswith('ol:') or asin.startswith('t-')) and not b.auto %}
 <a class="media-card" data-format="{{ b.format or 'audiobook' }}" href="{{ url_for('main.book_page', asin=asin) if (link and canlink) else '#' }}">
-  <div class="media-poster"><img src="{{ (b.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
+  <div class="media-poster"><img src="{{ (b.cover|hires) if b.cover else url_for('main.coverart', title=b.title, author=b.author, asin=b.asin or '', fmt=b.format or '') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
     {{ fmt_badge(b.format) }}</div>
   <div class="media-foot"><div class="media-title" title="{{ b.title }}">{{ b.title }}</div><div class="media-author">{{ b.author }}</div></div>
 </a>
@@ -73,4 +74,4 @@
   what's next, and fresh picks. Start on the <a href="{{ url_for('main.suggestions_page') }}">Suggestions</a> page.</p></div>
 {% endif %}
 {% endblock %}
-{% block scripts %}<script>Stackarr.boot();Stackarr.initFormatFilter&&Stackarr.initFormatFilter();</script>{% endblock %}
+{% block scripts %}<script>Stackarr.initFormatFilter&&Stackarr.initFormatFilter();</script>{% endblock %}{# boot() runs unconditionally from app.js — a second call double-binds listeners #}

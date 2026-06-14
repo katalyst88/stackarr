@@ -23,6 +23,12 @@ def book(asin: str) -> dict | None:
             seq = float(sp.get("position"))
         except (TypeError, ValueError):
             seq = None
+        rating = None
+        try:
+            if d.get("rating") is not None:          # presence, not truthiness — keep a genuine 0
+                rating = float(d["rating"])
+        except (TypeError, ValueError):              # a non-numeric rating must NOT void the whole record
+            rating = None
         return {
             "asin": d.get("asin", asin), "title": d.get("title", ""),
             "author": ", ".join(a.get("name", "") for a in d.get("authors") or []),
@@ -31,7 +37,7 @@ def book(asin: str) -> dict | None:
             "series_asin": sp.get("asin", ""),
             "genres": [g.get("name", "") for g in d.get("genres") or []],
             "cover": d.get("image", ""),
-            "rating": float(d["rating"]) if d.get("rating") else None,
+            "rating": rating,
             "release_date": (d.get("releaseDate") or "")[:10],
             "region": config.AUDNEXUS_REGION,
         }

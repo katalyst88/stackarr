@@ -75,13 +75,15 @@ class OPDSBackend(Backend):
                         "series": "", "series_seq": None, "narrator": "",
                     }))
             nxt = [l.get("href") for l in root.findall("a:link", NS) if l.get("rel") == "next"]
+            # resolve against the CURRENT url so absolute, root-relative AND
+            # path-relative (?page=2) next hrefs all work — the old code only
+            # handled '/'-prefixed and left path-relative as a schemeless request.
             if nxt:
-                href = nxt[0]
-                if href.startswith("/"):          # resolve relative next links
-                    from urllib.parse import urljoin
-                    href = urljoin(_url(), href)
-                path = href
+                from urllib.parse import urljoin
+                path = urljoin(path, nxt[0])
             else:
                 path = None
             pages += 1
+        if path:        # still had a next link → we exited on the page cap
+            log.warning("opds crawl hit the %d-page cap; library snapshot may be truncated", pages)
         return out

@@ -32,6 +32,13 @@ def _get(url, params=None, tries=2):
     for i in range(tries):
         try:
             r = requests.get(url, params=params or {}, headers=UA, timeout=20)
+            if r.status_code == 429 and i + 1 < tries:
+                try:                                  # honour Retry-After (capped) — a fixed 0.6s is usually too short
+                    wait = min(int(r.headers.get("Retry-After", "2")), 10)
+                except (ValueError, TypeError):
+                    wait = 2
+                time.sleep(wait)
+                continue
             r.raise_for_status()
             return r.json()
         except Exception as e:
@@ -126,8 +133,18 @@ def _ol_normalize(doc: dict) -> dict:
     langs = doc.get("language") or []
     lang = ""
     if langs:
-        lang = {"eng": "en", "ger": "de", "spa": "es", "fre": "fr",
-                "ita": "it", "dut": "nl", "por": "pt", "jpn": "ja"}.get(langs[0], langs[0][:2])
+        code = (langs[0] or "").lower()
+        # ISO-639-2/B → 639-1; blind [:2] truncation produced wrong tags ('chi'→'ch'
+        # not 'zh'), so map known codes and leave unmapped 3-letter codes blank
+        # rather than emit an invalid tag that breaks cross-source language matching.
+        m639 = {"eng": "en", "ger": "de", "spa": "es", "fre": "fr", "ita": "it",
+                "dut": "nl", "por": "pt", "jpn": "ja", "chi": "zh", "rus": "ru",
+                "ara": "ar", "kor": "ko", "gre": "el", "cze": "cs", "pol": "pl",
+                "swe": "sv", "dan": "da", "nor": "no", "fin": "fi", "tur": "tr", "hin": "hi"}
+        # map known 639-2/B codes; for unmapped 3-letter codes keep the [:2]
+        # passthrough (NOT "") so a foreign edition still carries a non-blank lang
+        # and the language filter can exclude it.
+        lang = code if len(code) == 2 else m639.get(code, code[:2])
     try:
         rating = round(float(doc.get("ratings_average")), 2) if doc.get("ratings_average") else None
     except (TypeError, ValueError):
@@ -217,6 +234,7 @@ def search(query: str, num: int = 12) -> list[dict]:
 
 
 def by_author(author: str, num: int = 25) -> list[dict]:
+    author = (author or "").replace('"', '')          # a stray quote closes the inauthor:"..." phrase
     books = gb_search(f'inauthor:"{author}"', num)
     if len(books) < num:
         books += [_ol_normalize(d) for d in
@@ -281,11 +299,16 @@ def _hardcover_shelf(token: str, status_id: int) -> list[dict]:
                   "{ book { title isbns contributions { author { name } } } } } }" % status_id}
     try:
         r = requests.post("https://api.hardcover.app/v1/graphql",
-                          headers={"Authorization": token, "Content-Type": "application/json"},
+                          headers={"Authorization": token if token.lower().startswith("bearer ") else f"Bearer {token}",
+                                   "Content-Type": "application/json"},
                           json=q, timeout=20)
         r.raise_for_status()
+        j = r.json()
+        if j.get("errors"):              # 200 + data:null errors shouldn't look like an empty shelf
+            log.warning("hardcover shelf GraphQL error: %s", j["errors"])
+            return []
         out = []
-        me = ((r.json().get("data") or {}).get("me") or [{}])
+        me = ((j.get("data") or {}).get("me") or [{}])
         for ub in (me[0] or {}).get("user_books", []):
             bk = ub.get("book") or {}
             authors = [c.get("author", {}).get("name", "") for c in bk.get("contributions") or []]

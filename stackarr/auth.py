@@ -100,10 +100,10 @@ def link_provider(user: dict, provider_id: str, username: str, password: str) ->
     info = be.verify_login(username, password)
     if not info:
         return False
-    owner = db.link_get(provider_id, info["external_id"])
-    if owner and owner != user["id"]:
+    # atomic claim: refuses (and doesn't clobber) if another account owns it,
+    # closing the check-then-set race between two concurrent links.
+    if not db.link_claim(provider_id, info["external_id"], user["id"], info.get("token", "")):
         return False            # that identity already belongs to another account
-    db.link_set(provider_id, info["external_id"], user["id"], info.get("token", ""))
     if provider_id == "abs":
         db.update_abs(user["id"], info["external_id"], info.get("token", ""))
     return True

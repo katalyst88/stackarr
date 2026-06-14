@@ -121,16 +121,36 @@ def run(user_id: int, max_new: int | None = None) -> int:
         if m and m.get("author"):
             read_authors.add(m["author"].split(",")[0].strip().lower())
 
+    target_lang = db.get_meta("language", config.TARGET_LANGUAGE)   # user-set; "any" disables filter
     # cold-start: thin/no history -> deterministic popular/curated fallback
     if len(seeds) < 2:
         log.info("user %s cold-start (%d seeds) -> discover fallback", user_id, len(seeds))
-        cands = {b["asin"]: {"cand": b, "score": b.get("rating") or 3, "lane": "discover", "extra": "",
-                             "reason": "Popular right now — listen to a few books and your picks get personal"}
-                 for b in discover.popular() if b.get("asin")}
+        cands = {}
+        for b in discover.popular():
+            asin = b.get("asin")
+            if not asin or _key(b["title"], b["author"]) in known:
+                continue                                   # already owned/requested/suggested
+            if any(d in (b["title"] or "").lower() for d in DRAMATIZED):
+                continue                                   # skip dramatized/GraphicAudio
+            # NB: no language re-filter here — discover.popular() is English-only, so
+            # filtering it against a non-English override would drop every candidate
+            # and return zero cold-start picks. (discover language-awareness = TODO.)
+            seq = b.get("sequence")
+            if b.get("series") and seq is not None:
+                try:
+                    if float(seq) > 1:                     # only the first book of a series
+                        continue
+                except (TypeError, ValueError):
+                    pass
+            first_author = (b.get("author") or "").split(",")[0].lower()
+            if ("asin", asin.lower()) in neg or ("author", first_author) in neg \
+                    or ("series", (b.get("series") or "").lower()) in neg:
+                continue                                   # passed/DNF/disliked
+            cands[asin] = {"cand": b, "score": b.get("rating") or 3, "lane": "discover", "extra": "",
+                           "reason": "Popular right now — listen to a few books and your picks get personal"}
         return _finalize(user_id, cands, known, neg, max_new)
 
     now_ms = time.time() * 1000
-    target_lang = db.get_meta("language", config.TARGET_LANGUAGE)   # user-set; "any" disables filter
     cands: dict[str, dict] = {}
     narrators_seen: dict[str, float] = {}
     genres_seen: dict[str, float] = {}
@@ -145,6 +165,18 @@ def run(user_id: int, max_new: int | None = None) -> int:
         asin = b.get("asin")
         if not asin or _key(b["title"], b["author"]) in known:
             return
+        # Only ever suggest the FIRST book of a series — never drop the user into
+        # the middle of a series they haven't started. Exempt the lanes that are
+        # *meant* to surface later entries: 'series' (continue a series you're
+        # reading), 'upcoming' (a just-released sequel), and 'importlist' (a book you
+        # EXPLICITLY put on your want-to-read list — honour deliberate user intent).
+        if lane not in ("series", "upcoming", "importlist") and b.get("series"):
+            seq = b.get("sequence")
+            try:
+                if seq is not None and float(seq) > 1:
+                    return
+            except (TypeError, ValueError):
+                pass
         if any(d in (b["title"] or "").lower() for d in DRAMATIZED):
             return                                          # skip dramatized/GraphicAudio variants
         if target_lang != "any" and (b.get("language") or "english").lower() != target_lang:
@@ -307,30 +339,40 @@ def _finalize(user_id: int, cands: dict, known: set, neg: dict, max_new: int,
 
     per_lane = config.SUGGEST_PER_LANE
     added = 0
+    for entries in by_lane.values():
+        entries.sort(key=lambda x: x["score"], reverse=True)
+    # Round-robin across lanes (one pick per lane per pass) so every category is
+    # represented before the overall max_new cap is hit — filling lane-by-lane
+    # let the first couple of lanes consume the whole budget and starve the rest.
+    state = {lane: {"idx": 0, "taken": 0, "auth": {}} for lane in by_lane}
     with db.conn() as c:
-        for lane, entries in by_lane.items():
-            if added >= max_new:           # honour the caller's overall cap
-                break
-            entries.sort(key=lambda x: x["score"], reverse=True)
-            per_author: dict[str, int] = {}
-            taken = 0
-            for entry in entries:
-                if taken >= per_lane or added >= max_new:
+        progressed = True
+        while added < max_new and progressed:
+            progressed = False
+            for lane, entries in by_lane.items():
+                if added >= max_new:
                     break
-                b = entry["cand"]
-                a = (b["author"] or "").split(",")[0].lower()
-                if per_author.get(a, 0) >= config.SUGGEST_MAX_PER_AUTHOR:
+                st = state[lane]
+                if st["taken"] >= per_lane:
                     continue
-                c.execute(
-                    "INSERT OR IGNORE INTO suggestions "
-                    "(user_id, asin, title, author, narrator, series, cover, reason, lane, score, extra, format) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (user_id, b["asin"], b["title"], b.get("author", ""), b.get("narrator", ""),
-                     b.get("series", ""), b.get("cover", ""), entry["reason"], entry["lane"],
-                     round(entry["score"], 2), entry.get("extra", ""), fmt))
-                if c.execute("SELECT changes()").fetchone()[0]:
-                    per_author[a] = per_author.get(a, 0) + 1
-                    taken += 1
-                    added += 1
+                while st["idx"] < len(entries):
+                    entry = entries[st["idx"]]; st["idx"] += 1
+                    b = entry["cand"]
+                    a = (b["author"] or "").split(",")[0].lower()
+                    if st["auth"].get(a, 0) >= config.SUGGEST_MAX_PER_AUTHOR:
+                        continue
+                    c.execute(
+                        "INSERT OR IGNORE INTO suggestions "
+                        "(user_id, asin, title, author, narrator, series, cover, reason, lane, score, extra, format) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (user_id, b["asin"], b["title"], b.get("author", ""), b.get("narrator", ""),
+                         b.get("series", ""), b.get("cover", ""), entry["reason"], entry["lane"],
+                         round(entry["score"], 2), entry.get("extra", ""), fmt))
+                    if c.execute("SELECT changes()").fetchone()[0]:
+                        st["auth"][a] = st["auth"].get(a, 0) + 1
+                        st["taken"] += 1
+                        added += 1
+                        progressed = True
+                        break                     # one per lane per round
     log.info("user %s: %d candidates -> %d new across %d lanes", user_id, len(cands), added, len(by_lane))
     return added

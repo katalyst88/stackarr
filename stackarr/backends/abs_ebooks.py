@@ -46,7 +46,7 @@ class ABSEbooksBackend(Backend):
         except Exception as e:
             return {"ok": False, "detail": str(e)}
 
-    def _ebook_ids(self) -> dict:
+    def _ebook_ids(self, raise_on_error: bool = False) -> dict:
         ids = {}
         for lib in absclient.libraries():
             try:
@@ -57,14 +57,20 @@ class ABSEbooksBackend(Backend):
                     if _has_ebook(it) and not _has_audio(it):
                         m = absclient.item_meta(it)
                         if m.get("item_id"):
+                            m["library_id"] = lib["id"]      # item_meta doesn't set it
                             ids[m["item_id"]] = m
             except Exception:
+                # for the library snapshot, propagate so refresh_library skips this
+                # source instead of treating a partial crawl as "these books are gone"
+                # and -5-poisoning every user (matches abs.library_items hardening).
+                if raise_on_error:
+                    raise
                 continue
         return ids
 
     def library_items(self) -> list[dict]:
         out = []
-        for m in self._ebook_ids().values():
+        for m in self._ebook_ids(raise_on_error=True).values():
             m["library_id"] = m.get("library_id", "")
             m["narrator"] = ""                  # ebooks have no narrator
             out.append(self._tag(m))

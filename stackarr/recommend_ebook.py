@@ -107,6 +107,16 @@ def run(user_id: int, max_new: int | None = None) -> int:
             return
         if _key(b.get("title", ""), b.get("author", "")) in known:
             return
+        # only ever suggest the first book of a series (see recommend.py); ebook
+        # catalogues rarely expose sequence, so this only fires when it's known.
+        # 'importlist' is exempt — a book you explicitly want-to-read is deliberate.
+        if lane not in ("importlist",) and b.get("series"):
+            seq = b.get("sequence")
+            try:
+                if seq is not None and float(seq) > 1:
+                    return
+            except (TypeError, ValueError):
+                pass
         # ebook languages are ISO codes (en/de/…); map the user's word to a code
         lang = (b.get("language") or "").lower()
         want = {"english": "en", "german": "de", "spanish": "es", "french": "fr",

@@ -2,7 +2,7 @@
 deploys anywhere with no code edits. Single source of truth for settings."""
 import os
 
-VERSION = "1.6.0"
+VERSION = "1.6.5"
 RELEASE_STAGE = "stable"
 
 
@@ -85,7 +85,11 @@ CHAPTARR_EBOOK_METADATA_PROFILE_ID = int(os.environ.get("CHAPTARR_EBOOK_METADATA
 AUDIBLE_DOMAIN = os.environ.get("AUDIBLE_DOMAIN", "com")           # com, co.uk, com.au, de…
 AUDIBLE_API = f"https://api.audible.{AUDIBLE_DOMAIN}/1.0"
 AUDNEXUS_API = os.environ.get("AUDNEXUS_API", "https://api.audnex.us")
-AUDNEXUS_REGION = os.environ.get("AUDNEXUS_REGION", AUDIBLE_DOMAIN if AUDIBLE_DOMAIN != "com" else "us")
+# Audnexus wants a 2-letter region code, NOT the Audible domain — a multi-part
+# domain like "com.au"/"co.uk" is rejected (400), collapsing every lookup. Map it.
+_AUDNEXUS_REGION_MAP = {"com": "us", "co.uk": "uk", "com.au": "au", "ca": "ca", "fr": "fr",
+                        "de": "de", "co.jp": "jp", "it": "it", "co.in": "in", "es": "es", "com.br": "br"}
+AUDNEXUS_REGION = os.environ.get("AUDNEXUS_REGION") or _AUDNEXUS_REGION_MAP.get(AUDIBLE_DOMAIN, "us")
 # Ebook catalogue metadata (no key needed; a Google Books key only raises rate
 # limits). Google Books + Open Library are both keyless.
 GOOGLE_BOOKS_KEY = os.environ.get("GOOGLE_BOOKS_KEY", "")
