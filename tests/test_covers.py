@@ -8,7 +8,6 @@ starved — the page crawled, not just the pictures.
 """
 import os
 import sys
-import tempfile
 import time
 import xml.etree.ElementTree as ET
 
@@ -18,14 +17,23 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 @pytest.fixture()
-def app(monkeypatch):
-    d = tempfile.mkdtemp()
-    for k, v in {"STACKARR_DATA": d,
-                 "ABS_URL": "http://abs.test", "ABS_ADMIN_TOKEN": "t",
-                 "CHAPTARR_URL": "http://chaptarr.test", "CHAPTARR_API_KEY": "k"}.items():
-        monkeypatch.setenv(k, v)
-    for m in [k for k in list(sys.modules) if k.startswith("stackarr")]:
-        del sys.modules[m]
+def app(tmp_db):
+    """The app against a throwaway database (conftest's `tmp_db`).
+
+    This used to set STACKARR_DATA itself and then PURGE every `stackarr.*`
+    entry from sys.modules so the package re-read it on import. That worked
+    while this was the only test file, but it swaps the module objects out
+    from under the shared fixtures in conftest.py — which hold references to
+    the originals — so any test running afterwards got a client whose session
+    resolved against a different `db` module and came back 401. conftest now
+    points STACKARR_DATA at a temp dir before the package is imported at all,
+    and `tmp_db` gives each test its own migrated DB, so neither the env
+    juggling nor the purge is needed."""
+    # The cover index is a module global with a 300s TTL, and the purge used to
+    # reset it incidentally. Each test gets a fresh DB, so the index built from
+    # the previous one must go with it or a cover resolves against rows that no
+    # longer exist. Production does this on every library refresh.
+    tmp_db.invalidate_cover_index()
     from stackarr import create_app
     application = create_app()
     application.config["TESTING"] = True
