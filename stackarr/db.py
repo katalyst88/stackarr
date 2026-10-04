@@ -7,6 +7,8 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
+import time
 from contextlib import contextmanager
 
 from . import config
@@ -102,6 +104,10 @@ CREATE TABLE IF NOT EXISTS library (
   narrator TEXT DEFAULT '',
   format TEXT DEFAULT 'audiobook',             -- audiobook | ebook
   source TEXT DEFAULT 'abs',                    -- backend id the book came from
+  cover TEXT DEFAULT '',                        -- LOCAL cover ref from the owning
+                                                -- source ("cw:161", "kv:127"), so an
+                                                -- owned book never needs an external
+                                                -- cover lookup. Empty = not offered.
   first_seen TEXT DEFAULT (datetime('now','localtime')),
   last_seen TEXT,
   gone_at TEXT
@@ -170,6 +176,7 @@ def init():
                      "ALTER TABLE library ADD COLUMN narrator TEXT DEFAULT ''",
                      "ALTER TABLE library ADD COLUMN format TEXT DEFAULT 'audiobook'",
                      "ALTER TABLE library ADD COLUMN source TEXT DEFAULT 'abs'",
+                     "ALTER TABLE library ADD COLUMN cover TEXT DEFAULT ''",
                      "ALTER TABLE suggestions ADD COLUMN format TEXT DEFAULT 'audiobook'",
                      "ALTER TABLE requests ADD COLUMN format TEXT DEFAULT 'audiobook'",
                      "ALTER TABLE ratings ADD COLUMN review TEXT DEFAULT ''",
@@ -283,6 +290,69 @@ def rating_key(asin: str, title: str, author: str) -> str:
         return asin
     base = f"{(title or '').strip().lower()} {(author or '').split(',')[0].strip().lower()}"
     return "t-" + re.sub(r"[^a-z0-9]+", "-", base).strip("-")
+
+
+_COVER_INDEX: dict[str, dict[str, str]] = {}
+_COVER_INDEX_AT = 0.0
+_COVER_INDEX_TTL = 300.0                 # seconds
+_COVER_INDEX_LOCK = threading.Lock()
+
+
+def invalidate_cover_index():
+    """Called after a library refresh so newly-seen books resolve straight away."""
+    global _COVER_INDEX_AT
+    _COVER_INDEX_AT = 0.0
+
+
+def _cover_index() -> dict[str, dict[str, str]]:
+    """{title+author key -> ref}, {title-only key -> ref} and {asin -> ref}.
+
+    Built once and reused. Matching has to run through rating_key's
+    normalisation, which can't be expressed in SQL, and doing that per <img>
+    meant a full scan of every library row per cover — 59 scans of 3,300 rows to
+    draw one page. The index makes each lookup a dict hit."""
+    global _COVER_INDEX, _COVER_INDEX_AT
+    with _COVER_INDEX_LOCK:
+        if _COVER_INDEX and (time.time() - _COVER_INDEX_AT) < _COVER_INDEX_TTL:
+            return _COVER_INDEX
+        by_key: dict[str, str] = {}
+        by_title: dict[str, str] = {}
+        by_asin: dict[str, str] = {}
+        with conn() as c:
+            rows = c.execute(
+                "SELECT title,author,asin,cover,item_id,source FROM library "
+                "WHERE gone_at IS NULL AND (cover<>'' OR source='abs')").fetchall()
+        for r in rows:
+            ref = r["cover"] or (r["item_id"] if r["source"] == "abs" else "")
+            if not ref:
+                continue
+            by_key.setdefault(rating_key("", r["title"], r["author"]), ref)
+            # title-only too: Kavita stores a series with no author, so an
+            # author-bearing render would otherwise never match its own book
+            by_title.setdefault(rating_key("", r["title"], ""), ref)
+            if r["asin"]:
+                by_asin.setdefault(r["asin"], ref)
+        _COVER_INDEX = {"key": by_key, "title": by_title, "asin": by_asin}
+        _COVER_INDEX_AT = time.time()
+        return _COVER_INDEX
+
+
+def library_cover(title: str, author: str = "", asin: str = "") -> str:
+    """The LOCAL cover ref for a book we own ("cw:161", "kv:127", or an ABS
+    item_id), or "" when it isn't in the library.
+
+    Matched on the same normalised key the rest of the app identifies books by,
+    so it survives the punctuation differences between sources. Owned books are
+    the overwhelming majority of what the UI renders, and every one has art on a
+    service in this house — resolving here is what stops the UI asking a third
+    party for a picture we already hold."""
+    want = rating_key("", title, author)
+    if not want or want == "t-":
+        return ""
+    idx = _cover_index()
+    if asin and asin in idx["asin"]:
+        return idx["asin"][asin]
+    return idx["key"].get(want) or idx["title"].get(rating_key("", title, "")) or ""
 
 
 def secret_key() -> str:

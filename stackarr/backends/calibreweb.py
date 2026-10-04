@@ -28,6 +28,27 @@ def _auth() -> tuple[str, str]:
             db.setting("calibreweb_pass", config.CALIBREWEB_PASS))
 
 
+# OPDS gives the full-size image and a thumbnail. Prefer the thumbnail: these are
+# poster tiles, and Calibre-Web's full-size art runs to ~800 KB a book, which is
+# a lot of bytes to push to a phone for a cover a few hundred pixels wide.
+_IMG_RELS = ("http://opds-spec.org/image/thumbnail", "http://opds-spec.org/image")
+
+
+def _cover_ref(entry) -> str:
+    """Calibre-Web's own cover for an OPDS entry, as the bare numeric book id
+    ("cw:161"). Stored rather than a full URL because the host and credentials
+    can change in Settings — resolving late keeps old rows valid. Returns "" when
+    the entry offers no image, which renders the placeholder."""
+    for rel in _IMG_RELS:
+        for l in entry.findall("a:link", NS):
+            href = (l.get("href") or "").strip()
+            if l.get("rel") == rel and href:
+                book_id = href.rstrip("/").rsplit("/", 1)[-1]
+                if book_id.isdigit():
+                    return "cw:" + book_id
+    return ""
+
+
 class CalibreWebBackend(Backend):
     id = "calibreweb"
     label = "Calibre-Web"
@@ -74,7 +95,14 @@ class CalibreWebBackend(Backend):
     # --- OPDS helpers -----------------------------------------------------
     def _feed_entries(self, start_path: str, max_pages: int = 60) -> list[dict]:
         """Crawl an OPDS acquisition feed, following rel=next. Returns
-        [{item_id, title, author}]."""
+        [{item_id, title, author, cover}].
+
+        `cover` is Calibre-Web's OWN cover for the book, which every OPDS entry
+        already carries as a rel="…/image" link ("/opds/cover/161"). It used to be
+        thrown away, so an owned ebook rendered with no cover and the UI fell back
+        to looking the art up by title against Google Books — an external call per
+        book, per page render. Keeping the link makes an owned book's cover a local
+        fetch that cannot fail on someone else's rate limit."""
         from urllib.parse import urljoin
         out, url, pages = [], f"{_url()}{start_path}", 0
         while url and pages < max_pages:
@@ -91,7 +119,8 @@ class CalibreWebBackend(Backend):
                 a = e.find("a:author", NS)
                 author = (a.findtext("a:name", default="", namespaces=NS) or "").strip() if a is not None else ""
                 if eid and title:
-                    out.append({"item_id": "calibreweb:" + eid, "title": title, "author": author})
+                    out.append({"item_id": "calibreweb:" + eid, "title": title,
+                                "author": author, "cover": _cover_ref(e)})
             nxt = [l.get("href") for l in root.findall("a:link", NS) if l.get("rel") == "next"]
             # urljoin handles absolute, root-relative and path-relative next hrefs;
             # the old f"{_url()}{path}" doubled the host on an absolute href.
@@ -123,6 +152,7 @@ class CalibreWebBackend(Backend):
                     "item_id": it["item_id"], "library_id": "calibreweb",
                     "title": it["title"], "author": it["author"], "asin": "",
                     "series": "", "series_seq": None, "narrator": "",
+                    "cover": it.get("cover", ""),
                 }))
         if not got_any:
             raise RuntimeError("calibre-web: no OPDS buckets returned a feed")

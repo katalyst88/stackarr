@@ -10,6 +10,25 @@ from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
                discover, ebookmeta, formats, notify, recommend, tagging)
 
 log = logging.getLogger("stackarr.routes")
+
+
+def reading_history(be, u) -> list[dict]:
+    """A backend's reading history, fetched at most ONCE per request.
+
+    Calibre-Web has no API, so its history is a crawl of the paginated
+    /opds/readbooks feed — a dozen HTTP calls. The home page asked two different
+    backends loops for the same history and paid for that crawl twice on every
+    render, about 1.6s of the page's time. Memoised on `g`, so it is per-request
+    and cannot go stale between requests (marking a book read still shows up on
+    the very next load)."""
+    from flask import g
+    cache = getattr(g, "_reading_history", None)
+    if cache is None:
+        cache = g._reading_history = {}
+    key = (getattr(be, "id", str(be)), str((u or {}).get("id", "")))
+    if key not in cache:
+        cache[key] = be.reading_history(u)
+    return cache[key]
 bp = Blueprint("main", __name__)
 
 # Recommendation lanes — single source of truth for their display titles and the
@@ -295,7 +314,7 @@ def _finish_dates_all(u) -> list[str]:
         from . import backends
         for be in backends.sources("ebook"):
             try:
-                for h in be.reading_history(u):
+                for h in reading_history(be, u):
                     if h.get("finished") and h.get("last_update"):
                         d = datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat()
                         _add(lib.get(h["item_id"]) or "eb:" + str(h["item_id"]), d)
@@ -341,7 +360,7 @@ def insights_page():
     if formats.show("ebook"):
         for be in backends.sources("ebook"):
             try:
-                ebook_hist += be.reading_history(u)
+                ebook_hist += reading_history(be, u)
             except Exception:
                 pass
     with db.conn() as c:
@@ -462,7 +481,7 @@ def history_page():
                     c.execute("SELECT item_id,title,author FROM library WHERE format='ebook'")}
         for be in backends.sources("ebook"):
             try:
-                for h in be.reading_history(u):
+                for h in reading_history(be, u):
                     if not h.get("finished"):
                         continue
                     m = elib.get(h["item_id"]) or {}
@@ -536,7 +555,7 @@ def series_page():
         from . import backends
         for be in backends.sources("ebook"):
             try:
-                for h in be.reading_history(u):
+                for h in reading_history(be, u):
                     if h.get("finished"):
                         finished_ids.add(h["item_id"])
                     elif 0.02 < (h.get("progress") or 0) < 1:
@@ -966,7 +985,7 @@ def _shelves_data(u):
             from . import backends
             for be in backends.sources("ebook"):
                 try:
-                    for h in be.reading_history(u):
+                    for h in reading_history(be, u):
                         m = lib.get(h["item_id"]) or {}
                         if not m.get("title"):
                             continue
@@ -2287,6 +2306,46 @@ def api_logs_download():
                     headers={"Content-Disposition": f"attachment; filename=stackarr-{level.lower()}.log"})
 
 
+_COVER_CACHE = {"Cache-Control": "max-age=86400"}
+
+
+@bp.route("/libcover/<path:ref>")
+@auth.login_required
+def libcover(ref):
+    """Serve the cover of a book we OWN, from the service that holds it.
+
+    Refs are the ones stored on the library row: "cw:161" (Calibre-Web),
+    "kv:127" (Kavita). Proxied rather than linked because the browser can't
+    reach host.docker.internal, and it keeps the backend credentials server side.
+
+    This exists so an owned book's art is a local fetch. It used to be resolved
+    by searching Google Books for the title, which made every poster tile depend
+    on a third party's rate limit, and put that call on the request path."""
+    from flask import Response
+    import requests as rq
+    kind, _, ident = (ref or "").partition(":")
+    try:
+        if kind == "cw" and ident.isdigit():
+            from .backends import calibreweb as cw
+            r = rq.get(f"{cw._url()}/opds/cover/{ident}", auth=cw._auth(), timeout=10)
+            if r.ok and r.content:
+                return Response(r.content, mimetype=r.headers.get("Content-Type", "image/jpeg"),
+                                headers=_COVER_CACHE)
+        elif kind == "kv" and ident.isdigit():
+            from . import backends
+            be = backends.by_id("kavita")
+            if be:
+                r = be._get(f"/api/image/series-cover?seriesId={ident}")
+                if r.ok and r.content:
+                    return Response(r.content, mimetype=r.headers.get("Content-Type", "image/jpeg"),
+                                    headers=_COVER_CACHE)
+    except Exception as e:
+        log.debug("libcover %s failed: %s", ref, e)
+    # A cover we can't fetch is a missing picture, never a slow page: fall through
+    # to the placeholder immediately rather than trying to source art elsewhere.
+    return redirect(url_for("static", filename="cover-placeholder.svg"))
+
+
 @bp.route("/cover/<item_id>")
 @auth.login_required
 def cover(item_id):
@@ -2316,11 +2375,23 @@ def cover(item_id):
 @bp.route("/coverart")
 @auth.login_required
 def coverart():
-    """Resolve cover art for a book that has no stored cover (ebooks, and
-    'marked read' items not in Audiobookshelf). Looks the cover up by ASIN, then
-    by title+author — eBooks via the book metadata APIs, audiobooks via Audible —
-    and caches the resolved URL so it's a one-time lookup per book. Redirects to
-    the art, or a placeholder when nothing is found."""
+    """Cover art for a book with no cover stored on the row it was rendered from.
+
+    This endpoint is the target of an <img> tag, so it MUST answer immediately.
+    It never calls an external service. It answers from, in order: the local
+    library (a book we own, served by whichever of our own services holds it),
+    then the resolved-cover cache, then the placeholder.
+
+    A book we do NOT own and have never resolved is handed to the background
+    worker and gets the placeholder for now; its art appears on a later render.
+
+    ⛔ It used to do the lookup inline — Audible or Google Books, on the request
+    thread, per image. That is what made this page unusable on 2026-09-21: the
+    home page emits ~59 of these, a miss was deliberately never cached so every
+    render retried all of them, and Google Books' keyless daily quota was
+    exhausted (429) so each one burned seconds before failing. With 8 worker
+    threads the whole app starved, so the PAGE crawled, not just the covers.
+    Whatever is wrong with a cover, it must never cost the page a thread."""
     asin = (request.args.get("asin") or "").strip()
     title = (request.args.get("title") or "").strip()
     author = (request.args.get("author") or "").strip()
@@ -2328,29 +2399,26 @@ def coverart():
     placeholder = url_for("static", filename="cover-placeholder.svg")
     if not title and not asin.startswith("B0"):
         return redirect(placeholder)
+    # 1) Do we own it? Then the art is on one of our own services.
+    try:
+        ref = db.library_cover(title, author, asin)
+        if ref:
+            return redirect(url_for("main.libcover", ref=ref) if ":" in ref
+                            else url_for("main.cover", item_id=ref))
+    except Exception as e:
+        log.debug("library cover lookup failed for %s: %s", title, e)
+    # 2) Resolved earlier by the background worker?
     cache_key = "cart:" + db.rating_key(asin if asin.startswith("B0") else "", title, author)
     cached = db.get_meta(cache_key, "")
     if cached:
         return redirect(placeholder if cached == "none" else cached)
-    cover, failed = "", False
+    # 3) Unknown: queue it and show the placeholder NOW.
     try:
-        if asin.startswith("B0"):
-            cover = (audible.by_asin(asin) or {}).get("cover", "")
-        if not cover and title:
-            q = f"{title} {author}".strip()
-            hits = ebookmeta.search(q, 1) if (fmt == "ebook" or asin.startswith(("gb:", "ol:"))) else audible.search(q, num=1)
-            if hits:
-                cover = hits[0].get("cover", "")
+        from . import scheduler          # local import: scheduler imports routes' siblings
+        scheduler.queue_cover(asin, title, author, fmt)
     except Exception as e:
-        failed = True
-        log.debug("coverart lookup failed for %s: %s", title, e)
-    # Cache only a real hit. The metadata helpers SWALLOW timeouts/429s and return
-    # empty without raising, so `failed` can't be trusted — caching "none" on a
-    # swallowed rate-limit would blank the cover forever. A genuine miss simply
-    # retries on the next render (cheap) rather than persisting a permanent blank.
-    if cover:
-        db.set_meta(cache_key, cover)
-    return redirect(cover or placeholder)
+        log.debug("could not queue cover for %s: %s", title, e)
+    return redirect(placeholder)
 
 
 # ---- KOReader progress sync (kosync protocol) ----------------------------

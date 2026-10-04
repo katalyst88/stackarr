@@ -161,6 +161,9 @@ class KavitaBackend(Backend):
                 "item_id": f"kavita:{sid}", "library_id": str(s.get("libraryId", "")),
                 "title": name, "author": "", "asin": "",
                 "series": "", "series_seq": None, "narrator": "",
+                # Kavita serves its own cover for every series, so an owned ebook
+                # never needs its art looked up by title against an external API.
+                "cover": f"kv:{sid}",
             }))
         return out
 

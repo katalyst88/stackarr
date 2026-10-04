@@ -3,6 +3,7 @@ deletions -> negative taste signals), flips requests to 'available' when
 they appear in the library, runs the per-user recommender on its interval,
 and sends digests. Survives individual failures; daemon thread."""
 import logging
+import queue
 import threading
 import time
 
@@ -65,16 +66,20 @@ def refresh_library():
                     continue
                 seen.add(m["item_id"])
                 c.execute(
-                    "INSERT INTO library (item_id,library_id,title,author,asin,series,series_seq,narrator,format,source,last_seen) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now','localtime')) "
+                    "INSERT INTO library (item_id,library_id,title,author,asin,series,series_seq,narrator,format,source,cover,last_seen) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now','localtime')) "
                     "ON CONFLICT(item_id) DO UPDATE SET title=excluded.title,"
                     "author=excluded.author,asin=excluded.asin,series=excluded.series,"
                     "series_seq=excluded.series_seq,narrator=excluded.narrator,"
                     "format=excluded.format,source=excluded.source,"
+                    # keep a cover we already hold if this cycle's item didn't carry
+                    # one, so a backend that briefly stops offering the link doesn't
+                    # blank every cover it owns
+                    "cover=CASE WHEN excluded.cover<>'' THEN excluded.cover ELSE library.cover END,"
                     "last_seen=excluded.last_seen,gone_at=NULL",
                     (m["item_id"], m.get("library_id", ""), m["title"], m["author"], m.get("asin", ""),
                      m.get("series", ""), m.get("series_seq"), m.get("narrator", ""),
-                     m.get("format", "audiobook"), m.get("source", "abs")))
+                     m.get("format", "audiobook"), m.get("source", "abs"), m.get("cover", "") or ""))
 
         # deletions -> "delete habit" negative signal for every user. ONLY sweep
         # items belonging to a source that reported successfully this cycle — a
@@ -115,6 +120,9 @@ def refresh_library():
             if hit:
                 c.execute("UPDATE requests SET status='available',updated_at=datetime('now','localtime') WHERE id=?", (r["id"],))
                 newly_available.append(dict(r))
+
+    # covers may have been added or changed this cycle
+    db.invalidate_cover_index()
 
     # notify outside the DB transaction (each channel self-gates on its config)
     base = db.get_meta("public_url", "")
@@ -305,8 +313,108 @@ def new_release_radar():
                 log.warning("new-release notify failed: %s", e)
 
 
+# ---- cover resolution (off the request path) -----------------------------
+# Books we do NOT own have no local art, so their cover has to be looked up
+# externally. That lookup happens HERE and never in a request: an <img> tag must
+# not be able to hold a worker thread while a third-party API decides whether to
+# answer. A queued book shows the placeholder until this fills it in.
+_cover_q: "queue.Queue[tuple]" = queue.Queue(maxsize=2000)
+_cover_seen: set[str] = set()
+_cover_lock = threading.Lock()
+
+COVER_PAUSE_SECONDS = 1.0        # be a good citizen with keyless public APIs
+COVER_MISS_TTL_HOURS = 24        # how long a "nothing found" answer stands
+
+
+def queue_cover(asin: str, title: str, author: str, fmt: str) -> bool:
+    """Ask for a cover to be resolved later. Returns True if newly queued.
+
+    De-duplicated per process, so a page with the same unowned book in three
+    rows queues one lookup, not three."""
+    key = db.rating_key(asin if (asin or "").startswith("B0") else "", title, author)
+    if not key or key == "t-":
+        return False
+    with _cover_lock:
+        if key in _cover_seen:
+            return False
+        _cover_seen.add(key)
+    try:
+        _cover_q.put_nowait((asin or "", title or "", author or "", fmt or "", key))
+        return True
+    except queue.Full:                    # a full queue is a slow day, not an error
+        with _cover_lock:
+            _cover_seen.discard(key)
+        return False
+
+
+def _resolve_one(asin: str, title: str, author: str, fmt: str, key: str):
+    from . import audible, ebookmeta
+    cover = ""
+    try:
+        if asin.startswith("B0"):
+            cover = (audible.by_asin(asin) or {}).get("cover", "")
+        if not cover and title:
+            q = f"{title} {author}".strip()
+            hits = (ebookmeta.search(q, 1) if (fmt == "ebook" or asin.startswith(("gb:", "ol:")))
+                    else audible.search(q, num=1))
+            if hits:
+                cover = hits[0].get("cover", "")
+    except Exception as e:
+        log.debug("cover resolve failed for %s: %s", title, e)
+    cache_key = "cart:" + key
+    if cover:
+        db.set_meta(cache_key, cover)
+        return
+    # A miss is remembered, but only for a while. Never caching it made every
+    # render retry every miss, which is what exhausted the Google Books daily
+    # quota; caching it forever would blank a cover permanently on a bad day.
+    # stamp FIRST: the legacy sweep clears a 'none' that has no expiry partner,
+    # so writing them the other way round leaves a window where a sweep landing
+    # between the two throws away the miss we just recorded
+    db.set_meta("cartx:" + key, str(int(time.time()) + COVER_MISS_TTL_HOURS * 3600))
+    db.set_meta(cache_key, "none")
+
+
+def _cover_worker():
+    while True:
+        try:
+            item = _cover_q.get()
+            _resolve_one(*item)
+        except Exception as e:
+            log.debug("cover worker error: %s", e)
+        finally:
+            time.sleep(COVER_PAUSE_SECONDS)
+
+
+def _expire_cover_misses():
+    """Drop 'nothing found' answers that have served their time, so a book whose
+    art only shows up later (or whose lookup failed on a rate limit) is retried."""
+    now = int(time.time())
+    with db.conn() as c:
+        # Misses written before expiry stamps existed have no 'cartx:' partner and
+        # would otherwise be permanent. Clear them once so those books get a look.
+        c.execute("DELETE FROM meta WHERE v='none' AND k LIKE 'cart:%' "
+                  "AND 'cartx:' || substr(k, 6) NOT IN (SELECT k FROM meta WHERE k LIKE 'cartx:%')")
+        rows = c.execute("SELECT k,v FROM meta WHERE k LIKE 'cartx:%'").fetchall()
+        for r in rows:
+            try:
+                if int(r["v"]) > now:
+                    continue
+            except (TypeError, ValueError):
+                pass
+            key = r["k"][len("cartx:"):]
+            c.execute("DELETE FROM meta WHERE k=?", ("cart:" + key,))
+            c.execute("DELETE FROM meta WHERE k=?", (r["k"],))
+            with _cover_lock:
+                _cover_seen.discard(key)
+
+
 def _loop():
     while True:
+        try:
+            _expire_cover_misses()
+        except Exception as e:
+            log.warning("cover miss expiry failed: %s", e)
         try:
             refresh_library()
         except Exception as e:
@@ -340,4 +448,5 @@ def _daily_user_sync():
 
 def start():
     threading.Thread(target=_loop, name="stackarr-worker", daemon=True).start()
+    threading.Thread(target=_cover_worker, name="stackarr-covers", daemon=True).start()
     log.info("background worker started (every %d min)", config.LIBRARY_REFRESH_MINUTES)

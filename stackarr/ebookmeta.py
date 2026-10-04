@@ -25,6 +25,40 @@ from . import config, db
 log = logging.getLogger("stackarr.ebookmeta")
 
 
+GB_QUOTA_KEY = "gb_quota_exhausted_until"
+
+
+def gb_quota_exhausted() -> bool:
+    """True while Google Books has told us the DAILY quota is gone.
+
+    Without a key, Google Books counts every keyless caller against one shared
+    anonymous project, so the daily allowance can be spent by lunchtime. A
+    per-request retry can't fix a per-DAY limit: it just spends the retry, the
+    2s back-off and another thread on a call that cannot succeed until the quota
+    resets. While this is open we go straight to Open Library."""
+    try:
+        return int(db.get_meta(GB_QUOTA_KEY, "0") or 0) > time.time()
+    except (TypeError, ValueError):
+        return False
+
+
+def _note_gb_quota(resp) -> bool:
+    """Open the breaker if this 429 is the daily-quota one. A 429 for burst rate
+    is worth retrying in a moment; a 429 for 'queries per day' is not."""
+    try:
+        msg = str(((resp.json() or {}).get("error") or {}).get("message", ""))
+    except Exception:
+        msg = ""
+    if "per day" not in msg.lower() and "daily limit" not in msg.lower():
+        return False
+    # Google's daily quota rolls over at midnight Pacific. We don't know the
+    # exact moment from here, so hold for an hour and re-test: a slightly early
+    # re-test costs one request, holding too long costs a day of covers.
+    db.set_meta(GB_QUOTA_KEY, str(int(time.time()) + 3600))
+    log.warning("Google Books daily quota exhausted — using Open Library for the next hour")
+    return True
+
+
 def _get(url, params=None, tries=2):
     """GET with a single retry — keyless Google Books / Open Library are flaky
     (rate-limit, cold cache), and a second attempt usually succeeds. Returns the
@@ -32,6 +66,8 @@ def _get(url, params=None, tries=2):
     for i in range(tries):
         try:
             r = requests.get(url, params=params or {}, headers=UA, timeout=20)
+            if r.status_code == 429 and url == GB_API and _note_gb_quota(r):
+                return None                     # daily limit: retrying cannot help
             if r.status_code == 429 and i + 1 < tries:
                 try:                                  # honour Retry-After (capped) — a fixed 0.6s is usually too short
                     wait = min(int(r.headers.get("Retry-After", "2")), 10)
@@ -73,6 +109,8 @@ def _series_from_title(title: str) -> tuple[str, float | None]:
 
 # ---------------------------------------------------------------- Google Books
 def _gb_get(params: dict) -> list[dict]:
+    if gb_quota_exhausted():
+        return []                               # breaker open -> straight to Open Library
     params.setdefault("maxResults", 20)
     params.setdefault("printType", "books")
     params.setdefault("country", "US")          # Google requires a country hint
