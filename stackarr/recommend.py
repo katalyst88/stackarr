@@ -19,7 +19,7 @@ import re
 import time
 
 from . import (absclient, audible, audnexus, config, db, discover, importlists,
-               tagging, taste)
+               tagging, taste, titles)
 
 log = logging.getLogger("stackarr.recommend")
 
@@ -31,8 +31,11 @@ def _norm(s: str) -> str:
 
 
 def _key(title: str, author: str) -> str:
-    t = re.sub(r"\s*[:(].*$", "", _norm(title))          # drop subtitle/parenthetical
-    return f"{t}|{_norm((author or '').split(',')[0])}"
+    """Edition-dedup key. Drops edition/series decoration ("(Unabridged)",
+    ", Book 1") but keeps the subtitle, so two works sharing a lead-in ("Star
+    Wars: …") stay distinct. (The old subtitle strip ran after _norm had already
+    removed the ':' / '(' it looked for, so it never fired.)"""
+    return f"{titles.norm(titles.clean(title))}|{_norm((author or '').split(',')[0])}"
 
 
 def _recency_weight(last_update_ms: float, now_ms: float) -> float:
@@ -78,14 +81,17 @@ def run(user_id: int, max_new: int | None = None) -> int:
     sig_where = rate_where
     with db.conn() as c:
         # exclusion + preference state (audiobook-scoped ownership/dedup)
-        known = set()
+        # owned/requested/suggested works, subtitle-tolerant both ways: the
+        # library holds "The Captain: The Last Horizon, Book 1" where the
+        # catalogue says "The Captain"
+        known = titles.KnownWorks()
         for row in c.execute("SELECT title, author FROM library WHERE gone_at IS NULL "
                              "AND (format='audiobook' OR format IS NULL OR format='')"):
-            known.add(_key(row["title"], row["author"]))
+            known.add(row["title"], row["author"])
         for tbl in ("requests", "suggestions"):
             for row in c.execute(f"SELECT title, author FROM {tbl} WHERE user_id=? "
                                  "AND (format='audiobook' OR format IS NULL OR format='')", (user_id,)):
-                known.add(_key(row["title"], row["author"]))
+                known.add(row["title"], row["author"])
         neg = {(s["kind"], s["value"].lower()): s["weight"]
                for s in c.execute(f"SELECT kind,value,weight FROM signals WHERE user_id=? AND weight<0{sig_where}", (user_id,))}
         pos = {(s["kind"], s["value"].lower()): s["weight"]
@@ -128,7 +134,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
         cands = {}
         for b in discover.popular():
             asin = b.get("asin")
-            if not asin or _key(b["title"], b["author"]) in known:
+            if not asin or (b["title"], b["author"]) in known:
                 continue                                   # already owned/requested/suggested
             if any(d in (b["title"] or "").lower() for d in DRAMATIZED):
                 continue                                   # skip dramatized/GraphicAudio
@@ -163,7 +169,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
 
     def consider(b: dict, base: float, lane: str, reason: str, extra: str = "", floor: bool = True):
         asin = b.get("asin")
-        if not asin or _key(b["title"], b["author"]) in known:
+        if not asin or (b["title"], b["author"]) in known:
             return
         # Only ever suggest the FIRST book of a series — never drop the user into
         # the middle of a series they haven't started. Exempt the lanes that are
@@ -320,7 +326,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
     return _finalize(user_id, cands, known, neg, max_new)
 
 
-def _finalize(user_id: int, cands: dict, known: set, neg: dict, max_new: int,
+def _finalize(user_id: int, cands: dict, known, neg: dict, max_new: int,
               fmt: str = "audiobook") -> int:
     """Edition-dedup, then keep the top N PER LANE (author-diverse) so every
     category is represented rather than one lane crowding out the rest.

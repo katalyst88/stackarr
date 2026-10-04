@@ -7,7 +7,7 @@ import queue
 import threading
 import time
 
-from . import absclient, backends, config, db, formats, notify, recommend
+from . import absclient, backends, chaptarr, config, db, formats, notify, recommend, titles
 
 log = logging.getLogger("stackarr.scheduler")
 
@@ -103,23 +103,35 @@ def refresh_library():
                                   (uid, "asin", row["asin"], -5, f"deleted from library: {row['title']}"))
                 log.info("library item gone -> negative: %s", row["title"])
 
-        # requests -> available when their book shows up
-        newly_available = []
-        for r in c.execute("SELECT id,user_id,title,author,cover,format FROM requests WHERE status IN ('queued','handed','failed')"):
-            title = (r['title'] or '').strip().lower()
-            if len(title) < 4:           # too short to match safely (e.g. "It")
-                continue
-            # match the same FORMAT so an audiobook arrival doesn't satisfy an
-            # ebook request (and vice-versa)
-            hit = c.execute("SELECT 1 FROM library WHERE gone_at IS NULL AND lower(title) LIKE ? "
-                            "AND (?='' OR lower(author) LIKE ?) AND format=?",
-                            (f"%{title[:40]}%",
-                             (r['author'] or '').split(',')[0].lower(),
-                             f"%{(r['author'] or '').split(',')[0].lower()}%",
-                             r['format'] or 'audiobook')).fetchone()
-            if hit:
+        # requests -> available when their book shows up in the library
+        newly_available, pending = [], []
+        for r in c.execute("SELECT id,user_id,title,author,cover,format,asin,status,source,chaptarr_ref "
+                           "FROM requests WHERE status IN ('queued','handed','failed')").fetchall():
+            r = dict(r)
+            if len((r["title"] or "").strip()) < 4 or _bulk_request(r):
+                continue                  # too short to match safely (e.g. "It"), or not one book
+            missing = [m for m in _request_media(r["format"]) if not _in_library(c, r, m)]
+            if not missing:
                 c.execute("UPDATE requests SET status='available',updated_at=datetime('now','localtime') WHERE id=?", (r["id"],))
-                newly_available.append(dict(r))
+                newly_available.append(r)
+            elif r["status"] == "handed":
+                pending.append((r, missing))
+
+    # ...or when Chaptarr reports it imported the requested format. Done outside
+    # the DB transaction (network calls), only for requests Chaptarr was handed,
+    # with each author's books fetched once per refresh.
+    if pending and chaptarr.configured():
+        cache, done = {}, []
+        for r, missing in pending:
+            if all(chaptarr.has_book_file(r["title"], r["author"], r["asin"] or "", m,
+                                          r["chaptarr_ref"] or "", cache) for m in missing):
+                done.append(r)
+        if done:
+            with db.conn() as c:
+                for r in done:
+                    if c.execute("UPDATE requests SET status='available',updated_at=datetime('now','localtime') "
+                                 "WHERE id=? AND status='handed'", (r["id"],)).rowcount:
+                        newly_available.append(r)
 
     # covers may have been added or changed this cycle
     db.invalidate_cover_index()
@@ -131,6 +143,37 @@ def refresh_library():
             notify.request_available(r, base_url=base)
         except Exception as e:
             log.warning("availability notify failed for %s: %s", r.get("title"), e)
+
+
+def _request_media(fmt: str) -> list[str]:
+    """The media a request row needs before it counts as available. Anything
+    that isn't 'ebook'/'both' was handed to Chaptarr as an audiobook (the way
+    add_and_search reads it) — including legacy Audible edition strings like
+    "Unabridged" — so it's matched as one, whatever the install mode."""
+    f = (fmt or "").strip().lower()
+    if f == "both":
+        return formats.available()
+    return ["ebook"] if f == "ebook" else ["audiobook"]
+
+
+def _bulk_request(r: dict) -> bool:
+    """A whole-series / whole-author request — its title isn't a book title."""
+    return ((r.get("source") or "") in ("series", "author")
+            or (r.get("title") or "").startswith(("Full series: ", "All books by ")))
+
+
+def _in_library(c, r: dict, media: str) -> bool:
+    """Is the requested book in the library snapshot, in `media`? Matched in
+    both directions with titles.matches() over the author's books in that
+    media: Audible decorates titles with a subtitle the library often doesn't
+    carry ("Beware of Chicken: A Xianxia Cultivation Novel" vs "Beware of
+    Chicken"), and library titles carry edition/series decoration the request
+    doesn't ("The Captain: The Last Horizon, Book 1", "(Unabridged)")."""
+    author = (r["author"] or "").split(",")[0].strip().lower()
+    rows = [dict(x) for x in c.execute(
+        "SELECT title, asin FROM library WHERE gone_at IS NULL AND format=? "
+        "AND (?='' OR lower(author) LIKE ?)", (media, author, f"%{author}%"))]
+    return bool(titles.matches(rows, r["title"], r.get("asin") or ""))
 
 
 def interval_hours() -> int:

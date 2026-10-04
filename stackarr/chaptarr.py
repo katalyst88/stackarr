@@ -31,6 +31,14 @@ def root_folder() -> str:
     return rf
 
 
+def ebook_root_folder() -> str:
+    """Root folder for ebook handoffs (Chaptarr's E-Book library). Falls back to
+    the audiobook root_folder() when unconfigured, so legacy single-root installs
+    are unchanged."""
+    rf = db.setting("chaptarr_ebook_root_folder", config.CHAPTARR_EBOOK_ROOT_FOLDER)
+    return (rf or "").rstrip("/") or root_folder()
+
+
 def _profile(key: str, fallback: int) -> int:
     try:
         return int(db.setting(key, str(fallback)))
@@ -160,9 +168,47 @@ def _author_books(author_id: int) -> list[dict]:
         return []
 
 
+def _pick_author(results: list[dict], author: str) -> dict:
+    """Choose the author the request actually named. Chaptarr's /author/lookup is
+    a fuzzy search that does NOT always rank the requested author first — e.g. for
+    "James Baldwin" another author whose book metadata mentions the name can
+    outrank him, so blindly taking results[0] adds the wrong author and the title
+    is never found. Prefer an exact normalized name match, then a contains match,
+    before falling back to the top result."""
+    na = _norm(author)
+    if na:
+        for r in results:
+            if _norm(r.get("authorName")) == na:
+                return r
+        for r in results:
+            rn = _norm(r.get("authorName"))
+            if rn and (na in rn or rn in na):
+                return r
+    return results[0]
+
+
+_SUBTITLE = re.compile(r"\s*(?::|\s-\s|\s—\s)\s*")
+
+
+def _base_title(s: str) -> str:
+    """Normalized title with any subtitle dropped — the part before the first
+    ':' / ' - ' separator ("Mindset - Updated Edition" -> "mindset")."""
+    return _norm(_SUBTITLE.split(s or "", 1)[0])
+
+
+def _one_work(cands: list[dict]) -> dict | None:
+    """The single work in `cands`, else None. Counts DISTINCT normalized titles,
+    not rows: Chaptarr's media split lists one work twice (an audiobook row and
+    an ebook row), and those two are the same work, not an ambiguity."""
+    if not cands:
+        return None
+    return cands[0] if len({_norm(b.get("title")) for b in cands}) == 1 else None
+
+
 def _match_book(books: list[dict], title: str, asin: str) -> dict | None:
     """Pick the specific book a recommendation refers to: ASIN first (exact),
-    then exact normalized title, then a title prefix match."""
+    then exact normalized title, then the title minus its subtitle, then a
+    prefix / subtitle-stripped fuzzy match."""
     asin = (asin or "").strip().upper()
     if asin:
         for b in books:
@@ -174,14 +220,86 @@ def _match_book(books: list[dict], title: str, asin: str) -> dict | None:
     for b in books:
         if _norm(b.get("title")) == nt:
             return b
-    # Prefix fallback only for a specific-enough title AND only when unambiguous —
-    # a short/common title ("it", "dune") prefix-matches the wrong book otherwise,
-    # and we'd confidently search+grab the wrong title.
+    # Audible decorates its titles with a subtitle Chaptarr's metadata doesn't
+    # carry ("Pandora's Star: Commonwealth Saga 1" vs "Pandora's Star"), and the
+    # ASINs differ too (a later Audible re-release vs Chaptarr's), so the tiers
+    # above both miss and the whole request fails with "couldn't find … to
+    # search". Retry on the title either side of the separator.
+    parts = _SUBTITLE.split(title or "", 1)
+    nb, ntail = _norm(parts[0]), (_norm(parts[1]) if len(parts) > 1 else "")
+    # The lead-in is sometimes the franchise rather than the work ("Star Wars:
+    # Thrawn"), so a book titled exactly like the part AFTER the separator beats
+    # the part before it.
+    for cand in (ntail, nb):
+        if cand and cand != nt:
+            for b in books:
+                if _norm(b.get("title")) == cand:
+                    return b
+    # Fuzzy tiers: only for a specific-enough title AND only when unambiguous — a
+    # short/common title ("it", "dune") matches the wrong book otherwise, and
+    # we'd confidently search+grab that. Chaptarr's title may be the longer one
+    # ("Pandora's Star (Commonwealth Saga #1)"), or both sides may be decorated
+    # differently, so try prefix first and subtitle-vs-subtitle second.
     if len(nt) >= 8:
-        cands = [b for b in books if _norm(b.get("title")).startswith(nt)]
-        if len(cands) == 1:
-            return cands[0]
+        hit = _one_work([b for b in books if _norm(b.get("title")).startswith(nt)])
+        if hit:
+            return hit
+    if len(nb) >= 8:
+        hit = _one_work([b for b in books if _base_title(b.get("title")) == nb])
+        if hit:
+            return hit
     return None
+
+
+def _media_edition_id(book_id: int, media: str) -> int:
+    """Chaptarr splits each work into per-media book rows (audiobook + ebook
+    siblings). A title match can land on the wrong-media row, so the caller would
+    search/grab the format that's already satisfied and never fetch the requested
+    one. The release view reports this row's sibling id + the sibling's media
+    type; if this row isn't the requested media, switch to its sibling."""
+    try:
+        rs = requests.get(f"{url()}/api/v1/release", headers=_h(),
+                          params={"bookId": book_id}, timeout=60).json()
+    except Exception:
+        return book_id
+    if not isinstance(rs, dict):
+        return book_id
+    # siblingMediaType names the OTHER row's media, so this row is the opposite.
+    sib_media = rs.get("siblingMediaType")
+    this_media = {"ebook": "audiobook", "audiobook": "ebook"}.get(sib_media)
+    sib_id = rs.get("siblingBookId")
+    if this_media and this_media != media and sib_id:
+        return sib_id
+    return book_id
+
+
+# Chaptarr's per-media "Monitor existing books" setting
+# ({audiobook,ebook}MonitorExisting): 0 = None, 1 = All, 2 = Selected. "All"
+# monitors the author's whole bibliography for that media the moment it's set —
+# for a request-driven tool that means Chaptarr goes on to grab every book by
+# every author anyone has requested one book from. "Selected" keeps the author
+# monitored for the media while only the books we monitor explicitly are wanted.
+MONITOR_EXISTING_NONE, MONITOR_EXISTING_ALL, MONITOR_EXISTING_SELECTED = 0, 1, 2
+
+
+def _for_media(books: list[dict], media: str) -> list[dict]:
+    """The author's book rows for one media type. Chaptarr's media split gives
+    each work an audiobook row and an ebook row, tagged `mediaType`; a schema
+    without the split (no `mediaType` on any row) is returned unchanged."""
+    if not any(b.get("mediaType") for b in books):
+        return books
+    return [b for b in books if b.get("mediaType") == media]
+
+
+def _series_books(books: list[dict], series: str) -> list[dict]:
+    """The rows belonging to `series`. Each row's `seriesTitle` lists the series
+    it's in as "Name #n", ';'-separated (Readarr's format)."""
+    ns = _norm(series)
+    if not ns:
+        return []
+    return [b for b in books
+            if any(_norm(re.sub(r"#\s*[\d.]+\s*$", "", part)) == ns
+                   for part in (b.get("seriesTitle") or "").split(";"))]
 
 
 def _ensure_media_monitored(author_obj: dict, media: str, rf: str,
@@ -190,18 +308,31 @@ def _ensure_media_monitored(author_obj: dict, media: str, rf: str,
     monitoring (audiobook/ebookMonitorExisting + matching root folder + profiles).
     Make sure the active media type is fully set up — crucially when REUSING an
     author first added for the OTHER format, whose {media}RootFolderPath/profiles
-    are unset, so a cross-format request isn't 400'd. Idempotent; best-effort."""
+    are unset, so a cross-format request isn't 400'd. Idempotent; best-effort.
+
+    Enabling a media type sets it to monitor *selected* books only, never All —
+    All would make Chaptarr want the author's entire bibliography in that format
+    when the user asked for one book. A media type the author is already
+    monitored for keeps whatever the user chose (we never unmonitor anything)."""
     changed = False
     if not author_obj.get("monitored"):
         author_obj["monitored"] = True; changed = True
     pfx = "audiobook" if media == "audiobook" else "ebook"
     if not author_obj.get(f"{pfx}MonitorExisting"):
-        author_obj[f"{pfx}MonitorExisting"] = 1; changed = True
+        author_obj[f"{pfx}MonitorExisting"] = MONITOR_EXISTING_SELECTED
+        # nor anything the author publishes later, for a media type that was off
+        author_obj[f"{pfx}MonitorNewItems"] = "none"
+        if f"{pfx}Monitored" in author_obj:
+            author_obj[f"{pfx}Monitored"] = True
+        changed = True
     if qp and not author_obj.get(f"{pfx}QualityProfileId"):
         author_obj[f"{pfx}QualityProfileId"] = qp; changed = True
     if mp and not author_obj.get(f"{pfx}MetadataProfileId"):
         author_obj[f"{pfx}MetadataProfileId"] = mp; changed = True
-    if rf and not author_obj.get(f"{pfx}RootFolderPath"):
+    # Force the correct per-media root even if already set: an author first added
+    # for audiobooks has its ebookRootFolderPath left at the audiobook folder, so
+    # a later ebook request would file the ebook into the audiobook library.
+    if rf and author_obj.get(f"{pfx}RootFolderPath") != rf:
         author_obj[f"{pfx}RootFolderPath"] = rf; changed = True
     if changed and author_obj.get("id"):
         try:
@@ -209,6 +340,51 @@ def _ensure_media_monitored(author_obj: dict, media: str, rf: str,
                          json=author_obj, timeout=30)
         except Exception as e:
             log.debug("chaptarr _ensure_media_monitored PUT failed: %s", e)
+
+
+def _author_id(name: str, cache: dict) -> int | None:
+    """An author already in Chaptarr, by name (exact, then contains — never a
+    guess). The author list is fetched once per `cache`."""
+    if "authors" not in cache:
+        try:
+            r = requests.get(f"{url()}/api/v1/author", headers=_h(), timeout=20)
+            cache["authors"] = r.json() if r.ok and isinstance(r.json(), list) else []
+        except Exception as e:
+            log.debug("chaptarr author list failed: %s", e)
+            cache["authors"] = []
+    na = _norm(name)
+    if not na:
+        return None
+    for exact in (True, False):
+        for a in cache["authors"]:
+            an = _norm(a.get("authorName"))
+            if an and (an == na if exact else (na in an or an in na)):
+                return a.get("id")
+    return None
+
+
+def has_book_file(title: str, author: str, asin: str = "", media: str = "audiobook",
+                  ref: str = "", cache: dict | None = None) -> bool:
+    """Has Chaptarr imported a file for this book in this media? True when the
+    requested media edition's row reports statistics.bookFileCount > 0.
+
+    Chaptarr knows a request is done even when the library snapshot can't see
+    it — an ebook filed where no connected source looks, or a title the library
+    spells differently. `ref` is the request's chaptarr_ref (the author id
+    add_and_search returned); without one the author is found by name. Pass
+    the same `cache` across a batch so each author's books are fetched once."""
+    if not configured():
+        return False
+    cache = {} if cache is None else cache
+    author = (author or "").split(",")[0].strip()
+    author_id = int(ref) if str(ref or "").isdigit() else _author_id(author, cache)
+    if not author_id:
+        return False
+    books = cache.setdefault(("books", author_id), None)
+    if books is None:
+        books = cache[("books", author_id)] = _author_books(author_id)
+    target = _match_book(_for_media(books, media), title, asin)
+    return bool(target and ((target.get("statistics") or {}).get("bookFileCount") or 0) > 0)
 
 
 def mark_read(title: str, author: str) -> bool:
@@ -224,7 +400,9 @@ def mark_read(title: str, author: str) -> bool:
         results = look.json() if look.ok else []
         if not results:
             return False
-        a = results[0]
+        # Same fuzzy lookup as add_and_search — take the author actually named,
+        # not the top hit, or we look for the book under someone else.
+        a = _pick_author(results, author)
         existing = _find_author(a.get("foreignAuthorId", ""), a.get("authorName") or author)
         if not existing:
             return False
@@ -241,7 +419,7 @@ def mark_read(title: str, author: str) -> bool:
 
 
 def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audiobook",
-                   root_folder_override: str = "") -> dict:
+                   root_folder_override: str = "", series: str = "") -> dict:
     """Ensure the author exists in Chaptarr (tagged 'stackarr'), then monitor +
     search. `fmt` (audiobook | ebook) decides the media type + profiles.
 
@@ -252,6 +430,8 @@ def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audioboo
     the media-split fields set, (2) when the request names a specific title, pin
     that book and monitor+search just it (avoids grabbing the whole backlist),
     else fall back to monitoring all the author's books + an author search.
+    `series` names a series to get the rest of: its books are monitored and
+    searched (the whole author if Chaptarr reports no matching series).
     Returns {ok, ref, detail}. Fails gracefully if Chaptarr is unavailable."""
     if not configured():
         return {"ok": False, "detail": "Stackarr isn't connected to Chaptarr yet — add it in Settings → Connections."}
@@ -263,7 +443,8 @@ def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audioboo
     eb_mp = _profile("chaptarr_ebook_metadata_profile_id", config.CHAPTARR_EBOOK_METADATA_PROFILE_ID)
     media = "ebook" if fmt == "ebook" else "audiobook"
     qp, mp = (eb_qp, eb_mp) if media == "ebook" else (ab_qp, ab_mp)
-    rf = (root_folder_override or root_folder()).rstrip("/") or root_folder()
+    default_root = ebook_root_folder() if media == "ebook" else root_folder()
+    rf = (root_folder_override or default_root).rstrip("/") or default_root
     tag_id = _ensure_tag("stackarr")
     try:
         look = requests.get(f"{url()}/api/v1/author/lookup",
@@ -280,7 +461,7 @@ def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audioboo
         results = look.json() if look.ok else []
         if not results:
             return {"ok": False, "detail": f"Chaptarr couldn't find “{author or title}” in its catalogue."}
-        a = results[0]
+        a = _pick_author(results, author)
         foreign_id = a.get("foreignAuthorId", "")
         author_obj = _find_author(foreign_id, a.get("authorName") or author)
         if author_obj is None:
@@ -293,13 +474,21 @@ def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audioboo
                 audiobookQualityProfileId=ab_qp, audiobookMetadataProfileId=ab_mp,
                 ebookQualityProfileId=eb_qp, ebookMetadataProfileId=eb_mp,
                 rootFolderPath=rf, path=f"{rf.rstrip('/')}/{folder}",
-                audiobookMonitorExisting=(1 if media == "audiobook" else 0),
-                ebookMonitorExisting=(1 if media == "ebook" else 0),
+                # Monitored for the requested media, but only for books we
+                # monitor explicitly below — "All" here made Chaptarr want (and
+                # grab) the author's whole bibliography for a one-book request.
+                audiobookMonitorExisting=(MONITOR_EXISTING_SELECTED if media == "audiobook"
+                                          else MONITOR_EXISTING_NONE),
+                ebookMonitorExisting=(MONITOR_EXISTING_SELECTED if media == "ebook"
+                                      else MONITOR_EXISTING_NONE),
+                audiobookMonitored=(media == "audiobook"), ebookMonitored=(media == "ebook"),
                 audiobookMonitorFuture=False, ebookMonitorFuture=False,
+                audiobookMonitorNewItems="none", ebookMonitorNewItems="none",
                 tags=([tag_id] if tag_id else []),
                 monitored=True, monitorNewItems="none",
                 # Don't auto-grab on add; we monitor + search precisely below.
-                addOptions={"monitor": "none", "searchForMissingBooks": False})
+                addOptions={"monitor": "none", "booksToMonitor": [],
+                            "searchForMissingBooks": False})
             # Pin the per-media root so the pick lands in the configured folder,
             # but Chaptarr 400s ("root folder does not have <media> defaults
             # configured") if that folder isn't set up for this media type. So
@@ -355,14 +544,36 @@ def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audioboo
 
         # A request that names a specific title → grab just that book. An
         # author-level add (title is the author name / no match) → whole backlist.
-        is_author_level = _norm(title) == _norm(author)
-        target = None if is_author_level else _match_book(books, title, asin)
+        in_series = _series_books(_for_media(books, media), series) if series else []
+        if in_series:
+            ids = [b["id"] for b in in_series]
+            ok = _dispatch(ids, {"name": "BookSearch", "bookIds": ids})
+            if ok:
+                return {"ok": True, "ref": str(author_id),
+                        "detail": f"Sent the “{series}” series ({len(ids)} books) to Chaptarr — it's searching now."}
+            return {"ok": False, "ref": str(author_id),
+                    "detail": f"Added “{author_obj.get('authorName')}” to Chaptarr, but the search didn't start — retry shortly."}
+        # A series Chaptarr doesn't list falls back to the whole author (the
+        # documented "get the rest of the series" behaviour).
+        is_author_level = bool(series) or _norm(title) == _norm(author)
+        target = None if is_author_level else (_match_book(_for_media(books, media), title, asin)
+                                               or _match_book(books, title, asin))
         if target:
-            ok = _dispatch([target["id"]], {"name": "BookSearch", "bookIds": [target["id"]]})
+            # A title match can land on the wrong-media sibling row; resolve to the
+            # row for the requested media so we search/grab the format asked for.
+            # Rows tagged with the requested mediaType need no lookup — the
+            # release endpoint is a live indexer search, so only fall back to it
+            # when the row's media is unknown or the requested row isn't listed.
+            target_id = (target["id"] if target.get("mediaType") == media
+                         else _media_edition_id(target["id"], media))
+            ok = _dispatch([target_id], {"name": "BookSearch", "bookIds": [target_id]})
             name = target.get("title") or title
         elif is_author_level:
-            # genuine whole-author add → monitor everything + author search
-            ok = _dispatch([b["id"] for b in books], {"name": "AuthorSearch", "authorId": author_id})
+            # genuine whole-author add → monitor everything in the requested
+            # media + author search (not the other media's rows: nobody asked
+            # for that format, and the author isn't set up for it)
+            ok = _dispatch([b["id"] for b in _for_media(books, media)],
+                           {"name": "AuthorSearch", "authorId": author_id})
             name = author_obj.get("authorName") or author
         else:
             # a specific title was requested but isn't among the author's books — do

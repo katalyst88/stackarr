@@ -20,6 +20,22 @@ Or with Docker:
 docker compose up -d --build
 ```
 
+## Tests
+
+The unit tests need no running services — Chaptarr and the library sources are
+small in-memory fakes, and each test gets a throwaway SQLite DB.
+
+```bash
+pip install -r requirements-dev.txt
+pytest                         # from the repo root
+```
+
+The search-card UI check runs `static/app.js` under jsdom:
+
+```bash
+npm install --no-save jsdom && node tests/js/search-card.mjs
+```
+
 ## Project layout
 
 - `stackarr/recommend.py` — the deterministic recommendation engine (the heart).
@@ -33,7 +49,8 @@ docker compose up -d --build
   entry reached by an explainable rule. Keep it deterministic.
 - Match the existing style; keep config env-driven (`stackarr/config.py`).
 - Bump `VERSION` in `config.py` and add a `CHANGELOG.md` entry with your change.
-- Test against a real Audiobookshelf + Chaptarr where you can.
+- Add a test under `tests/` for a behaviour fix, and test against a real
+  Audiobookshelf + Chaptarr where you can.
 
 ## Releasing
 

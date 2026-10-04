@@ -80,6 +80,11 @@ CHAPTARR_METADATA_PROFILE_ID = int(os.environ.get("CHAPTARR_METADATA_PROFILE_ID"
 # E-Book quality=1, Ebook-Default metadata=2).
 CHAPTARR_EBOOK_QUALITY_PROFILE_ID = int(os.environ.get("CHAPTARR_EBOOK_QUALITY_PROFILE_ID", "1"))
 CHAPTARR_EBOOK_METADATA_PROFILE_ID = int(os.environ.get("CHAPTARR_EBOOK_METADATA_PROFILE_ID", "2"))
+# Ebook handoffs can land in a distinct root folder (Chaptarr's E-Book library)
+# separate from the audiobook root — otherwise ebooks requested for an author
+# first added for audiobooks get filed into the audiobook folder. Falls back to
+# CHAPTARR_ROOT_FOLDER when unset (legacy single-root installs unchanged).
+CHAPTARR_EBOOK_ROOT_FOLDER = os.environ.get("CHAPTARR_EBOOK_ROOT_FOLDER", "")
 
 # --- metadata sources (no API key needed; deterministic, no AI) -------------
 AUDIBLE_DOMAIN = os.environ.get("AUDIBLE_DOMAIN", "com")           # com, co.uk, com.au, de…

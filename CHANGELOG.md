@@ -2,6 +2,48 @@
 
 All notable changes to Stackarr.
 
+## [Unreleased]
+
+Fixes from running Stackarr against Chaptarr's media-split schema (an
+audiobook row and an ebook row per work) with `STACKARR_FORMATS=both`.
+
+### Fixed
+- **Requesting one book no longer makes Chaptarr want the author's whole
+  bibliography.** Authors were added (and reused for a new format) with
+  "monitor existing books: All"; they're now set to *Selected*, and only the
+  requested book's edition is monitored and searched. Nothing a user monitored
+  themselves is unmonitored.
+- **Requests now move from "handed" to "available".** The library check matches
+  titles in both directions (Audible's "Title: Subtitle" vs the library's
+  "Title"), resolves legacy formats, handles `both` requests, and asks Chaptarr
+  whether it has imported the requested edition — so ebooks filed where no
+  connected library looks are picked up too. Existing rows whose format holds an
+  Audible edition string ("Unabridged") are migrated to `audiobook`.
+- **Books you own showed a Request button.** Library titles are often decorated
+  ("The Captain: The Last Horizon, Book 1", "House of Blades (Unabridged)") and
+  usually have no ASIN, and ownership was an exact title match. A shared,
+  subtitle-aware matcher (`stackarr/titles.py`) now backs the owned check, the
+  book page's owned formats, mark-read write-back, request availability and the
+  recommenders' "already have it" filter.
+- **Wrong author picked** from Chaptarr's fuzzy author lookup (request and
+  mark-read): the author actually named now wins over the top hit.
+- **Wrong-media edition searched**: a request now searches the row for the
+  requested format, found by `mediaType` without an extra indexer search.
+- **eBooks filed in the audiobook root folder** for authors first added for
+  audiobooks — new optional `CHAPTARR_EBOOK_ROOT_FOLDER`.
+- **Requests failed for any title with a subtitle** ("Pandora's Star:
+  Commonwealth Saga 1" vs Chaptarr's "Pandora's Star").
+- **Audible's edition string used as the media format**, so a `both` install
+  never requested the eBook from a search/Discover card.
+- **Search and Discover results weren't clickable** (and did nothing on phones).
+- **"Get the rest of the series" and approved series/author requests failed**:
+  the series name was matched as a book title. The series' books are now
+  monitored and searched (the whole author if Chaptarr doesn't list the series).
+
+### Added
+- A portable test suite (`pytest`, no running services needed) — see
+  CONTRIBUTING.md.
+
 ## [1.6.8] - 2026-07-04
 
 Security hardening from the same field report's attached findings doc (thanks

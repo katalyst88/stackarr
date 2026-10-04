@@ -234,6 +234,21 @@ def init():
                 c.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('tags_pk_kind','1')")
         except sqlite3.OperationalError as e:
             logging.getLogger("stackarr.db").warning("book_tags migration skipped: %s", e)
+        # requests.format must be a media type, but rows requested from a search /
+        # Discover card used to store Audible's EDITION string there
+        # ("Unabridged", "Abridged", "Original_Recording", …). Those were handed to
+        # Chaptarr as audiobooks, so record them as such — otherwise they can
+        # never match the library and stay "handed" forever.
+        try:
+            if not c.execute("SELECT v FROM meta WHERE k='req_fmt_media'").fetchone():
+                c.execute("UPDATE requests SET format=lower(trim(format)) "
+                          "WHERE lower(trim(format)) IN ('audiobook','ebook','both') "
+                          "AND format<>lower(trim(format))")
+                c.execute("UPDATE requests SET format='audiobook' WHERE format IS NULL "
+                          "OR format NOT IN ('audiobook','ebook','both')")
+                c.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('req_fmt_media','1')")
+        except sqlite3.OperationalError as e:
+            logging.getLogger("stackarr.db").warning("requests format migration skipped: %s", e)
         # seed link rows for pre-existing ABS users so they keep their account
         # after the multi-provider switch (match by their stored abs_user_id).
         try:

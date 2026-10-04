@@ -156,6 +156,7 @@ automatically on every release.
 |---|---|
 | `ABS_URL`, `ABS_ADMIN_TOKEN` | Audiobookshelf connection (also editable in Settings) |
 | `CHAPTARR_URL`, `CHAPTARR_API_KEY`, `CHAPTARR_ROOT_FOLDER` | where approved picks go |
+| `CHAPTARR_EBOOK_ROOT_FOLDER` | Chaptarr root folder for eBook picks (defaults to `CHAPTARR_ROOT_FOLDER`) |
 | `STACKARR_FORMATS` | `audiobook` (default) · `ebook` · `both` (also in Settings → General) |
 | `KAVITA_URL`, `KAVITA_API_KEY` | eBook library + reading progress (or set in Settings) |
 | `CALIBREWEB_URL`, `CALIBREWEB_USER`, `CALIBREWEB_PASS` | eBook library via OPDS (or in Settings) |

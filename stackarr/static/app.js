@@ -50,16 +50,24 @@ const Stackarr = (() => {
     const canReq = !tag || tag[1] === "failed";
     const reqLabel = tag ? tag[2] : "Request";
     const j = (o) => JSON.stringify(o).replace(/'/g, "&#39;");
-    return `<div class="media-card">
+    // The whole card is a link to the book page — same contract as the
+    // server-rendered cards (`<a class="media-card">` in suggestions.html) — so
+    // search results and discover tiles open their detail page on click/tap,
+    // not just on desktop hover. Every control inside the link cancels the
+    // click so it acts instead of navigating (as browse.html/lane.html do).
+    const stop = "event.preventDefault();event.stopPropagation();";
+    const href = b.asin ? `${B()}/book/${encodeURIComponent(b.asin)}` : "";
+    const open = href ? `<a class="media-card" href="${esc(href)}">` : `<div class="media-card">`;
+    return `${open}
       <div class="media-poster">
         ${b.cover ? `<img src="${esc(hires(b.cover))}" loading="lazy" alt="">` : ""}
         ${tag ? `<span class="corner-badge ${tag[1]}">${tag[0]}</span>` : ""}
         <div class="media-overlay">
           <div class="ov-reason">${esc(reason)}</div>
-          <div class="media-stars" data-asin="${esc(b.asin)}" data-title="${esc(b.title)}" data-author="${esc(b.author)}">${[1,2,3,4,5].map(n => `<span onclick="Stackarr.rate('${esc(b.asin)}',${n},this)">★</span>`).join("")}</div>
+          <div class="media-stars" data-asin="${esc(b.asin)}" data-title="${esc(b.title)}" data-author="${esc(b.author)}">${[1,2,3,4,5].map(n => `<span onclick="${stop}Stackarr.rate('${esc(b.asin)}',${n},this)">★</span>`).join("")}</div>
           <div class="ov-actions">
-            <button class="btn" ${canReq ? "" : "disabled"} onclick='Stackarr.request(${j(b)}, this)'>${esc(reqLabel)}</button>
-            <button class="btn ghost" onclick='Stackarr.markReadBook(${j({title:b.title,author:b.author,cover:b.cover,asin:b.asin,format:b.format})}, this)'>Read it</button>
+            <button class="btn" ${canReq ? "" : "disabled"} onclick='${stop}Stackarr.request(${j(b)}, this)'>${esc(reqLabel)}</button>
+            <button class="btn ghost" onclick='${stop}Stackarr.markReadBook(${j({title:b.title,author:b.author,cover:b.cover,asin:b.asin,format:b.format})}, this)'>Read it</button>
           </div>
         </div>
       </div>
@@ -67,7 +75,7 @@ const Stackarr = (() => {
         <div class="media-title" title="${esc(b.title)}">${esc(b.title)}</div>
         <div class="media-author">${esc(b.author)}</div>
       </div>
-    </div>`;
+    ${href ? "</a>" : "</div>"}`;
   };
 
   let pollTimer = null;

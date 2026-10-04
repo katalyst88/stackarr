@@ -13,11 +13,10 @@ your reading list, and a genre/popular fallback. Series-next is best-effort
 (ebook catalogues rarely expose structured series order)."""
 import logging
 
-from . import (backends, config, db, ebookmeta, importlists, recommend, taste)
+from . import (backends, config, db, ebookmeta, importlists, recommend, taste, titles)
 
 log = logging.getLogger("stackarr.recommend_ebook")
 
-_key = recommend._key
 _norm = recommend._norm
 
 
@@ -81,12 +80,12 @@ def run(user_id: int, max_new: int | None = None) -> int:
     # only drop audiobook-specific signals so a DNF there doesn't suppress ebooks.
     sig_where = "" if xfmt else " AND (format='ebook' OR format IS NULL OR format='')"
     with db.conn() as c:
-        known = set()
+        known = titles.KnownWorks()      # subtitle-tolerant, see recommend.run
         for row in c.execute("SELECT title, author FROM library WHERE gone_at IS NULL AND format='ebook'"):
-            known.add(_key(row["title"], row["author"]))
+            known.add(row["title"], row["author"])
         for tbl in ("requests", "suggestions"):
             for row in c.execute(f"SELECT title, author FROM {tbl} WHERE user_id=? AND format='ebook'", (user_id,)):
-                known.add(_key(row["title"], row["author"]))
+                known.add(row["title"], row["author"])
         neg = {(s["kind"], s["value"].lower()): s["weight"]
                for s in c.execute(f"SELECT kind,value,weight FROM signals WHERE user_id=? AND weight<0{sig_where}", (user_id,))}
         pos = {(s["kind"], s["value"].lower()): s["weight"]
@@ -105,7 +104,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
         bid = b.get("id") or b.get("asin")
         if not bid:
             return
-        if _key(b.get("title", ""), b.get("author", "")) in known:
+        if (b.get("title", ""), b.get("author", "")) in known:
             return
         # only ever suggest the first book of a series (see recommend.py); ebook
         # catalogues rarely expose sequence, so this only fires when it's known.

@@ -7,7 +7,7 @@ from flask import (Blueprint, jsonify, redirect, render_template, request,
                    session, url_for)
 
 from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
-               discover, ebookmeta, formats, notify, recommend, tagging)
+               discover, ebookmeta, formats, notify, recommend, tagging, titles)
 
 log = logging.getLogger("stackarr.routes")
 
@@ -729,12 +729,8 @@ def book_page(asin):
     # duplicate/upgrade: which formats of this title you already own
     owned_formats = []
     if formats.multi() and b.get("title"):
-        a1 = (b.get("author") or "").split(",")[0].strip().lower()
         with db.conn() as c:
-            for r in c.execute("SELECT DISTINCT format FROM library WHERE gone_at IS NULL "
-                               "AND lower(title)=? AND (?='' OR lower(author) LIKE ?)",
-                               ((b["title"] or "").strip().lower(), a1, f"%{a1}%")):
-                owned_formats.append(r["format"])
+            owned_formats = sorted({r["format"] for r in _library_works(c, b["title"], b.get("author", ""))})
     return render_template("book.html", b=b, rate_key=key, owned_formats=owned_formats,
                            community=db.community_rating(key), reviews=db.reviews_for(key),
                            my_stars=(my["stars"] if my else 0), my_review=(my["review"] if my else ""),
@@ -907,7 +903,7 @@ def api_series_add():
     if _needs_approval(u):
         return jsonify(_queue_for_approval(u, {"title": name, "author": author, "format": fmt}, "series"))
     fmts = ["audiobook", "ebook"] if fmt == "both" else [fmt]
-    results = {f: chaptarr.add_and_search(name, author, fmt=f) for f in fmts}
+    results = {f: chaptarr.add_and_search(name, author, fmt=f, series=name) for f in fmts}
     # one request row per format so a partial success (e.g. audiobook ok, ebook
     # fail) isn't overwritten and hidden by the last iteration's result.
     with db.conn() as c:
@@ -1286,23 +1282,35 @@ def _account_ctx(u: dict) -> dict:
 
 
 # ------------------------------------------------------------------- api ---
+def _library_works(c, title, author, fmt=None) -> list[dict]:
+    """The library rows (item_id, title, author, format) that are this book, by
+    the same author — one per format/source it's held in. Library titles are
+    often decorated where the catalogue's aren't ("The Captain: The Last
+    Horizon, Book 1", "House of Blades (Unabridged)") and usually carry no
+    ASIN, so titles are compared with titles.matches(), not exactly. No author,
+    no match: title-only matching gives false positives on common one-word
+    titles (e.g. 'Emergence')."""
+    a = (author or "").split(",")[0].strip().lower()
+    if not a or not (title or "").strip():
+        return []
+    fclause = " AND format=?" if fmt else ""
+    rows = [dict(r) for r in c.execute(
+        "SELECT item_id, title, author, format FROM library WHERE gone_at IS NULL "
+        "AND lower(author) LIKE ?" + fclause, (f"%{a}%",) + ((fmt,) if fmt else ()))]
+    return titles.matches(rows, title)
+
+
 def _owned(c, asin, title, author, fmt=None) -> bool:
-    """True only if the book is really in the library — ASIN match, or exact
-    title AND author match. Title-only matching gives false positives on
-    common one-word titles (e.g. 'Emergence'). When `fmt` is given, the match is
-    restricted to that format, so owning the audiobook doesn't count as owning
-    the ebook (and the other format can still be grabbed)."""
+    """True only if the book is really in the library — ASIN match, or the same
+    work by the same author (see _library_works). When `fmt` is given, the match
+    is restricted to that format, so owning the audiobook doesn't count as
+    owning the ebook (and the other format can still be grabbed)."""
     fclause = " AND format=?" if fmt else ""
     fargs = (fmt,) if fmt else ()
     if asin and c.execute("SELECT 1 FROM library WHERE gone_at IS NULL AND asin=? AND asin<>''" + fclause,
                           (asin,) + fargs).fetchone():
         return True
-    a = (author or "").split(",")[0].strip().lower()
-    if not a:
-        return False
-    return bool(c.execute(
-        "SELECT 1 FROM library WHERE gone_at IS NULL AND lower(title)=? AND lower(author) LIKE ?" + fclause,
-        ((title or "").strip().lower(), f"%{a}%") + fargs).fetchone())
+    return bool(_library_works(c, title, author, fmt))
 
 
 def _ensure_webhook_token() -> str:
@@ -1513,12 +1521,43 @@ def _queue_for_approval(user, item, source):
     return {"ok": True, "pending": True, "detail": "Request sent — an admin will approve it shortly."}
 
 
+def _request_format(book) -> str:
+    """The media format(s) a request applies to — 'audiobook' | 'ebook' | 'both'.
+
+    A catalogue row's `format` is Audible's EDITION string ("Unabridged",
+    "Original_Recording"), NOT a Stackarr media type, and the media cards post
+    the whole row. Taken verbatim it lands in requests.format and hands off a
+    single format, so a 'both' install silently never grabbed the ebook half.
+    Only a real, currently-offered media type is honoured (so an explicit pick
+    from the detail page still wins); anything else falls back to the install's
+    configured mode."""
+    f = ((book or {}).get("format") or "").strip().lower()
+    if f in formats.available():
+        return f
+    if f == "both" and formats.multi():
+        return "both"
+    return formats.mode()
+
+
 def _hand_to_chaptarr(user_id, book, source):
-    fmt = book.get("format") or "audiobook"
+    fmt = _request_format(book)
     user = db.get_user(user_id)
     # Hold non-admin, non-trusted requests for approval instead of grabbing.
+    # A 'both' request stays ONE pending row — api_request_approve fans it out.
     if _needs_approval(user):
-        return _queue_for_approval(user, book, source)
+        return _queue_for_approval(user, dict(book, format=fmt), source)
+    fmts = formats.available() if fmt == "both" else [fmt]
+    if len(fmts) > 1:
+        rmap = {f: _grab_one(user_id, book, f, source) for f in fmts}
+        oks = [f for f in fmts if rmap[f].get("ok")]
+        return {"ok": bool(oks), "ref": "",
+                "detail": (f"Sent as {' + '.join(oks)}." if oks
+                           else rmap[fmts[-1]].get("detail", "Couldn't add right now."))}
+    return _grab_one(user_id, book, fmts[0], source)
+
+
+def _grab_one(user_id, book, fmt, source):
+    """Hand ONE media format to Chaptarr and record its request row."""
     # Bypass Chaptarr if the book is already in a connected library (the user may
     # have added it straight to Audiobookshelf / Kavita / Calibre-Web). Record it
     # as available rather than redundantly asking Chaptarr to grab it.
@@ -1838,7 +1877,15 @@ def api_request_approve(rid):
     # a 'both' request must hand off BOTH formats — chaptarr maps 'both'→audiobook,
     # so the approval path silently dropped the ebook half (the direct path splits).
     fmts = ["audiobook", "ebook"] if book["format"] == "both" else [book["format"]]
-    rmap = {f: chaptarr.add_and_search(book["title"], book["author"], book["asin"], fmt=f) for f in fmts}
+    # bulk requests queued by api_series_add / api_author_add: the row's title is
+    # the series name / "All books by X", not a book title to match
+    if row["source"] == "series":
+        grab = lambda f: chaptarr.add_and_search(book["title"], book["author"], fmt=f, series=book["title"])
+    elif row["source"] == "author":
+        grab = lambda f: chaptarr.add_and_search(book["author"], book["author"], fmt=f)
+    else:
+        grab = lambda f: chaptarr.add_and_search(book["title"], book["author"], book["asin"], fmt=f)
+    rmap = {f: grab(f) for f in fmts}
     ok_any = any(r.get("ok") for r in rmap.values())
     oks = [f for f in fmts if rmap[f].get("ok")]
     res = (rmap[fmts[0]] if len(fmts) == 1
@@ -1983,25 +2030,12 @@ def _push_read_to_source(u, title, author, fmt):
     Kavita…) that this book is finished, so 'Read' in Stackarr propagates back.
     Returns the source's label if it synced, else None — marking locally never
     depends on the push succeeding."""
-    tl = (title or "").strip().lower()
-    if not tl:
-        return None
-    al = (author or "").split(",")[0].strip().lower()
     with db.conn() as c:
-        rows = [dict(r) for r in c.execute(
-            "SELECT item_id,author,format FROM library WHERE lower(title)=? AND gone_at IS NULL", (tl,))]
+        rows = _library_works(c, title, author)
     if not rows:
         return None
-
-    def _score(r):
-        s = 0
-        if (r.get("format") or "audiobook") == fmt:
-            s += 2
-        if al and al in (r.get("author") or "").lower():
-            s += 1
-        return s
-
-    rows.sort(key=_score, reverse=True)
+    # prefer the copy in the format being marked read
+    rows.sort(key=lambda r: (r.get("format") or "audiobook") == fmt, reverse=True)
     row = rows[0]
     item_id, rfmt = row["item_id"], (row.get("format") or "audiobook")
     try:
