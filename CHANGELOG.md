@@ -2,10 +2,12 @@
 
 All notable changes to Stackarr.
 
-## [Unreleased]
+## [1.6.9] - 2026-10-05
 
 Fixes from running Stackarr against Chaptarr's media-split schema (an
-audiobook row and an ebook row per work) with `STACKARR_FORMATS=both`.
+audiobook row and an ebook row per work) with `STACKARR_FORMATS=both`,
+reported with patches and live test results by Mr Hynesy. Also ships the
+cover-serving fix that had been sitting uncommitted since 2026-09-21.
 
 ### Fixed
 - **Requesting one book no longer makes Chaptarr want the author's whole
@@ -39,6 +41,18 @@ audiobook row and an ebook row per work) with `STACKARR_FORMATS=both`.
 - **"Get the rest of the series" and approved series/author requests failed**:
   the series name was matched as a book title. The series' books are now
   monitored and searched (the whole author if Chaptarr doesn't list the series).
+
+- **Covers cost the page its worker threads.** `/coverart` is the target of an
+  `<img>`, and it did an external metadata lookup on the request thread — ~59 of
+  them per `/home` render, one measured at 20.58s against 8 worker threads, so
+  the whole page crawled rather than just the pictures. Misses were never
+  cached, so every render repeated the lot and exhausted Google Books' keyless
+  daily quota. Owned books now serve the art the house already holds: the cover
+  link Calibre-Web's OPDS feed sends for every entry (and Kavita's series cover)
+  is kept in a new `library.cover` column and served same-origin from
+  `/libcover/<ref>`. `/coverart` never calls out on the request thread; unowned
+  books go to a background worker, a miss is remembered for 24h, and a
+  daily-quota 429 opens a circuit breaker instead of being retried per image.
 
 ### Added
 - A portable test suite (`pytest`, no running services needed) — see
