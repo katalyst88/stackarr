@@ -51,6 +51,16 @@ def _first_author(a: str) -> str:
     return (a or "").split(",")[0].strip()
 
 
+def _language() -> str:
+    from . import config
+    return (db.get_meta("language", config.TARGET_LANGUAGE) or "english").lower()
+
+
+def _placeholder(p: dict) -> bool:
+    """Audible lists not-yet-announced books as "Embargo title …" dated 2200."""
+    return (p.get("title") or "").lower().startswith("embargo title") or (p.get("release_date") or "") >= "2100"
+
+
 def from_audible(series_asin: str) -> dict | None:
     """{name, series_asin, source, books: [{seq, asin, title, author, cover,
     release_date}]} for an Audible series, or None."""
@@ -58,7 +68,13 @@ def from_audible(series_asin: str) -> dict | None:
         kids = audible.series_children(series_asin)
         if not kids:
             return None
-        prods = {p["asin"]: p for p in audible.by_asins([a for a, _ in kids])}
+        prods = {p["asin"]: p for p in audible.by_asins([a for a, _ in kids]) if not _placeholder(p)}
+        # editions in another language that share the series product are not
+        # this reader's next book (unless the whole series is in that language)
+        want = _language()
+        if want != "any":
+            same = {a: p for a, p in prods.items() if (p.get("language") or "").lower() in ("", want)}
+            prods = same or prods
         name, by_seq = "", {}
         for asin, seq in kids:
             p = prods.get(asin)
@@ -105,7 +121,7 @@ def series_of(asin: str = "", title: str = "", author: str = "") -> dict:
         return {}
 
     def fetch():
-        a = real or (audible.find_asin(titles.clean(title), _first_author(author)) if title else "")
+        a = real or (audible.find_asin(titles.clean(title), _first_author(author), _language()) if title else "")
         p = audible.by_asin(a) if a else None
         if not p or not p.get("series_asin"):
             return None

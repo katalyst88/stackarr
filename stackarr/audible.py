@@ -172,7 +172,15 @@ def similar(asin: str, num: int = 10) -> list[dict]:
     return []
 
 
-def find_asin(title: str, author: str) -> str:
-    hits = _products({"title": title, "author": author, "num_results": 1,
+def find_asin(title: str, author: str, language: str = "") -> str:
+    """The ASIN of (title, author). With `language` ("english"; "any" or ""
+    for no preference) the first hit IN that language wins: Audible ranks a
+    "Dungeon Crawler Carl (German Edition)" alongside the original, and the
+    first result decided which edition's series map Up Next showed."""
+    hits = _products({"title": title, "author": author, "num_results": 10 if language else 1,
                       "response_groups": "product_attrs"})
+    want = (language or "").lower()
+    if want and want != "any":
+        same = [h for h in hits if (h.get("language") or "").lower() in ("", want)]
+        hits = same or hits
     return hits[0].get("asin", "") if hits else ""
