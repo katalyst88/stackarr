@@ -245,14 +245,14 @@ def suggestions_page():
     except Exception:
         recently_added = []
     with db.conn() as c:
-        recent_requests = [dict(r) for r in c.execute(
-            "SELECT title, author, cover, status, asin FROM requests WHERE user_id=? "
-            "ORDER BY id DESC LIMIT 14", (u["id"],))]
+        recent_rows = [dict(r) for r in c.execute(
+            "SELECT * FROM requests WHERE user_id=? ORDER BY id DESC LIMIT 80", (u["id"],))]
         rated_count = c.execute("SELECT COUNT(*) FROM ratings WHERE user_id=?", (u["id"],)).fetchone()[0]
         onboard_off = bool(c.execute(
             "SELECT 1 FROM signals WHERE user_id=? AND kind='onboard_dismissed'", (u["id"],)).fetchone())
     # quick-rate onboarding: only when taste is thin and not dismissed
     onboard_books = [] if (rated_count >= ONBOARD_THRESHOLD or onboard_off) else _onboarding_books(u)
+    recent_requests = group_requests(recent_rows)[:14]      # one card per book, current status
     with db.conn() as c:
         vibes_done = bool(c.execute("SELECT 1 FROM signals WHERE user_id=? AND kind='vibes_done'", (u["id"],)).fetchone())
     show_vibes = not vibes_done and rated_count < ONBOARD_THRESHOLD
@@ -291,28 +291,76 @@ def discover_page():
     return render_template("discover.html")
 
 
+def _work_key(r) -> tuple:
+    """Which book a request row is about: its user + the title without edition
+    or series decoration + first author. Bulk "Full series:" / "All books by"
+    rows are their own book."""
+    return (r.get("user_id"), titles.parts(r.get("title") or "")[0], _first(r.get("author")).lower())
+
+
+def group_requests(rows: list[dict]) -> list[dict]:
+    """Request rows as ONE entry per book per user, newest first: the latest
+    row per format is current, older rows are its history (a failed try that
+    a later request superseded, say). Each entry: {id, ids, title, author,
+    cover, asin, username, formats, current, history, st, retry_id}, with
+    `st` from status.for_request_group — the same answer the book page gives.
+    Groups the rows already in the database too, so nothing is deleted."""
+    groups = {}
+    for r in sorted(rows, key=lambda x: x["id"], reverse=True):
+        groups.setdefault(_work_key(r), []).append(r)
+    out = []
+    for rs in groups.values():
+        latest, current, history = rs[0], {}, []
+        for r in rs:                                  # newest first
+            f = r.get("format") or "audiobook"
+            if f not in current:
+                current[f] = r
+            else:
+                history.append(r)
+        cur = list(current.values())
+        st = status.for_request_group(cur)
+        failed = [r for r in cur if r["status"] in ("failed", "denied")]
+        out.append({"id": latest["id"], "ids": [r["id"] for r in rs], "title": latest["title"],
+                    "author": latest.get("author") or "", "asin": next((r["asin"] for r in rs if r.get("asin")), ""),
+                    "cover": next((r["cover"] for r in rs if r.get("cover")), ""),
+                    "username": latest.get("username") or "", "formats": sorted(current),
+                    "current": cur, "history": history, "st": st,
+                    # the status line's own words; nothing once it's in the library (the
+                    # row's stored "Sent to Chaptarr…" is stale by then)
+                    "detail": "" if st["state"] in ("available", "none") else (st.get("detail") or ""),
+                    "retry_id": failed[0]["id"] if failed else None,
+                    "approval": any(r["status"] == "pending_approval" for r in cur)})
+    return out
+
+
 @bp.route("/requests")
 @auth.login_required
 def requests_page():
+    """Your requests — one entry per book, its formats and where each stands
+    (status.py), earlier attempts folded under it. ?wanted=1 lists only books
+    whose current attempt failed; admins add ?all=1 for everyone's."""
     u = auth.current_user()
     admin = u["role"] == "admin"
     wanted = bool(request.args.get("wanted"))            # Sonarr-style: couldn't-grab list
-    where = "WHERE status='failed'" if wanted else "WHERE 1=1"
     with db.conn() as c:
         if admin and request.args.get("all"):
-            rows = [dict(r) for r in c.execute(f"SELECT r.*, u.username FROM requests r "
-                    f"JOIN users u ON u.id=r.user_id {where.replace('status','r.status')} ORDER BY r.id DESC LIMIT 200")]
+            rows = [dict(r) for r in c.execute("SELECT r.*, u.username FROM requests r "
+                    "JOIN users u ON u.id=r.user_id ORDER BY r.id DESC LIMIT 600")]
         else:
-            rows = [dict(r) for r in c.execute(f"SELECT * FROM requests {where} AND user_id=? ORDER BY id DESC LIMIT 200", (u["id"],))]
+            rows = [dict(r) for r in c.execute(
+                "SELECT * FROM requests WHERE user_id=? ORDER BY id DESC LIMIT 600", (u["id"],))]
         # admins get the approval queue (everyone's pending requests)
         approvals = []
         if admin:
             approvals = [dict(r) for r in c.execute(
                 "SELECT r.*, u.username FROM requests r JOIN users u ON u.id=r.user_id "
                 "WHERE r.status='pending_approval' ORDER BY r.id")]
+    entries = group_requests(rows)
+    if wanted:
+        entries = [e for e in entries if e["retry_id"]]
     # a normal user shouldn't see their pending_approval rows twice; they already
-    # appear in their own list with a 'pending_approval' status badge.
-    return render_template("requests.html", requests=rows, admin=admin, wanted=wanted,
+    # appear in their own list with a 'Needs approval' status.
+    return render_template("requests.html", requests=entries, admin=admin, wanted=wanted,
                            approvals=approvals)
 
 
@@ -1032,10 +1080,8 @@ def api_series_request_remaining():
         with db.conn() as c:
             for b in todo:
                 fmt = "both" if len(b["need"]) > 1 else b["need"][0]
-                c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,source,format) "
-                          "VALUES (?,?,?,?,?,?,?,?,?)",
-                          (u["id"], b.get("asin", ""), b["title"], b["author"], b.get("cover", ""),
-                           "pending_approval", "Waiting for an admin to approve", "series_book", fmt))
+                db.record_request(c, u["id"], b, fmt, "pending_approval", "Waiting for an admin to approve",
+                                  source="series_book")
         try:     # one heads-up for the batch, not one per book
             notify.request_pending({"title": f"{len(todo)} books from {name}", "author": v["author"],
                                     "format": fmts[0]}, u.get("username", "A user"), db.admin_emails(), _base_url())
@@ -1056,8 +1102,9 @@ def api_series_request_remaining():
                 rows.append((u["id"], b.get("asin", ""), b["title"], b["author"], b.get("cover", ""), status,
                              r.get("detail", ""), res.get("ref", ""), "series_book", f))
     with db.conn() as c:
-        c.executemany("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
-                      "VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+        for r in rows:          # one row per book + format: a failed earlier try is updated, not duplicated
+            db.record_request(c, r[0], {"asin": r[1], "title": r[2], "author": r[3], "cover": r[4]},
+                              r[9], r[5], r[6], r[7], r[8])
     failed = [r for r in rows if r[5] == "failed"]
     if sent:
         detail = f"Requested {len(todo)} book{'s' if len(todo) != 1 else ''} from “{name}” — Chaptarr is searching now."
@@ -1858,12 +1905,13 @@ def _queue_for_approval(user, item, source):
     """Record a request that needs an admin's approval and ping the admins.
     `item` has title/author and optionally asin/cover/format. Used by both
     single-book grabs and the bulk series/author 'add all' paths."""
+    fmt = item.get("format", "audiobook")
     with db.conn() as c:
-        c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,source,format) "
-                  "VALUES (?,?,?,?,?,?,?,?,?)",
-                  (user["id"], item.get("asin", ""), item["title"], item.get("author", ""),
-                   item.get("cover", ""), "pending_approval", "Waiting for an admin to approve",
-                   source, item.get("format", "audiobook")))
+        if db.open_request(c, user["id"], item.get("asin", ""), item["title"], fmt):
+            return {"ok": True, "pending": True, "duplicate": True,
+                    "detail": "Already requested — it's waiting for an admin or with Chaptarr."}
+        db.record_request(c, user["id"], item, fmt, "pending_approval", "Waiting for an admin to approve",
+                          source=source)
     try:
         notify.request_pending(item, user.get("username", "A user"), db.admin_emails(), _base_url())
     except Exception as e:
@@ -1913,18 +1961,15 @@ def _grab_one(user_id, book, fmt, source):
     # as available rather than redundantly asking Chaptarr to grab it.
     with db.conn() as c:
         if _owned(c, book.get("asin", ""), book.get("title", ""), book.get("author", ""), fmt=fmt):
-            c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,source,format) "
-                      "VALUES (?,?,?,?,?,?,?,?,?)",
-                      (user_id, book.get("asin", ""), book["title"], book.get("author", ""),
-                       book.get("cover", ""), "available", "Already in your library", source, fmt))
+            db.record_request(c, user_id, book, fmt, "available", "Already in your library", source=source)
             return {"ok": True, "detail": "Already in your library — marked available."}
+        # asked again while Chaptarr is still on it: no second row, no second search
+        if db.open_request(c, user_id, book.get("asin", ""), book.get("title", ""), fmt):
+            return {"ok": True, "duplicate": True, "detail": "Already requested — Chaptarr is on it."}
     res = chaptarr.add_and_search(book["title"], book.get("author", ""), book.get("asin", ""), fmt=fmt)
-    status = "handed" if res["ok"] else "failed"
+    st = "handed" if res["ok"] else "failed"
     with db.conn() as c:
-        c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
-                  "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                  (user_id, book.get("asin", ""), book["title"], book.get("author", ""),
-                   book.get("cover", ""), status, res.get("detail", ""), res.get("ref", ""), source, fmt))
+        db.record_request(c, user_id, book, fmt, st, res.get("detail", ""), res.get("ref", ""), source)
     return res
 
 
@@ -2168,18 +2213,21 @@ def api_onboard_dismiss():
 @bp.route("/api/requests/status")
 @auth.login_required
 def api_requests_status():
-    """Live per-request status, merging the stored status with Chaptarr's queue
-    (downloading / importing) so the Requests page shows real progress."""
+    """Live status of your requests that are still on their way, by Requests
+    page entry id (the newest row of each book): {id: {label, cls, detail,
+    formats: {fmt: {label, cls, detail}}}} — status.py, with Chaptarr's queue
+    (cached 30 s). The page polls this to keep progress fresh."""
     u = auth.current_user()
     with db.conn() as c:
         rows = [dict(r) for r in c.execute(
-            "SELECT id,title,status FROM requests WHERE user_id=? AND status IN ('queued','handed')", (u["id"],))]
-    live = chaptarr.queue_status() if rows else {}
+            "SELECT * FROM requests WHERE user_id=? ORDER BY id DESC LIMIT 600", (u["id"],))]
     out = {}
-    for r in rows:
-        t = (r["title"] or "").lower().strip()
-        hit = next((v for k, v in live.items() if t and (t in k or k in t)), None)
-        out[r["id"]] = hit or r["status"]
+    for e in group_requests(rows):
+        if any(r["status"] in db.OPEN_REQUEST for r in e["current"]):
+            st = e["st"]
+            out[e["id"]] = {"state": st["state"], "label": st["label"], "cls": st["cls"], "detail": st["detail"],
+                            "formats": {f: {k: v.get(k) for k in ("state", "label", "cls", "detail")}
+                                        for f, v in st["formats"].items()}}
     return jsonify(out)
 
 
@@ -2314,9 +2362,7 @@ def api_retry_all():
         rows = [dict(r) for r in c.execute(
             "SELECT * FROM requests WHERE user_id=? AND status='failed' ORDER BY id", (u["id"],))]
     ok = 0
-    for row in rows:
-        with db.conn() as c:
-            c.execute("DELETE FROM requests WHERE id=?", (row["id"],))
+    for row in rows:          # the retry updates each failed row in place (db.record_request)
         res = _hand_to_chaptarr(u["id"], row, row.get("source", "manual"))
         if res.get("ok"):
             ok += 1
@@ -2338,7 +2384,6 @@ def api_retry(rid):
         if row["status"] not in ("failed", "denied"):
             return jsonify({"error": "Only failed requests can be retried."}), 400
         was_denied = row["status"] == "denied"
-        c.execute("DELETE FROM requests WHERE id=?", (rid,))
     # a denial is an explicit admin decision — re-requesting it goes BACK through
     # approval (unless the requester is admin), never straight to a grab.
     if was_denied and u["role"] != "admin":

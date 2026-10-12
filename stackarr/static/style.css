@@ -219,6 +219,12 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
 .req-info { flex: 1; min-width: 0; }
 .req-title { font-weight: 700; }
 .req-author, .req-detail { color: var(--subtle); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.req-status { display: flex; flex-wrap: wrap; gap: 6px; margin: 5px 0 2px; }
+.req-cover-link { flex: none; line-height: 0; }
+.req-history { margin-top: 4px; font-size: 12px; color: var(--subtle); }
+.req-history summary { cursor: pointer; width: fit-content; }
+.req-history ul { margin: 4px 0 0; padding-left: 16px; }
+.req-history li { margin: 2px 0; overflow-wrap: anywhere; }
 .req-actions { display: flex; gap: 8px; }
 
 /* ---------- insights ---------- */
