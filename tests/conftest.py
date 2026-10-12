@@ -22,11 +22,14 @@ from stackarr import chaptarr, db  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _fresh_status_cache():
-    """status.py caches Chaptarr's queue for 30 s — never across tests."""
-    from stackarr import status
+    """status.py caches Chaptarr's queue for 30 s and the book page its
+    catalogue lookups for 10 min — never across tests."""
+    from stackarr import routes, status
     status.reset_cache()
+    routes._BOOK_META.clear()
     yield
     status.reset_cache()
+    routes._BOOK_META.clear()
 
 
 @pytest.fixture
