@@ -16,8 +16,10 @@ book said "Requested" on one page and "Downloading" on the next.
   waiting      Waiting         Chaptarr is holding the release (a delay
                                profile, a tracker check) — reason attached
   requested    Requested       handed to Chaptarr, searching
-  not_found    Not found yet   handed STALE_DAYS ago, never reached the queue
-                               (e.g. only VIP-only or no releases)
+  not_found    Not found yet   no usable release: the background release check
+                               found none / only rejected ones, or the request
+                               is STALE_DAYS old and never reached the queue
+  unavailable  Not available   every release is VIP-only on the tracker
   pending      Needs approval  waiting for an admin
   failed       Failed          the handoff failed (retryable)
   denied       Not approved    an admin declined it
@@ -50,6 +52,7 @@ LABELS = {
     "waiting": ("Waiting", "waiting"),
     "requested": ("Requested", "handed"),
     "not_found": ("Not found yet", "stalled"),
+    "unavailable": ("Not available", "failed"),
     "pending": ("Needs approval", "pending_approval"),
     "failed": ("Failed", "failed"),
     "denied": ("Not approved", "denied"),
@@ -57,7 +60,7 @@ LABELS = {
     "none": ("", ""),
 }
 # most advanced first — the overall state of a book that isn't in the library
-ORDER = ("downloading", "importing", "stalled", "waiting", "requested", "not_found",
+ORDER = ("downloading", "importing", "stalled", "waiting", "requested", "not_found", "unavailable",
          "pending", "failed", "denied")
 OPEN = ("queued", "handed", "approving")            # stored statuses Chaptarr is working on
 FMT_NAME = {"audiobook": "Audiobook", "ebook": "eBook"}
@@ -141,6 +144,13 @@ def _format_state(fmt, owned, rows, queue_fn, title, author, asin) -> dict:
             if s == "failed":
                 return _entry("failed", hit.get("reason") or "The download failed in Chaptarr")
             return _entry(s if s in LABELS else "downloading")
+        # what the background release check (releasecheck.py) found, if it looked
+        from . import releasecheck
+        rc = releasecheck.result(r.get("id")) if r.get("id") else None
+        if rc and rc.get("kind") == "vip":
+            return _entry("unavailable", f"Not available: {rc['detail']}")
+        if rc and rc.get("kind") in ("none", "rejected"):
+            return _entry("not_found", rc["detail"] + f" (checked {tz.fmt_epoch(rc.get('at'))})")
         days = _days_since(r.get("created_at") or "")
         if days >= STALE_DAYS:
             return _entry("not_found", f"Chaptarr has searched for {int(days)} days without a usable release "

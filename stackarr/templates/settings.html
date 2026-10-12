@@ -44,6 +44,15 @@
         <datalist id="tz-list">{% for z in timezones %}<option value="{{ z }}">{% endfor %}</datalist>
         <button class="btn" onclick="Stackarr.saveTimezone(this)">Save</button>
       </div>
+      <div class="panel"><h3>Stuck requests</h3>
+        <label class="row"><span>Check why a request isn't downloading</span>
+          <input type="checkbox" class="switch" {{ 'checked' if release_check }}
+                 onchange="Stackarr.setSetting({release_check: this.checked})"></label>
+        <p class="muted">A quarter of an hour after a request goes to Chaptarr, if nothing is downloading,
+          Stackarr asks Chaptarr once for that book's releases and says why in plain words (for example
+          <i>Not available: VIP-only on the tracker</i>). It looks again once a day. Each look is one indexer search,
+          one book a minute at most, in the background.</p>
+      </div>
       {% endif %}
     </div>
 

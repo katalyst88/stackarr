@@ -99,6 +99,14 @@ def fmt(s, pattern: str = "%Y-%m-%d %H:%M") -> str:
     return d.strftime(pattern) if d else (str(s or "")[:16])
 
 
+def fmt_epoch(sec, pattern: str = "%d %b %H:%M") -> str:
+    """Epoch seconds, formatted in the zone ("" if missing)."""
+    try:
+        return datetime.datetime.fromtimestamp(float(sec), tz=zone()).strftime(pattern)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return ""
+
+
 def days_ago(ms) -> int:
     """Whole calendar days between an epoch-ms moment and today, in the zone
     ("today" = 0, "yesterday" = 1), not 24-hour blocks."""

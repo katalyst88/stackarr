@@ -1605,6 +1605,7 @@ def settings_page():
                            hide_rated_history=db.get_pref(auth.current_user()["id"], "hide_rated_history", "0") == "1",
                            format_mode=formats.mode(),
                            timezone=tz.name(), timezones=tz.zones(), timezone_default=tz.default_name(),
+                           release_check=db.get_meta("release_check", "1") == "1",
                            cross_format_taste=db.get_pref(auth.current_user()["id"], "cross_format_taste", "0") == "1",
                            adventurousness=db.get_meta(f"adventurousness_{auth.current_user()['id']}", str(config.ADVENTUROUSNESS)),
                            log_level=config.LOG_LEVEL,
@@ -2758,7 +2759,7 @@ SETTING_KEYS = {
 }
 BOOL_KEYS = {"email_enabled", "discord_enabled",
              "notify_avail_enabled", "notify_newrelease_enabled",
-             "abs_ebooks", "koreader_sync"}
+             "abs_ebooks", "koreader_sync", "release_check"}
 # per-user boolean preferences (written via /api/prefs, never the global endpoint)
 USER_BOOL_PREFS = {"cross_format_taste", "hide_rated_history"}
 # per-user email notification toggles (also via /api/prefs)

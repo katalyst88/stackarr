@@ -544,4 +544,6 @@ def _daily_user_sync():
 def start():
     threading.Thread(target=_loop, name="stackarr-worker", daemon=True).start()
     threading.Thread(target=_cover_worker, name="stackarr-covers", daemon=True).start()
+    from . import releasecheck
+    threading.Thread(target=releasecheck.worker, name="stackarr-releases", daemon=True).start()
     log.info("background worker started (every %d min)", config.LIBRARY_REFRESH_MINUTES)
