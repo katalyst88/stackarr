@@ -96,9 +96,9 @@
          data-title="{{ b.title }}" data-seq="{{ b.sequence if b.sequence is not none else '' }}"></section>
 {% endif %}
 
-{# below-the-fold: repeat the primary grab actions so they're reachable after reading #}
+{# below-the-fold: a way back up (the grab actions live once, at the top — repeating
+   them here showed every Add button twice) #}
 <div class="book-actions-bottom">
-  {{ grab_actions() }}
   <button class="btn ghost" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑ Back to top</button>
 </div>
 
