@@ -511,14 +511,33 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
 .series-badge.available { background: rgba(94,234,212,.16); color: #5eead4; }
 .series-badge.handed { background: rgba(217,140,63,.18); color: var(--accent); }
 /* "Next in <series>" (book page) / "Continue <series>" (Home) */
+.series-strip-wrap { max-width: 860px; padding: 16px 18px 18px; border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg2));
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-left: 3px solid var(--accent); }
 .book-detail ~ .series-strip-wrap { margin-top: 34px; }
 .series-strip-head { flex-wrap: wrap; gap: 8px 14px; }
+.series-strip-head h3 { font-size: 19px; }
+.series-strip-head .series-next-label { display: block; margin-bottom: 3px; }
 .series-strip-head .subtle { font-size: 13px; font-weight: 400; margin-left: 6px; }
 .series-strip { display: grid; gap: 18px; grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 820px; }
 .series-strip .media-foot .btn { display: block; width: 100%; margin-top: 9px; }
 .corner-badge.upcoming { background: rgba(167,139,250,.55); }
+/* "Request remaining" confirm (in the shared in-app modal) */
+.rr-intro { margin-top: 0; }
+.rr-fmt { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 12px; }
+.rr-fmt label { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.rr-fmt input, .rr-item input { accent-color: var(--accent); margin: 0; flex: none; }
+.rr-list { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; margin: 4px 0 10px; }
+.rr-item { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 9px; padding: 8px 10px; border-radius: 9px;
+  background: var(--bg3); border: 1px solid var(--line); cursor: pointer; font-size: 14px; }
+.rr-title { flex: 1 1 9em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rr-fmts, .rr-status { font-size: 12px; color: var(--subtle); white-space: nowrap; margin-left: auto; }   /* wraps under a long title */
+.rr-item.is-off { opacity: .55; cursor: default; background: transparent; }
+.rr-item.is-off .missing-seq { color: var(--subtle); }
+.rr-note { font-size: 12.5px; line-height: 1.45; margin: 6px 0; }
 @media (max-width: 640px) {
   .series-strip { gap: 10px; }
+  .series-strip-wrap { padding: 12px 12px 14px; }
   .series-strip .media-foot { padding: 8px 9px 10px; }
   .series-strip .media-title { font-size: 13px; }
   .series-strip .media-author { font-size: 12px; }

@@ -26,6 +26,7 @@ log = logging.getLogger("stackarr.series")
 CACHE_TTL = 24 * 3600
 MISS_TTL = 3600
 STRIP = 3              # books on a "Next in" strip
+MAX_REQUEST = 10       # books one "Request remaining" may send
 MEDIA = ("audiobook", "ebook")
 DRAMATIZED = ("dramatized", "graphic audio", "graphicaudio", "[ga]", "radio play")
 
@@ -188,3 +189,27 @@ def strip(books: list[dict], after: float | None = None, n: int = STRIP) -> tupl
     done = [b["seq"] for b in books if b.get("finished")]
     start = max(done) if done else after
     return start, [b for b in books if start is None or b["seq"] > start][:n]
+
+
+def plan(books: list[dict], fmts: list[str], cap: int = MAX_REQUEST) -> dict:
+    """What "Request remaining" would send, in series order: {todo: books with
+    `need` (the formats to request), more: how many past the cap, skipped:
+    books with `why` (finished | upcoming | owned | requested)}. A book is
+    skipped when you've finished it, it isn't out yet, or every format asked
+    for is already in the library or requested. The confirm dialog
+    (Stackarr.requestRemaining) computes the same plan client-side to list the
+    exact books; the server recomputes it before sending anything."""
+    todo, skipped = [], []
+    for b in books:
+        if b.get("finished"):
+            skipped.append(dict(b, why="finished"))
+            continue
+        if b.get("upcoming"):
+            skipped.append(dict(b, why="upcoming"))
+            continue
+        need = [f for f in fmts if f not in b.get("owned", []) and f not in b.get("requested", [])]
+        if not need:
+            skipped.append(dict(b, why="owned" if any(f in b.get("owned", []) for f in fmts) else "requested"))
+            continue
+        todo.append(dict(b, need=need))
+    return {"todo": todo[:cap], "more": max(len(todo) - cap, 0), "skipped": skipped}

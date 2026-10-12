@@ -46,7 +46,7 @@ if (!url) fail("strip never asked /api/series/next: " + JSON.stringify(w.calls))
 for (const p of ["asin=B0BVMW49D1", "series_asin=B0BVQ26GG1", "seq=1.0"])
   if (!url.includes(p)) fail(`series target missing ${p}: ${url}`);
 if (el.hidden) fail("strip stayed hidden");
-if (!el.querySelector("h3").textContent.startsWith("Next in The Last Horizon")) fail("heading: " + el.querySelector("h3").textContent);
+if (!el.querySelector("h3").textContent.includes("Next in The Last Horizon")) fail("heading: " + el.querySelector("h3").textContent);
 if (!el.querySelector("h3 .subtle").textContent.includes("after #1 The Captain")) fail("no 'after #1' context");
 const cards = [...el.querySelectorAll(".series-strip .media-card")];
 if (cards.length !== 3) fail("expected 3 cards, got " + cards.length);

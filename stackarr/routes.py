@@ -3,7 +3,7 @@
 import logging
 import re
 
-from flask import (Blueprint, jsonify, redirect, render_template, request,
+from flask import (Blueprint, jsonify, make_response, redirect, render_template, request,
                    session, url_for)
 
 from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
@@ -923,7 +923,8 @@ def _series_view(u, t: dict) -> dict | None:
     return {"ok": True, "series": data.get("name") or t["series"], "series_asin": data.get("series_asin", ""),
             "source": data.get("source", ""), "author": t["author"] or _first(books[0]["author"]),
             "after": start, "after_title": after["title"] if after else "", "books": books, "next": nxt,
-            "formats": formats.available(), "multi": formats.multi()}
+            "formats": formats.available(), "multi": formats.multi(), "cap": seriesmap.MAX_REQUEST,
+            "needs_approval": _needs_approval(u)}
 
 
 def _first(author: str) -> str:
@@ -977,6 +978,99 @@ def api_series_continue():
     return jsonify({"ok": False})
 
 
+def _remaining_formats(f) -> list[str]:
+    """Formats a "Request remaining" asks for: the dialog's pick when it's on
+    offer ('both' only when both are), else every format this install offers."""
+    f = (f or "").strip().lower()
+    if f in formats.available():
+        return [f]
+    return formats.available()
+
+
+@bp.route("/api/series/request-remaining", methods=["POST"])
+@auth.login_required
+def api_series_request_remaining():
+    """Request the books of a series you don't have yet — exactly the ones the
+    confirm dialog listed (`keys`), never anything else by the author.
+
+    The server recomputes the plan (seriesmap.plan) and sends only books that
+    are BOTH in it and confirmed: finished, owned, already-requested and
+    not-yet-released books are skipped, at most MAX_REQUEST per click. Each book
+    gets its own request row per format, so each flips to available on its own.
+    Chaptarr monitors just those books (one search per format) — unlike the
+    deprecated /api/series/add, which monitored every row in the series and
+    fell back to the author's whole backlist. Non-admins go through the usual
+    approval gate: one pending row per book, one notification."""
+    u = auth.current_user()
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"ok": False, "detail": "Bad request."}), 400
+    keys = body.get("keys")
+    if not isinstance(keys, list) or not keys or not all(isinstance(k, str) for k in keys):
+        return jsonify({"ok": False, "detail": "Confirm which books to request."}), 400
+    t = _series_target(body)
+    if not (t["asin"] or t["series_asin"] or (t["series"] and t["author"]) or (t["title"] and t["author"])):
+        return jsonify({"ok": False, "detail": "Name a book or a series."}), 400
+    wait = _cooldown("series_remaining", 10)
+    if wait:
+        return jsonify({"ok": False, "detail": f"Just requested — try again in {wait}s."}), 429
+    v = _series_view(u, t)
+    if not v:
+        return jsonify({"ok": False, "detail": "Couldn't place this series in the catalogue."})
+    fmts = _remaining_formats(body.get("format"))
+    want = set(keys)
+    # confirmed AND in the plan, then capped: the dialog may tick a book past the
+    # first ten (after unticking others), so cap after intersecting, not before
+    todo = [b for b in seriesmap.plan(v["books"], fmts, cap=len(v["books"]))["todo"]
+            if b["key"] in want][:seriesmap.MAX_REQUEST]
+    name = v["series"]
+    if not todo:
+        return jsonify({"ok": False, "detail": f"Nothing left to request in “{name}” — those books are in the "
+                                               "library, requested or not out yet."})
+    for b in todo:
+        b["author"] = _first(b.get("author")) or v["author"]
+
+    if _needs_approval(u):
+        with db.conn() as c:
+            for b in todo:
+                fmt = "both" if len(b["need"]) > 1 else b["need"][0]
+                c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,source,format) "
+                          "VALUES (?,?,?,?,?,?,?,?,?)",
+                          (u["id"], b.get("asin", ""), b["title"], b["author"], b.get("cover", ""),
+                           "pending_approval", "Waiting for an admin to approve", "series_book", fmt))
+        try:     # one heads-up for the batch, not one per book
+            notify.request_pending({"title": f"{len(todo)} books from {name}", "author": v["author"],
+                                    "format": fmts[0]}, u.get("username", "A user"), db.admin_emails(), _base_url())
+        except Exception as e:
+            log.debug("pending-approval notify failed: %s", e)
+        return jsonify({"ok": True, "pending": True, "count": len(todo),
+                        "detail": f"Sent {len(todo)} book{'s' if len(todo) != 1 else ''} from “{name}” "
+                                  "for an admin to approve."})
+
+    rows, sent = [], 0
+    for f in fmts:
+        for author in dict.fromkeys(b["author"] for b in todo if f in b["need"]):
+            group = [b for b in todo if f in b["need"] and b["author"] == author]
+            res = chaptarr.add_books(author, [{"title": b["title"], "asin": b.get("asin", "")} for b in group], fmt=f)
+            for b, r in zip(group, res.get("books") or []):
+                status = "available" if r.get("available") else ("handed" if r.get("ok") else "failed")
+                sent += status == "handed"
+                rows.append((u["id"], b.get("asin", ""), b["title"], b["author"], b.get("cover", ""), status,
+                             r.get("detail", ""), res.get("ref", ""), "series_book", f))
+    with db.conn() as c:
+        c.executemany("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+    failed = [r for r in rows if r[5] == "failed"]
+    if sent:
+        detail = f"Requested {len(todo)} book{'s' if len(todo) != 1 else ''} from “{name}” — Chaptarr is searching now."
+        if failed:
+            detail += f" {len(failed)} couldn't be sent — see Requests."
+    else:
+        detail = failed[0][6] if failed else "Chaptarr already has these."
+    return jsonify({"ok": bool(sent) or not failed, "count": len(todo), "detail": detail,
+                    "results": [{"title": r[2], "format": r[9], "status": r[5], "detail": r[6]} for r in rows]})
+
+
 @bp.route("/api/series/repair", methods=["POST"])
 @auth.admin_required
 def api_series_repair():
@@ -1013,7 +1107,19 @@ def api_series_repair():
 @auth.login_required
 def api_series_add():
     """Get the rest of a series: hand its author to Chaptarr, which monitors and
-    searches all their books (covering the remaining entries in the series)."""
+    searches all their books (covering the remaining entries in the series).
+
+    DEPRECATED — the UI uses /api/series/request-remaining. This monitors every
+    row Chaptarr lists for the series (owned books included), falls back to the
+    author's WHOLE backlist when Chaptarr doesn't list the series, and records
+    one "Full series: X" request that never flips to available. Kept, unchanged,
+    for API callers; responses carry a `Deprecation: true` header."""
+    resp = make_response(_series_add())
+    resp.headers["Deprecation"] = "true"
+    return resp
+
+
+def _series_add():
     u = auth.current_user()
     body = request.get_json(force=True)
     name = (body.get("series") or "").strip()
