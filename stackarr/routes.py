@@ -793,6 +793,30 @@ def taste_page():
                            readseed=readseed, removed=removed)
 
 
+_BOOK_META: dict = {}            # asin -> (fetched_at, audible row, audnexus row)
+_BOOK_META_TTL = 600
+
+
+def _catalogue_book(asin) -> tuple[dict, dict]:
+    """(Audible product, Audnexus record) for an ASIN. The two lookups run side
+    by side instead of one after the other (each is a few hundred ms), and a
+    found book is kept for ten minutes, so going back to a book page — or
+    opening it again from another card — doesn't pay for both again."""
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    hit = _BOOK_META.get(asin)
+    if hit and time.time() - hit[0] < _BOOK_META_TTL:
+        return dict(hit[1]), dict(hit[2])
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        fa, fx = ex.submit(audible.by_asin, asin), ex.submit(audnexus.book, asin)
+        b, ax = fa.result() or {}, fx.result() or {}
+    if b.get("title"):
+        if len(_BOOK_META) > 500:
+            _BOOK_META.clear()
+        _BOOK_META[asin] = (time.time(), dict(b), dict(ax))
+    return b, ax
+
+
 @bp.route("/book/<path:asin>")
 @auth.login_required
 def book_page(asin):
@@ -804,10 +828,9 @@ def book_page(asin):
         b["format"] = "ebook"
         b["asin"] = asin            # keep the gb:/ol: id as the page identity for actions
     else:
-        b = audible.by_asin(asin) or {}
+        b, ax = _catalogue_book(asin)
         b.setdefault("asin", asin)
         b.setdefault("format", "audiobook")
-        ax = audnexus.book(asin) or {}
         if ax.get("genres"):
             b["genres"] = ax["genres"]
         if ax.get("series") and not b.get("series"):
@@ -2850,20 +2873,23 @@ def cover(item_id):
     import requests as rq
     try:
         r = rq.get(f"{absclient.abs_url()}/api/items/{item_id}/cover",
-                   headers={"Authorization": f"Bearer {absclient.admin_token()}"}, timeout=20)
+                   headers={"Authorization": f"Bearer {absclient.admin_token()}"}, timeout=8)
         if r.ok and r.content:
             return Response(r.content, mimetype=r.headers.get("Content-Type", "image/jpeg"),
                             headers={"Cache-Control": "max-age=86400"})
     except Exception:
         pass
-    # ABS has no art for this item -> fall back to the Audible cover by title/author
-    try:
-        m = absclient.item_detail(item_id)
-        hits = audible.search(f"{m.get('title','')} {m.get('author','')}", num=1)
-        if hits and hits[0].get("cover"):
-            return redirect(hits[0]["cover"])
-    except Exception:
-        pass
+    # ABS has no art for this item. This used to ask ABS for the item and then
+    # search Audible for it, inline, per <img> — two network calls on a worker
+    # thread for every coverless card (the /coverart rule: an image endpoint
+    # never calls a third party). Hand it to /coverart instead, which answers
+    # from the cover cache or queues the lookup for the background worker.
+    with db.conn() as c:
+        m = c.execute("SELECT title, author, asin FROM library WHERE item_id=?", (item_id,)).fetchone()
+    if m and m["title"]:
+        # nolib: this IS the library copy, so /coverart mustn't send us back here
+        return redirect(url_for("main.coverart", title=m["title"], author=m["author"] or "",
+                                asin=m["asin"] or "", fmt="audiobook", nolib=1))
     return redirect(url_for("static", filename="cover-placeholder.svg"))
 
 
@@ -2896,7 +2922,7 @@ def coverart():
         return redirect(placeholder)
     # 1) Do we own it? Then the art is on one of our own services.
     try:
-        ref = db.library_cover(title, author, asin)
+        ref = "" if request.args.get("nolib") else db.library_cover(title, author, asin)
         if ref:
             return redirect(url_for("main.libcover", ref=ref) if ":" in ref
                             else url_for("main.cover", item_id=ref))

@@ -923,6 +923,8 @@ const Stackarr = (() => {
         loading = false;
         if (!books || !books.length) { done = true; if (sentinel) sentinel.textContent = ""; return; }
         disc.insertAdjacentHTML("beforeend", books.map(mediaCard).join(""));
+        Stackarr.fitCovers();
+        Stackarr.initCovers(disc);               // blank/broken covers fall back on these too
         page++;
       };
       if (sentinel && "IntersectionObserver" in window) {
@@ -941,6 +943,7 @@ const Stackarr = (() => {
         if (discSec) discSec.style.display = "none"; rhead.hidden = false;
         results.innerHTML = books.map(mediaCard).join("") || `<div class="empty"><p>No results.</p></div>`;
         Stackarr.fitCovers();
+        Stackarr.initCovers(results);
       };
       const q = document.getElementById("topsearch");
       if (q) { q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => doSearch(q.value.trim()), 350); }); }
