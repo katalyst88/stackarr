@@ -4,6 +4,48 @@ All notable changes to Stackarr.
 
 ## [Unreleased]
 
+### Consistency pass (field report 2026-10-12)
+
+One answer per book on every page, and the things that "didn't run fluidly".
+
+#### Fixed
+- **Rating stars did nothing** on History, the book page and the Suggestions
+  quick-rate card (also Find missing, Clear, Remove, Add all by author): their
+  `onclick="…{{ x|tojson }}…"` attribute ended at tojson's first `"`. Single-
+  quoted now, with a template guard test. Ratings — and Insights' average and
+  moods — update again.
+- **Cards that linked nowhere.** Home's Read shelf linked 2 of 23 books (only
+  ones with an ASIN; the rest reloaded Home). Every card now opens a book
+  page: its id, an id Stackarr already holds for the work, or `/book/find`,
+  which resolves the title on click (one catalogue search, remembered).
+- **Recently added** linked to the server's internal ABS address
+  (`http://audiobookshelf:80`). It opens the Stackarr book page; "Open in
+  Audiobookshelf" appears only when the new optional Settings → Audiobookshelf
+  → Public URL (or `ABS_PUBLIC_URL`) is set.
+- **Duplicate requests.** One entry per book on Requests and Recent requests,
+  its formats each with a status, earlier attempts folded underneath. A new
+  attempt updates the book's row for that format instead of adding one; asking
+  again while it's open makes no second Chaptarr search. Existing rows are
+  grouped on display — no migration, nothing deleted.
+- **"Requested" here, "Downloading" there.** `status.py` decides for every page:
+  In library / Downloading (% and ETA) / Importing / Stalled / Waiting ("Held
+  by Chaptarr: …") / Requested / Not found yet (a week with no usable release)
+  / Needs approval / Failed / Not approved / Upcoming. Chaptarr's queue is read
+  once per 30 s, only when something on screen is on order.
+- **A book started today wasn't "Currently reading"**: unfinished books under
+  25% progress were dropped. Now from the first minute.
+- **Insights** counted library duplicates (30 finished for 13 books) and
+  disagreed with Home's goal ring; it now uses Home's once-per-book finishes.
+- **Foreign-language editions** cluttered author, search, browse and series
+  pages (Matt Dinniman: 23 of 36). Lists follow Settings → language (default
+  English; "any" keeps all) and show one card per work; series maps prefer the
+  language and drop "Embargo title" placeholders.
+- Covers: no inline Audible search per coverless ABS item; Discover scroll and
+  search results get the blank-cover fallback. Book page lookups run in
+  parallel and are kept ten minutes.
+
+### Series follow-through
+
 Series follow-through and honest fresh picks, reported with field evidence
 and patches.
 
