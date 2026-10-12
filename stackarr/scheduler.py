@@ -430,11 +430,47 @@ def _resolve_one(asin: str, title: str, author: str, fmt: str, key: str):
     db.set_meta(cache_key, "none")
 
 
+# Other small lookups that must never run on a page request ride the same
+# paced worker: ("bookid", title, author, fmt) resolves a card's book page so
+# the next render links straight to it (routes.resolve_book_id).
+_job_q: "queue.Queue[tuple]" = queue.Queue(maxsize=2000)
+_job_seen: set = set()
+
+
+def queue_job(kind: str, *args) -> bool:
+    """Queue a background lookup once per process. True if newly queued."""
+    key = (kind,) + tuple(str(a).lower() for a in args)
+    with _cover_lock:
+        if key in _job_seen:
+            return False
+        _job_seen.add(key)
+    try:
+        _job_q.put_nowait((kind,) + args)
+        return True
+    except queue.Full:
+        with _cover_lock:
+            _job_seen.discard(key)
+        return False
+
+
+def _run_job(kind: str, *args):
+    if kind == "bookid":
+        from . import routes
+        routes.resolve_book_id(*args)
+
+
 def _cover_worker():
     while True:
         try:
-            item = _cover_q.get()
-            _resolve_one(*item)
+            try:
+                item = _cover_q.get(timeout=0.05 if not _job_q.empty() else 5)
+                _resolve_one(*item)
+            except queue.Empty:
+                pass
+            try:
+                _run_job(*_job_q.get_nowait())
+            except queue.Empty:
+                pass
         except Exception as e:
             log.debug("cover worker error: %s", e)
         finally:

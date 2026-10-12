@@ -1278,7 +1278,15 @@ def _shelves_data(u):
                 if a and a in (x.get("author") or "").lower()]
         return bool(same and titles.matches(same, _LEADING_NUM.sub("", title)))
 
-    def _add_reading(title, author, cover, fmt, rkey=""):
+    def _fix(title, author, series, seq, rkey):
+        """(title to show, id) for a library book: the cached series map can
+        put a right title and ASIN on a mangled one ("Reape" → "Reaper")."""
+        t = (title or "").strip()
+        w = series_work(t, author, series, seq) if (series or seq is not None or not _real_book_id(rkey)) else None
+        return display_title(t, w), (rkey if _real_book_id(rkey) else (w or {}).get("asin", "") or rkey)
+
+    def _add_reading(title, author, cover, fmt, rkey="", series="", seq=None):
+        title, rkey = _fix(title, author, series, seq, rkey)
         t = (title or "").strip()
         if not t or t.lower() in seen_titles or _listed(shelves["reading"], t, author):
             return
@@ -1295,7 +1303,8 @@ def _shelves_data(u):
     # finish dates) showed the right count — finished audiobooks never landed here.
     read_titles = {(it.get("title") or "").strip().lower() for it in shelves["read"]}
 
-    def _add_read(title, author, cover, fmt, rkey=""):
+    def _add_read(title, author, cover, fmt, rkey="", series="", seq=None):
+        title, rkey = _fix(title, author, series, seq, rkey)
         t = (title or "").strip()
         if not t or t.lower() in read_titles or _listed(shelves["read"], t, author):
             return
@@ -1304,7 +1313,8 @@ def _shelves_data(u):
                                 "author": author or "", "cover": cover or "", "format": fmt, "auto": True})
     try:
         with db.conn() as c:
-            lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,asin,format FROM library")}
+            lib = {r["item_id"]: dict(r) for r in c.execute(
+                "SELECT item_id,title,author,asin,format,series,series_seq FROM library")}
         fetched = 0
         for h in abs_history(u):
             m = lib.get(h["item_id"]) or {}
@@ -1317,12 +1327,13 @@ def _shelves_data(u):
                 continue
             # pass the real ASIN as the key so the card links to the book page
             rk = (m.get("asin") or "").strip()
+            ser = (m.get("series") or "", m.get("series_seq"))
             if h.get("finished"):
                 _add_read(m["title"], m.get("author", ""), url_for("main.cover", item_id=h["item_id"]),
-                          "audiobook", rkey=rk)
+                          m.get("format") or "audiobook", rk, *ser)
             elif h.get("reading", (h.get("progress") or 0) > 0.02):
                 _add_reading(m["title"], m.get("author", ""), url_for("main.cover", item_id=h["item_id"]),
-                             "audiobook", rkey=rk)
+                             m.get("format") or "audiobook", rk, *ser)
         if formats.show("ebook"):
             from . import backends
             for be in backends.sources("ebook"):
@@ -1331,10 +1342,11 @@ def _shelves_data(u):
                         m = lib.get(h["item_id"]) or {}
                         if not m.get("title"):
                             continue
+                        ser = (m.get("series") or "", m.get("series_seq"))
                         if h.get("finished"):
-                            _add_read(m["title"], m.get("author", ""), "", "ebook")
+                            _add_read(m["title"], m.get("author", ""), "", "ebook", (m.get("asin") or "").strip(), *ser)
                         elif 0.02 < (h.get("progress") or 0) < 1:
-                            _add_reading(m["title"], m.get("author", ""), "", "ebook")
+                            _add_reading(m["title"], m.get("author", ""), "", "ebook", (m.get("asin") or "").strip(), *ser)
                 except Exception:
                     pass
         for it in ebookmeta.hardcover_reading(ebookmeta.hardcover_token()):
@@ -1681,13 +1693,75 @@ def _real_book_id(v) -> str:
     return v if _BOOK_ID.fullmatch(v) else ""
 
 
-def _known_book_id(title, author, fmt="") -> str:
+def _series_rows() -> list[dict]:
+    """Every book of every series map Stackarr has cached (meta "ser:a:…"), as
+    {title, asin, author, series, seq, format} rows — fetched once per request.
+    Up Next and the book pages fill these maps, so for a series the household
+    reads, the ASIN and the catalogue's own title of each position are local."""
+    from flask import g, has_request_context
+    if has_request_context() and getattr(g, "_series_rows", None) is not None:
+        return g._series_rows
+    import json
+    out = []
+    with db.conn() as c:
+        for r in c.execute("SELECT v FROM meta WHERE k LIKE 'ser:a:%'"):
+            try:
+                v = (json.loads(r["v"]) or {}).get("v") or {}
+            except (ValueError, TypeError, AttributeError):
+                continue
+            for b in v.get("books") or []:
+                if _real_book_id(b.get("asin")):
+                    out.append({"title": b.get("title") or "", "asin": b["asin"], "author": b.get("author") or "",
+                                "series": v.get("name") or "", "seq": b.get("seq"), "format": "audiobook"})
+    if has_request_context():
+        g._series_rows = out
+    return out
+
+
+def _series_key(name) -> str:
+    return re.sub(r"^the\s+", "", titles.norm(name))
+
+
+def series_work(title, author, series="", seq=None) -> dict | None:
+    """The cached series-map entry for a library book: by its series + position
+    when the library knows them, else by title within the author's maps. The
+    library's own title can be mangled — Audiobookshelf holds Cradle #10 as
+    "Reape" — so the position is the stronger evidence."""
+    a = _first(author).lower()
+    if not a:
+        return None
+    rows = [r for r in _series_rows() if a in (r["author"] or "").lower()]
+    if series and seq is not None:
+        try:
+            pos = float(seq)
+        except (TypeError, ValueError):
+            pos = None
+        hit = [r for r in rows if pos is not None and r["seq"] == pos and _series_key(r["series"]) == _series_key(series)]
+        if hit:
+            return hit[0]
+    hit = titles.matches(rows, _LEADING_NUM.sub("", title or "")) if title else []
+    return hit[0] if hit else None
+
+
+def display_title(title, work: dict | None) -> str:
+    """The title to show for a library book: the catalogue's when the library's
+    is a truncation of it ("Reape" → "Reaper"), else the library's own."""
+    t = (title or "").strip()
+    if work and work.get("title"):
+        nt, nw = titles.norm(t), titles.norm(work["title"])
+        if len(nt) >= 3 and nw.startswith(nt) and nw != nt:
+            return work["title"]
+    return t
+
+
+def _known_book_id(title, author, fmt="", series="", seq=None) -> str:
     """The catalogue id Stackarr already holds for (title, author), from its own
     tables — no network. Library rows rarely carry an ASIN, but the same work
-    usually has one on a request, a suggestion, a rating or a shelf row, or in
-    the cache the /book/find resolver fills. Same-author, subtitle-tolerant
-    title match (titles.matches), so "Unsouled (Cradle Book 1)" finds the
-    "Unsouled" request's ASIN."""
+    usually has one on a request, a suggestion, a rating or a shelf row, in a
+    cached series map, or in the cache the /book/find resolver fills.
+    Same-author, subtitle-tolerant title match (titles.matches), so "Unsouled
+    (Cradle Book 1)" finds the "Unsouled" request's ASIN; `series` + `seq`
+    place a book the library titles wrongly ("Reape", Cradle #10)."""
     a = _first(author).lower()
     if not a or not (title or "").strip():
         return ""
@@ -1703,9 +1777,10 @@ def _known_book_id(title, author, fmt="") -> str:
                   "SELECT title, rkey AS asin, format FROM shelf WHERE lower(author) LIKE ?",
                   "SELECT title, asin, format FROM library WHERE asin<>'' AND lower(author) LIKE ?"):
             rows += [dict(r) for r in c.execute(q, like) if _real_book_id(r["asin"])]
-    hits = titles.matches(rows, title)
+    hits = titles.matches(rows, _LEADING_NUM.sub("", title))
     if not hits:
-        return ""
+        w = series_work(title, author, series, seq)
+        return w["asin"] if w else ""
     # the page in the card's own format when there is one (an eBook card opens
     # the eBook page), else any id the work has
     same = [h for h in hits if (h.get("format") or "audiobook") == (fmt or "audiobook")]
@@ -1713,52 +1788,68 @@ def _known_book_id(title, author, fmt="") -> str:
 
 
 @bp.app_template_global("book_href")
-def book_href(asin="", title="", author="", fmt="") -> str:
+def book_href(asin="", title="", author="", fmt="", series="", seq=None) -> str:
     """The Stackarr book page for a card — EVERY card, whatever it was built
     from. A real id links straight to /book/<id>; otherwise an id Stackarr
     already knows for the work (_known_book_id); otherwise /book/find, which
-    resolves the title on click. Never "#": that sent 21 of the 23 Home "Read"
-    cards back to Home, because library books rarely carry an ASIN."""
-    bid = _real_book_id(asin) or _known_book_id(title, author, fmt)
+    resolves the title on click — and the background worker is asked to
+    resolve it now, so the next render links straight to the book. Never
+    "#": that sent 21 of the 23 Home "Read" cards back to Home."""
+    bid = _real_book_id(asin) or _known_book_id(title, author, fmt, series, seq)
     if bid:
         return url_for("main.book_page", asin=bid)
     if not (title or "").strip():
         return url_for("main.discover_page")
+    try:
+        from . import scheduler
+        scheduler.queue_job("bookid", title, _first(author), fmt or "")
+    except Exception as e:
+        log.debug("could not queue book id for %s: %s", title, e)
     return url_for("main.book_find", title=title, author=_first(author), fmt=fmt or "")
+
+
+def resolve_book_id(title, author, fmt="") -> str:
+    """ONE catalogue search for (title, author) — same author, same work, in
+    the install's language — remembered in meta ("bookid:…"; a miss for a
+    day). Used by /book/find on click and by the background worker."""
+    import time
+    author = _first(author)
+    key = "bookid:" + db.rating_key("", titles.clean(title), author.lower())
+    have = db.get_meta(key, "")
+    if _real_book_id(have):
+        return have
+    if (have.startswith("none:") and time.time() - float(have[5:] or 0) < 86400) or not author:
+        return ""
+    bid = ""
+    try:
+        want = titles.clean(_LEADING_NUM.sub("", title))
+        if fmt == "ebook" and not formats.show("audiobook"):
+            cands = [dict(x, asin=x.get("id", "")) for x in ebookmeta.search(f"{want} {author}", num=5)]
+        else:
+            cands = audible.search(f"{want} {author}", num=8)
+        cands = [x for x in _in_language(cands)
+                 if _real_book_id(x.get("asin")) and author.lower() in (x.get("author") or "").lower()]
+        hit = titles.matches(cands, want)
+        bid = hit[0]["asin"] if hit else ""
+    except Exception as e:
+        log.debug("book id lookup %r failed: %s", title, e)
+    db.set_meta(key, bid or f"none:{int(time.time())}")
+    return bid
 
 
 @bp.route("/book/find")
 @auth.login_required
 def book_find():
     """Open the book page for a title + author — the link target of a card with
-    no catalogue id. Tries what Stackarr knows, then ONE catalogue search
-    (same author, same work), remembered in meta so the next click is local.
-    When the catalogue can't place it, the Discover search for the title — a
-    page about this book, never Home."""
+    no catalogue id. What Stackarr knows first, then resolve_book_id(). When
+    the catalogue can't place it, the Discover search for the title — a page
+    about this book, never Home."""
     title = (request.args.get("title") or "").strip()
     author = _first(request.args.get("author"))
     fmt = (request.args.get("fmt") or "").strip()
     if not title:
         return redirect(url_for("main.discover_page"))
-    bid = _known_book_id(title, author, fmt)
-    key = "bookid:" + db.rating_key("", titles.clean(title), author.lower())
-    import time
-    miss = db.get_meta(key, "")
-    recent_miss = miss.startswith("none:") and time.time() - float(miss[5:] or 0) < 86400
-    if not bid and author and not recent_miss:
-        try:
-            want = titles.clean(title)
-            if fmt == "ebook" and not formats.show("audiobook"):
-                cands = [dict(x, asin=x.get("id", "")) for x in ebookmeta.search(f"{want} {author}", num=5)]
-            else:
-                cands = audible.search(f"{want} {author}", num=8)
-            cands = [x for x in _in_language(cands)
-                     if _real_book_id(x.get("asin")) and author.lower() in (x.get("author") or "").lower()]
-            hit = titles.matches(cands, title)
-            bid = hit[0]["asin"] if hit else ""
-        except Exception as e:
-            log.debug("book find %r failed: %s", title, e)
-        db.set_meta(key, bid or f"none:{int(time.time())}")
+    bid = _known_book_id(title, author, fmt) or resolve_book_id(title, author, fmt)
     if bid:
         return redirect(url_for("main.book_page", asin=bid))
     return redirect(url_for("main.discover_page", q=f"{titles.clean(title)} {author}".strip()))
