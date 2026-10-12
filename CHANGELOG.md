@@ -23,7 +23,9 @@ All notable changes to Stackarr.
   (never writes it) and searches those books again when it turns on.
 - **Stuck requests**: one background Chaptarr release check per stuck request
   (15 min after hand-off, once a day, one a minute at most; never on a page
-  request) gives the reason: VIP-only, no releases, or every release rejected.
+  request) flags it: "Needs VIP", or "Needs attention · Might need a look in
+  Chaptarr" (no usable release, or a week with none). The reasons stay in
+  Chaptarr; Stackarr doesn't retell them.
 - **Cover style** (Settings): Audible as is, or Clean print covers from Google
   Books / Open Library.
 - **"Fetching cover…"** placeholder: a cover is real or this, and the page

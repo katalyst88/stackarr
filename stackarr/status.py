@@ -16,11 +16,12 @@ book said "Requested" on one page and "Downloading" on the next.
   waiting      Waiting         Chaptarr is holding the release (a delay
                                profile, a tracker check) — reason attached
   requested    Requested       handed to Chaptarr, searching
-  not_found    Not found yet   no usable release: the background release check
+  not_found    Needs attention no usable release: the background release check
                                found none / only rejected ones, or the request
                                is STALE_DAYS old and never reached the queue
   needs_vip    Needs VIP       every release is VIP-only on the indexer
-  unavailable  Not available   every release was rejected (reason attached)
+  unavailable  Needs attention every release was rejected (both say "Might need
+                               a look in Chaptarr", not the reasons)
   pending      Needs approval  waiting for an admin
   failed       Failed          the handoff failed (retryable)
   denied       Not approved    an admin declined it
@@ -43,6 +44,9 @@ from . import chaptarr, db, formats, titles, tz
 
 QUEUE_TTL = 30
 STALE_DAYS = 7
+# Stackarr flags a stuck request; the why lives in Chaptarr (its search, its
+# indexers, its rejections), so the flag points there instead of retelling it.
+CHECK_CHAPTARR = "Might need a look in Chaptarr"
 MEDIA = ("audiobook", "ebook")
 
 LABELS = {
@@ -52,8 +56,8 @@ LABELS = {
     "stalled": ("Stalled", "stalled"),
     "waiting": ("Waiting", "waiting"),
     "requested": ("Requested", "handed"),
-    "not_found": ("Not found yet", "stalled"),
-    "unavailable": ("Not available", "failed"),
+    "not_found": ("Needs attention", "stalled"),
+    "unavailable": ("Needs attention", "failed"),
     "needs_vip": ("Needs VIP", "vip"),
     "pending": ("Needs approval", "pending_approval"),
     "failed": ("Failed", "failed"),
@@ -154,13 +158,12 @@ def _format_state(fmt, owned, rows, queue_fn, title, author, asin) -> dict:
         if rc and rc.get("kind") == "vip_retry":
             return _entry("requested", "Searching again — VIP is on")
         if rc and rc.get("kind") == "rejected":
-            return _entry("unavailable", "Not available: " + rc["detail"][0].lower() + rc["detail"][1:])
+            return _entry("unavailable", CHECK_CHAPTARR)
         if rc and rc.get("kind") == "none":
-            return _entry("not_found", rc["detail"] + f" (checked {tz.fmt_epoch(rc.get('at'))})")
+            return _entry("not_found", CHECK_CHAPTARR)
         days = _days_since(r.get("created_at") or "")
         if days >= STALE_DAYS:
-            return _entry("not_found", f"Chaptarr has searched for {int(days)} days without a usable release "
-                                       "(none found, or only ones it rejects, e.g. VIP-only)")
+            return _entry("not_found", CHECK_CHAPTARR)
         return _entry("requested", "Sent to Chaptarr — searching")
     return _entry("none")
 

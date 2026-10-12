@@ -87,7 +87,8 @@ def test_a_request_that_never_reaches_the_queue_is_not_found_yet(tmp_db, queue):
     db.set_meta("formats", "ebook")
     _req(1, "The Captain", "Will Wight", "handed", "ebook", days_ago=status.STALE_DAYS + 1)
     st = status.for_book("", "The Captain", "Will Wight")
-    assert st["state"] == "not_found" and "VIP-only" in st["detail"]
+    assert st["state"] == "not_found" and st["label"] == "Needs attention" and st["detail"] == "Might need a look in Chaptarr"
+    assert "days" not in st["detail"]
     _req(1, "The Engineer", "Will Wight", "handed", "ebook", days_ago=1)
     assert status.for_book("", "The Engineer", "Will Wight")["state"] == "requested"
 
