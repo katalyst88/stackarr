@@ -8,9 +8,9 @@
     <div class="seg">
       <a class="btn small ghost {{ 'on' if not wanted }}" href="{{ url_for('main.requests_page') }}">All</a>
       <a class="btn small ghost {{ 'on' if wanted }}" href="?wanted=1">Wanted</a>
-      {% if vip_count %}<a class="btn small ghost {{ 'on' if vip_only }}" href="?vip=1" title="Every release is VIP-only — check Chaptarr / indexer">Waiting for VIP <span class="subtle">{{ vip_count }}</span></a>{% endif %}
+      {% if vip_count %}<a class="btn small ghost {{ 'on' if vip_only }}" href="?vip=1" title="Needs VIP — check upstream">Waiting for VIP <span class="subtle">{{ vip_count }}</span></a>{% endif %}
       {% if admin %}<a class="btn small ghost" href="?all=1">All users</a>{% endif %}
-      <button class="btn small ghost" onclick="Stackarr.checkLibraries(this)" title="Re-scan your libraries for books added outside Chaptarr">↻ Check libraries</button>
+      <button class="btn small ghost" onclick="Stackarr.checkLibraries(this)" title="Re-scan your libraries for books added outside Stackarr">↻ Check libraries</button>
       {% if requests | selectattr('retry_id') | list | length %}
       <button class="btn small" onclick="Stackarr.retryAll(this)">↻ Retry all failed</button>
       {% endif %}
@@ -38,7 +38,7 @@
 </section>
 {% endif %}
 {% if vip_only %}
-<p class="muted vip-note">Every release is VIP-only — check Chaptarr / indexer.
+<p class="muted vip-note">Needs VIP — check upstream.
   {% if vip_reflow and vip_reflow.total and vip_reflow.todo %}Searching again: {{ vip_reflow.total - vip_reflow.todo|length }} of {{ vip_reflow.total }} done.{% endif %}
   {% if admin %}<button class="btn small ghost" onclick="Stackarr.vipRecheck(this)">↻ Search these again</button>{% endif %}</p>
 {% endif %}

@@ -1256,11 +1256,11 @@ def api_series_request_remaining():
                               r[9], r[5], r[6], r[7], r[8])
     failed = [r for r in rows if r[5] == "failed"]
     if sent:
-        detail = f"Requested {len(todo)} book{'s' if len(todo) != 1 else ''} from “{name}” — Chaptarr is searching now."
+        detail = f"Requested {len(todo)} book{'s' if len(todo) != 1 else ''} from “{name}” — searching upstream."
         if failed:
             detail += f" {len(failed)} couldn't be sent — see Requests."
     else:
-        detail = failed[0][6] if failed else "Chaptarr already has these."
+        detail = failed[0][6] if failed else "Already requested upstream."
     return jsonify({"ok": bool(sent) or not failed, "count": len(todo), "detail": detail,
                     "results": [{"title": r[2], "format": r[9], "status": r[5], "detail": r[6]} for r in rows]})
 
@@ -1337,7 +1337,7 @@ def _series_add():
     oks = [f for f in fmts if results[f].get("ok")]
     if fmt == "both":
         res = {"ok": bool(oks),
-               "detail": (f"Sent “{name}” to Chaptarr as {' + '.join(oks)}." if oks
+               "detail": (f"Requested “{name}” as {' + '.join(oks)}." if oks
                           else results[fmts[-1]].get("detail", "Couldn't add this series right now."))}
     else:
         res = results[fmts[0]]
@@ -2222,7 +2222,7 @@ def _queue_for_approval(user, item, source):
     with db.conn() as c:
         if db.open_request(c, user["id"], item.get("asin", ""), item["title"], fmt):
             return {"ok": True, "pending": True, "duplicate": True,
-                    "detail": "Already requested — it's waiting for an admin or with Chaptarr."}
+                    "detail": "Already requested — it's waiting for an admin or upstream."}
         db.record_request(c, user["id"], item, fmt, "pending_approval", "Waiting for an admin to approve",
                           source=source)
     try:
@@ -2278,7 +2278,7 @@ def _grab_one(user_id, book, fmt, source):
             return {"ok": True, "detail": "Already in your library — marked available."}
         # asked again while Chaptarr is still on it: no second row, no second search
         if db.open_request(c, user_id, book.get("asin", ""), book.get("title", ""), fmt):
-            return {"ok": True, "duplicate": True, "detail": "Already requested — Chaptarr is on it."}
+            return {"ok": True, "duplicate": True, "detail": "Already requested — it's on its way."}
     res = chaptarr.add_and_search(book["title"], book.get("author", ""), book.get("asin", ""), fmt=fmt)
     # Chaptarr already holds a file for the work (on any of its rows): done
     st = "available" if res.get("available") else ("handed" if res["ok"] else "failed")
@@ -2681,7 +2681,7 @@ def api_retry_all():
         if res.get("ok"):
             ok += 1
     return jsonify({"ok": True, "retried": len(rows), "succeeded": ok,
-                    "detail": f"Retried {len(rows)} — {ok} sent to Chaptarr" if rows else "Nothing to retry"})
+                    "detail": f"Retried {len(rows)} — {ok} sent upstream" if rows else "Nothing to retry"})
 
 
 @bp.route("/api/request/<int:rid>/retry", methods=["POST"])

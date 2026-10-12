@@ -69,9 +69,9 @@ def test_one_check_names_the_reason_everywhere(chap, admin_client):
     assert chap.releases == [{"bookId": 8802}]
     st = status.for_book("", "This Inevitable Ruin", "Matt Dinniman", viewer=admin_client.uid)
     assert st["state"] == "needs_vip" and st["label"] == "Needs VIP"
-    assert "check Chaptarr / indexer" in st["detail"]
+    assert st["detail"] == "Check upstream"
     html = admin_client.get("/requests").get_data(as_text=True)
-    assert "Needs VIP" in html and "VIP-only" in html
+    assert "Needs VIP" in html and "VIP-only" not in html
     assert releasecheck.run_once() == 0                # not again today
     assert len(chap.releases) == 1 and rid
 

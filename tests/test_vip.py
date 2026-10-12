@@ -85,7 +85,7 @@ def test_requests_page_has_a_waiting_for_vip_section(chap, admin_client):
     assert "/help/vip" not in html
     only = admin_client.get("/requests?vip=1").get_data(as_text=True)
     assert "This Inevitable Ruin" in only and "Some Other Book" not in only
-    assert "check Chaptarr / indexer" in only and "Search these again" in only
+    assert "Needs VIP — check upstream" in only and "Search these again" in only
     assert admin_client.get("/help/vip").status_code == 404
 
 
@@ -98,4 +98,4 @@ def test_admin_recheck_button(chap, admin_client):
 def test_settings_says_where_the_switch_is(chap, admin_client):
     vip.poll(now=1000)
     html = admin_client.get("/settings").get_data(as_text=True)
-    assert "Indexer VIP: <b>off</b>" in html
+    assert "Upstream VIP: <b>off</b>" in html

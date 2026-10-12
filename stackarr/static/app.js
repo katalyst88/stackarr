@@ -262,7 +262,7 @@ const Stackarr = (() => {
     async addAllByAuthor(author, btn) {
       btn.disabled = true; btn.textContent = "Adding…";
       const r = await api("/api/author/add", { method: "POST", body: JSON.stringify({ author }) });
-      btn.textContent = r && r.ok ? "Added to Chaptarr" : "Failed";
+      btn.textContent = r && r.ok ? "Requested" : "Failed";
       if (r) toast(r.detail || "Done.");
     },
     toggleNav() {
@@ -305,7 +305,7 @@ const Stackarr = (() => {
       if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
       const r = await api("/api/series/add", { method: "POST", body: JSON.stringify({ series: name, author, format }) });
       if (!r) { if (btn) { btn.disabled = false; btn.textContent = label || "＋ Get full series"; } return; }   // 401 → api() redirected
-      toast(r.detail || (r.ok ? "Sent to Chaptarr." : "Couldn't add right now."));
+      toast(r.detail || (r.ok ? "Requested." : "Couldn't add right now."));
       if (btn) { btn.disabled = false; btn.textContent = r.ok ? "✓ Requested" : (label || "＋ Get full series"); }
     },
     async loadSeriesStrip(el) {
@@ -418,7 +418,7 @@ const Stackarr = (() => {
           `<label class="chip"><input type="radio" name="rr-fmt" value="${v}"${v === fmt ? " checked" : ""}> ${l}</label>`).join("") +
         "</div>" : "";
       const open = this._openModal(`Request the rest of ${d.series}`,
-        `<p class="muted rr-intro">Only these books go to Chaptarr — nothing else by ${esc(d.author || "this author")}.</p>
+        `<p class="muted rr-intro">Only these books are requested — nothing else by ${esc(d.author || "this author")}.</p>
          ${pick}<div class="rr-plan"></div>`, "Request");
       const mb = document.getElementById("modal-body");
       renderPlan();
@@ -470,7 +470,7 @@ const Stackarr = (() => {
       if (card) { card.style.transition = "opacity .3s, transform .3s"; card.style.opacity = .25; card.style.transform = "scale(.9)"; }
       else setTimeout(() => location.reload(), 600);
       toast(verdict === "approve"
-        ? (res.ok ? "Approved — sent to Chaptarr." : "Approved, but: " + (res.detail || "handoff failed"))
+        ? (res.ok ? "Approved — requested." : "Approved, but: " + (res.detail || "handoff failed"))
         : verdict === "read" ? "Marked as read — your picks will improve."
         : "Ignored — you won't see this again.");
     },

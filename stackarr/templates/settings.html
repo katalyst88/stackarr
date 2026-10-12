@@ -58,12 +58,11 @@
         <label class="row"><span>Check why a request isn't downloading</span>
           <input type="checkbox" class="switch" {{ 'checked' if release_check }}
                  onchange="Stackarr.setSetting({release_check: this.checked})"></label>
-        <p class="muted">A quarter of an hour after a request goes to Chaptarr, if nothing is downloading,
-          Stackarr asks Chaptarr once for that book's releases and flags it
-          (<i>Needs VIP</i> or <i>Needs attention</i>; the details stay in Chaptarr). It looks again once a day. Each look is one indexer search,
-          one book a minute at most, in the background.</p>
-        <p class="muted">Indexer VIP: <b>{% if vip_state and vip_state.at %}{{ 'on' if vip_state.vip else 'off' }}{% else %}unknown{% endif %}</b>
-          (read from Chaptarr). When it turns on, books that need VIP are searched again.</p>
+        <p class="muted">A quarter of an hour after a request goes upstream, if nothing is downloading,
+          Stackarr checks once and flags it (<i>Needs VIP</i> or <i>Needs attention</i>; the details stay
+          upstream). It looks again once a day, one book a minute at most, in the background.</p>
+        <p class="muted">Upstream VIP: <b>{% if vip_state and vip_state.at %}{{ 'on' if vip_state.vip else 'off' }}{% else %}unknown{% endif %}</b>
+          When it turns on, books that need VIP are searched again.</p>
       </div>
       {% endif %}
     </div>

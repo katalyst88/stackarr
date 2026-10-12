@@ -142,7 +142,7 @@ def test_never_falls_back_to_the_whole_author(chap, household):
     chap.books = {3: [book(90, "Unsouled", "audiobook", series="Cradle #1"),
                       book(91, "Soulsmith", "audiobook", series="Cradle #2")]}
     r = _post(_client(household), ALL_KEYS).get_json()
-    assert r["ok"] is False and "doesn't list" in r["detail"]
+    assert r["ok"] is False and "isn't listed upstream" in r["detail"]
     assert not _monitored(chap) and not _commands(chap)    # no AuthorSearch, no backlist monitoring
     assert [(x["title"], x["status"]) for x in _requests()] == [("The Pilot", "failed")]
 

@@ -21,7 +21,7 @@ book said "Requested" on one page and "Downloading" on the next.
                                is STALE_DAYS old and never reached the queue
   needs_vip    Needs VIP       every release is VIP-only on the indexer
   unavailable  Needs attention every release was rejected (both say "Might need
-                               a look in Chaptarr", not the reasons)
+                               Check upstream", not the reasons)
   pending      Needs approval  waiting for an admin
   failed       Failed          the handoff failed (retryable)
   denied       Not approved    an admin declined it
@@ -46,7 +46,7 @@ QUEUE_TTL = 30
 STALE_DAYS = 7
 # Stackarr flags a stuck request; the why lives in Chaptarr (its search, its
 # indexers, its rejections), so the flag points there instead of retelling it.
-CHECK_CHAPTARR = "Might need a look in Chaptarr"
+CHECK_UPSTREAM = "Check upstream"
 MEDIA = ("audiobook", "ebook")
 
 LABELS = {
@@ -144,11 +144,11 @@ def _format_state(fmt, owned, rows, queue_fn, title, author, asin) -> dict:
                         f"about {hit['eta']} left" if hit.get("eta") else ""]
                 return _entry("downloading", " · ".join(b for b in bits if b), pct=hit.get("pct"), eta=hit.get("eta"))
             if s == "waiting":
-                return _entry("waiting", "Held by Chaptarr" + (f": {hit['reason']}" if hit.get("reason") else ""))
+                return _entry("waiting", "Held upstream")
             if s == "stalled":
-                return _entry("stalled", hit.get("reason") or "The download has no peers right now")
+                return _entry("stalled", "Stalled upstream")
             if s == "failed":
-                return _entry("failed", hit.get("reason") or "The download failed in Chaptarr")
+                return _entry("failed", "Failed upstream — you can retry")
             return _entry(s if s in LABELS else "downloading")
         # what the background release check (releasecheck.py) found, if it looked
         from . import releasecheck
@@ -158,13 +158,13 @@ def _format_state(fmt, owned, rows, queue_fn, title, author, asin) -> dict:
         if rc and rc.get("kind") == "vip_retry":
             return _entry("requested", "Searching again — VIP is on")
         if rc and rc.get("kind") == "rejected":
-            return _entry("unavailable", CHECK_CHAPTARR)
+            return _entry("unavailable", CHECK_UPSTREAM)
         if rc and rc.get("kind") == "none":
-            return _entry("not_found", CHECK_CHAPTARR)
+            return _entry("not_found", CHECK_UPSTREAM)
         days = _days_since(r.get("created_at") or "")
         if days >= STALE_DAYS:
-            return _entry("not_found", CHECK_CHAPTARR)
-        return _entry("requested", "Sent to Chaptarr — searching")
+            return _entry("not_found", CHECK_UPSTREAM)
+        return _entry("requested", "Sent upstream — searching")
     return _entry("none")
 
 

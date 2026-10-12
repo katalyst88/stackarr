@@ -589,14 +589,14 @@ def _ensure_author(title: str, author: str, media: str, rf: str, profiles: tuple
     # miss, so a config error isn't reported to the user as "not found" and
     # auto_approve can tell "retry later" (stop) from "skip this one" (continue).
     if look.status_code >= 500:
-        return None, {"ok": False, "retry": True, "detail": "Chaptarr's book database is offline right now — we've kept this; try again shortly."}
+        return None, {"ok": False, "retry": True, "detail": "The upstream book database is offline right now — we've kept this; try again shortly."}
     if look.status_code in (401, 403):
-        return None, {"ok": False, "detail": "Chaptarr rejected the API key — check Settings → Connections."}
+        return None, {"ok": False, "detail": "Upstream rejected the API key — check Settings → Connections."}
     if look.status_code == 429:
-        return None, {"ok": False, "retry": True, "detail": "Chaptarr is rate-limited right now — try again shortly."}
+        return None, {"ok": False, "retry": True, "detail": "Upstream is rate-limited right now — try again shortly."}
     results = look.json() if look.ok else []
     if not results:
-        return None, {"ok": False, "detail": f"Chaptarr couldn't find “{author or title}” in its catalogue."}
+        return None, {"ok": False, "detail": f"Couldn't find “{author or title}” upstream."}
     a = _pick_author(results, author)
     foreign_id = a.get("foreignAuthorId", "")
     author_obj = _find_author(foreign_id, a.get("authorName") or author)
@@ -638,12 +638,12 @@ def _ensure_author(title: str, author: str, media: str, rf: str, profiles: tuple
         if not r.ok:
             body = r.text or ""
             if r.status_code in (502, 503) or "V5 API" in body or "author info" in body:
-                return None, {"ok": False, "retry": True, "detail": "Chaptarr's metadata service is down right now, so it can't add "
+                return None, {"ok": False, "retry": True, "detail": "The upstream metadata service is down right now, so it can't add "
                               "books — this is a Chaptarr-side issue, not Stackarr. We've kept your pick; retry shortly."}
             if "Invalid Path" in body:
-                return None, {"ok": False, "detail": "Chaptarr rejected the root folder path — check Settings → Connections → "
+                return None, {"ok": False, "detail": "Upstream rejected the root folder path — check Settings → Connections → "
                               "Chaptarr root folder matches a path that exists inside the Chaptarr container."}
-            return None, {"ok": False, "detail": "Chaptarr couldn't add this one right now — please try again in a bit."}
+            return None, {"ok": False, "detail": "Couldn't add this one upstream right now — please try again in a bit."}
         author_obj = r.json()
     return author_obj, None
 
@@ -727,23 +727,23 @@ def add_books(author: str, books: list[dict], fmt: str = "audiobook") -> dict:
         rows = _wait_for_books(author_id)
         if not rows:
             return _all({"ok": False, "ref": str(author_id),
-                         "detail": f"Added “{name}” to Chaptarr; its catalogue is still loading — try again shortly."})
+                         "detail": f"Added “{name}” upstream; its catalogue is still loading — try again shortly."})
         ids, out = [], []
         for bk in books:
             title, asin = bk.get("title", ""), bk.get("asin", "")
             pick, have = pick_row(rows, title, asin, media) if any(r.get("mediaType") for r in rows) else (None, None)
             if have:
-                out.append({"ok": True, "available": True, "detail": "Chaptarr already has this one."})
+                out.append({"ok": True, "available": True, "detail": "Already requested upstream."})
                 continue
             hit = pick or _match_book(_for_media(rows, media), title, asin) or _match_book(rows, title, asin)
             if not hit:
-                out.append({"ok": False, "detail": f"Chaptarr doesn't list “{title}” for {name} yet."})
+                out.append({"ok": False, "detail": f"“{title}” isn't listed upstream for {name} yet."})
                 continue
             # same media resolution as a single request (see add_and_search)
             tid = hit["id"] if hit.get("mediaType") == media else _media_edition_id(hit["id"], media)
             row = next((r for r in rows if r.get("id") == tid), hit)
             if _files(row) > 0:
-                out.append({"ok": True, "available": True, "detail": "Chaptarr already has this one."})
+                out.append({"ok": True, "available": True, "detail": "Already requested upstream."})
                 continue
             if tid not in ids:
                 ids.append(tid)
@@ -752,16 +752,16 @@ def add_books(author: str, books: list[dict], fmt: str = "audiobook") -> dict:
         for o in out:
             if o.pop("_id", None) is not None:
                 o["ok"] = sent
-                o["detail"] = ("Sent to Chaptarr — it's searching now." if sent
-                               else f"Added “{name}” to Chaptarr, but the search didn't start — retry shortly.")
+                o["detail"] = ("Requested — searching upstream." if sent
+                               else f"Added “{name}” upstream, but the search didn't start — retry shortly.")
         n = sum(1 for o in out if o["ok"] and not o.get("available"))
         have = sum(1 for o in out if o.get("available"))
         return {"ok": n + have > 0, "ref": str(author_id), "books": out,
-                "detail": (f"Sent {n} of {len(books)} to Chaptarr — it's searching now." if n
+                "detail": (f"Requested {n} of {len(books)} — searching upstream." if n
                            else "Chaptarr already has these." if have
                            else out[0]["detail"])}
     except Exception:
-        return _all({"ok": False, "detail": "Couldn't reach Chaptarr — check it's running and connected in Settings."})
+        return _all({"ok": False, "detail": "Couldn't reach upstream — check Settings → Connections."})
 
 
 def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audiobook",
@@ -796,7 +796,7 @@ def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audioboo
         books = _wait_for_books(author_id)
         if not books:
             return {"ok": True, "ref": str(author_id),
-                    "detail": f"Added “{author_obj.get('authorName')}” to Chaptarr; it'll search once its catalogue finishes loading."}
+                    "detail": f"Added “{author_obj.get('authorName')}” upstream; it'll search once its catalogue finishes loading."}
         # A request that names a specific title → grab just that book. An
         # author-level add (title is the author name / no match) → whole backlist.
         in_series = _series_books(_for_media(books, media), series) if series else []
@@ -805,9 +805,9 @@ def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audioboo
             ok = _dispatch(ids, {"name": "BookSearch", "bookIds": ids})
             if ok:
                 return {"ok": True, "ref": str(author_id),
-                        "detail": f"Sent the “{series}” series ({len(ids)} books) to Chaptarr — it's searching now."}
+                        "detail": f"Requested the “{series}” series ({len(ids)} books) — searching upstream."}
             return {"ok": False, "ref": str(author_id),
-                    "detail": f"Added “{author_obj.get('authorName')}” to Chaptarr, but the search didn't start — retry shortly."}
+                    "detail": f"Added “{author_obj.get('authorName')}” upstream, but the search didn't start — retry shortly."}
         # A series Chaptarr doesn't list falls back to the whole author (the
         # documented "get the rest of the series" behaviour).
         is_author_level = bool(series) or _norm(title) == _norm(author)
@@ -816,7 +816,7 @@ def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audioboo
             pick, have = pick_row(books, title, asin, media) if any(b.get("mediaType") for b in books) else (None, None)
             if have:
                 return {"ok": True, "available": True, "ref": str(author_id),
-                        "detail": f"Chaptarr already has “{have.get('title') or title}” — nothing to download."}
+                        "detail": f"“{have.get('title') or title}” is already upstream — nothing to fetch."}
             target = pick or _match_book(_for_media(books, media), title, asin) or _match_book(books, title, asin)
         if target:
             # A title match can land on the wrong-media sibling row; resolve to the
@@ -840,11 +840,11 @@ def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audioboo
             # NOT fall back to grabbing the entire backlist (that also re-monitored
             # books the user had marked read, silently undoing it).
             return {"ok": False, "ref": str(author_id),
-                    "detail": f"Added “{author_obj.get('authorName')}” to Chaptarr, but couldn't find “{title}” to search."}
+                    "detail": f"Added “{author_obj.get('authorName')}” upstream, but couldn't find “{title}” to search."}
         if ok:
             return {"ok": True, "ref": str(author_id),
-                    "detail": f"Sent “{name}” to Chaptarr — it's searching now."}
+                    "detail": f"Requested “{name}” — searching upstream."}
         return {"ok": False, "ref": str(author_id),
-                "detail": f"Added “{author_obj.get('authorName')}” to Chaptarr, but the search didn't start — retry shortly."}
+                "detail": f"Added “{author_obj.get('authorName')}” upstream, but the search didn't start — retry shortly."}
     except Exception:
-        return {"ok": False, "detail": "Couldn't reach Chaptarr — check it's running and connected in Settings."}
+        return {"ok": False, "detail": "Couldn't reach upstream — check Settings → Connections."}

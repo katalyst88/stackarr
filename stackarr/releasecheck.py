@@ -28,7 +28,7 @@ from . import chaptarr, db, tz
 
 log = logging.getLogger("stackarr.releasecheck")
 
-VIP_EXPLAINER = "Every release is VIP-only — check Chaptarr / indexer"
+VIP_EXPLAINER = "Check upstream"
 CHECK_AFTER_MIN = 15          # give Chaptarr's own search time to grab first
 RECHECK_HOURS = 24
 PAUSE_SECONDS = 60            # one indexer search per minute, at most
