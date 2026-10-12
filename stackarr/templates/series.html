@@ -46,7 +46,7 @@
     </div>
     <div class="series-next">
       {% if s.next %}
-      <a class="series-next-cover" href="{{ url_for('main.book_page', asin=s.next.asin) }}">
+      <a class="series-next-cover" href="{{ book_href(s.next.asin, s.next.title, s.next.author) }}">
         <img src="{{ (s.next.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt=""
              onerror="this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'"></a>
       <div class="series-next-info">

@@ -90,7 +90,9 @@ const Stackarr = (() => {
   const seqLabel = (n) => (n === null || n === undefined || n === "" ? "" : "#" + Number(n));
   const seriesCard = (b) => {
     const tag = SERIES_TAG[b.state];
-    const href = b.asin ? `${B()}/book/${encodeURIComponent(b.asin)}` : "";
+    // no catalogue id (a Chaptarr-mapped series): the resolver opens its page
+    const href = b.asin ? `${B()}/book/${encodeURIComponent(b.asin)}`
+      : b.title ? `${B()}/book/find?` + new URLSearchParams({ title: b.title, author: b.author || "" }) : "";
     // no catalogue cover (Chaptarr-mapped series): the local cover endpoint
     // answers from the library / cover cache, never inline from a third party
     const cover = b.cover ? hires(b.cover)

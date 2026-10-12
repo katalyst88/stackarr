@@ -157,6 +157,7 @@
       <div class="panel"><h3>Audiobookshelf</h3>
         <label class="row"><span>URL</span><input data-setting="abs_url" value="{{ conn.abs_url }}"></label>
         <label class="row"><span>Admin API token</span><input type="password" data-setting="abs_admin_token" value="{{ conn.abs_admin_token }}"></label>
+        <label class="row"><span>Public URL <span class="subtle">(optional — the address your browser opens ABS at, for "Open in Audiobookshelf" links)</span></span><input data-setting="abs_public_url" value="{{ conn.abs_public_url }}" placeholder="https://abs.example.com"></label>
         <div class="conn-actions"><button class="btn small ghost" onclick="Stackarr.testConn('abs', this)">Test</button>
           <span class="conn-result" id="test-abs"></span></div>
       </div>

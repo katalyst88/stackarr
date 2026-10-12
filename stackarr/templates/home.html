@@ -1,10 +1,9 @@
 {% extends "base.html" %}
 {% from "_fmt.html" import fmt_badge with context %}
-{% macro bookcard(b, link=True) %}
-{% set asin = b.asin or b.rkey %}
-{# auto 'currently reading' cards aren't persisted, so a t- link would hit a dead "Unknown" page — only link real (non-auto) entries #}
-{% set canlink = asin and (asin.startswith('B') or asin.startswith('gb:') or asin.startswith('ol:') or asin.startswith('t-')) and not b.auto %}
-<a class="media-card" data-format="{{ b.format or 'audiobook' }}" href="{{ url_for('main.book_page', asin=asin) if (link and canlink) else '#' }}">
+{% macro bookcard(b) %}
+{# every card opens a book page: book_href resolves a library book (which rarely
+   has an ASIN) to the work's page, never "#" (that reloaded Home) #}
+<a class="media-card" data-format="{{ b.format or 'audiobook' }}" href="{{ book_href(b.asin or b.rkey, b.title, b.author, b.format) }}">
   <div class="media-poster"><img src="{{ (b.cover|hires) if b.cover else url_for('main.coverart', title=b.title, author=b.author, asin=b.asin or '', fmt=b.format or '') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
     {{ fmt_badge(b.format) }}</div>
   <div class="media-foot"><div class="media-title" title="{{ b.title }}">{{ b.title }}</div><div class="media-author">{{ b.author }}</div></div>
@@ -40,7 +39,7 @@
   <div class="slider-wrap"><div class="slider">
     {% for s in fresh %}
     <div class="media-card" data-format="{{ s.format or 'audiobook' }}">
-      <a class="media-poster" href="{{ url_for('main.book_page', asin=s.asin) }}">
+      <a class="media-poster" href="{{ book_href(s.asin, s.title, s.author, s.format) }}">
         <img src="{{ (s.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
         {{ fmt_badge(s.format) }}
         <div class="media-overlay"><div class="ov-reason">{{ s.reason }}</div>

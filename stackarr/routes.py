@@ -258,10 +258,17 @@ def suggestions_page():
     show_vibes = not vibes_done and rated_count < ONBOARD_THRESHOLD
     return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles,
                            genres=discover.DEFAULT_GENRES, rec_authors=rec_authors,
-                           abs_base=absclient.abs_url(),
+                           abs_public=_abs_public_url(),
                            recently_added=recently_added, recent_requests=recent_requests,
                            onboard_books=onboard_books, onboard_target=ONBOARD_THRESHOLD,
                            show_vibes=show_vibes, all_moods=tagging.ALL_MOODS)
+
+
+def _abs_public_url() -> str:
+    """The browser-facing Audiobookshelf address, or "" when none is set. Only
+    an http(s) URL — it lands in an href."""
+    u = (db.setting("abs_public_url", config.ABS_PUBLIC_URL) or "").strip().rstrip("/")
+    return u if re.match(r"^https?://[^\s\"'<>]+$", u) else ""
 
 
 @bp.route("/lane/<lane>")
@@ -1438,6 +1445,7 @@ def settings_page():
     # the ABS admin token / SMTP password to a non-admin who curls /settings.
     conn = {"abs_url": g("abs_url", config.ABS_URL),
             "abs_admin_token": g("abs_admin_token", config.ABS_ADMIN_TOKEN),
+            "abs_public_url": g("abs_public_url", config.ABS_PUBLIC_URL),
             "chaptarr_url": g("chaptarr_url", config.CHAPTARR_URL),
             "chaptarr_api_key": g("chaptarr_api_key", config.CHAPTARR_API_KEY),
             "chaptarr_root_folder": g("chaptarr_root_folder", config.CHAPTARR_ROOT_FOLDER),
@@ -1565,6 +1573,108 @@ def _req_format(body) -> str:
     if formats.multi() and f in ("audiobook", "ebook"):
         return f
     return formats.primary()
+
+
+_BOOK_ID = re.compile(r"(?:[A-Z0-9]{10}|(?:gb|ol):\S+)")
+
+
+def _real_book_id(v) -> str:
+    """`v` if it names a catalogue page (an ASIN, or a gb:/ol: ebook id), else
+    "" — "t-…" rating-key slugs and blanks don't."""
+    v = (v or "").strip()
+    return v if _BOOK_ID.fullmatch(v) else ""
+
+
+def _known_book_id(title, author, fmt="") -> str:
+    """The catalogue id Stackarr already holds for (title, author), from its own
+    tables — no network. Library rows rarely carry an ASIN, but the same work
+    usually has one on a request, a suggestion, a rating or a shelf row, or in
+    the cache the /book/find resolver fills. Same-author, subtitle-tolerant
+    title match (titles.matches), so "Unsouled (Cradle Book 1)" finds the
+    "Unsouled" request's ASIN."""
+    a = _first(author).lower()
+    if not a or not (title or "").strip():
+        return ""
+    cached = db.get_meta("bookid:" + db.rating_key("", titles.clean(title), a), "")
+    if _real_book_id(cached):
+        return cached
+    like = (f"%{a}%",)
+    with db.conn() as c:
+        rows = []
+        for q in ("SELECT title, asin, format FROM requests WHERE asin<>'' AND lower(author) LIKE ?",
+                  "SELECT title, asin, format FROM suggestions WHERE asin<>'' AND lower(author) LIKE ?",
+                  "SELECT title, asin, format FROM ratings WHERE asin<>'' AND lower(author) LIKE ?",
+                  "SELECT title, rkey AS asin, format FROM shelf WHERE lower(author) LIKE ?",
+                  "SELECT title, asin, format FROM library WHERE asin<>'' AND lower(author) LIKE ?"):
+            rows += [dict(r) for r in c.execute(q, like) if _real_book_id(r["asin"])]
+    hits = titles.matches(rows, title)
+    if not hits:
+        return ""
+    # the page in the card's own format when there is one (an eBook card opens
+    # the eBook page), else any id the work has
+    same = [h for h in hits if (h.get("format") or "audiobook") == (fmt or "audiobook")]
+    return (same or hits)[0]["asin"]
+
+
+@bp.app_template_global("book_href")
+def book_href(asin="", title="", author="", fmt="") -> str:
+    """The Stackarr book page for a card — EVERY card, whatever it was built
+    from. A real id links straight to /book/<id>; otherwise an id Stackarr
+    already knows for the work (_known_book_id); otherwise /book/find, which
+    resolves the title on click. Never "#": that sent 21 of the 23 Home "Read"
+    cards back to Home, because library books rarely carry an ASIN."""
+    bid = _real_book_id(asin) or _known_book_id(title, author, fmt)
+    if bid:
+        return url_for("main.book_page", asin=bid)
+    if not (title or "").strip():
+        return url_for("main.discover_page")
+    return url_for("main.book_find", title=title, author=_first(author), fmt=fmt or "")
+
+
+@bp.route("/book/find")
+@auth.login_required
+def book_find():
+    """Open the book page for a title + author — the link target of a card with
+    no catalogue id. Tries what Stackarr knows, then ONE catalogue search
+    (same author, same work), remembered in meta so the next click is local.
+    When the catalogue can't place it, the Discover search for the title — a
+    page about this book, never Home."""
+    title = (request.args.get("title") or "").strip()
+    author = _first(request.args.get("author"))
+    fmt = (request.args.get("fmt") or "").strip()
+    if not title:
+        return redirect(url_for("main.discover_page"))
+    bid = _known_book_id(title, author, fmt)
+    key = "bookid:" + db.rating_key("", titles.clean(title), author.lower())
+    import time
+    miss = db.get_meta(key, "")
+    recent_miss = miss.startswith("none:") and time.time() - float(miss[5:] or 0) < 86400
+    if not bid and author and not recent_miss:
+        try:
+            want = titles.clean(title)
+            if fmt == "ebook" and not formats.show("audiobook"):
+                cands = [dict(x, asin=x.get("id", "")) for x in ebookmeta.search(f"{want} {author}", num=5)]
+            else:
+                cands = audible.search(f"{want} {author}", num=8)
+            cands = [x for x in _in_language(cands)
+                     if _real_book_id(x.get("asin")) and author.lower() in (x.get("author") or "").lower()]
+            hit = titles.matches(cands, title)
+            bid = hit[0]["asin"] if hit else ""
+        except Exception as e:
+            log.debug("book find %r failed: %s", title, e)
+        db.set_meta(key, bid or f"none:{int(time.time())}")
+    if bid:
+        return redirect(url_for("main.book_page", asin=bid))
+    return redirect(url_for("main.discover_page", q=f"{titles.clean(title)} {author}".strip()))
+
+
+def _in_language(books: list[dict]) -> list[dict]:
+    """Catalogue rows in the install's language (Settings → language; "any"
+    keeps everything). A row with no language is kept."""
+    want = (db.get_meta("language", config.TARGET_LANGUAGE) or "english").lower()
+    if want == "any":
+        return list(books)
+    return [b for b in books if not b.get("language") or b["language"].lower() == want]
 
 
 def _cached_book(asin) -> dict:
@@ -2368,7 +2478,7 @@ def api_surprise():
 SETTING_KEYS = {
     "email_theme", "language", "email_frequency", "suggest_interval_hours",
     "smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from", "smtp_to",
-    "abs_url", "abs_admin_token",
+    "abs_url", "abs_admin_token", "abs_public_url",
     "chaptarr_url", "chaptarr_api_key", "chaptarr_root_folder",
     "chaptarr_quality_profile_id", "chaptarr_metadata_profile_id",
     "goodreads_rss", "hardcover_token", "discord_webhook", "custom_webhook",
