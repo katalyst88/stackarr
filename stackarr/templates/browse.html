@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_fmt.html" import status_badge, requestable with context %}
+{% from "_fmt.html" import status_badge, requestable, card_foot with context %}
 {% block content %}
 <button class="btn small ghost back-btn" onclick="history.back()">‹ Back</button>
 <div class="page-head">
@@ -25,7 +25,7 @@
         </div>
       </div>
     </a>
-    <div class="media-foot"><div class="media-title" title="{{ b.title }}">{{ b.title }}</div><div class="media-author">{{ b.author }}</div></div>
+    {{ card_foot(b) }}
   </div>
   {% endfor %}
 </div>

@@ -70,7 +70,9 @@ def create_app() -> Flask:
     from . import tz
     app.jinja_env.filters["localtime"] = tz.fmt
     from . import covers
-    app.jinja_env.filters["bookcover"] = covers.bookcover   # Settings → Cover style          # stored timestamps, in Settings → Timezone
+    app.jinja_env.filters["bookcover"] = covers.bookcover   # Settings → Cover style
+    from . import titles
+    app.jinja_env.filters["work_title"] = titles.display    # "Reaper: Cradle, Book 10" → "Reaper"          # stored timestamps, in Settings → Timezone
 
     from flask import request, abort
     from urllib.parse import urlparse

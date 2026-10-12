@@ -355,7 +355,29 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
 .error-banner { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.4); color: #fca5a5;
   border-radius: 10px; padding: 12px 16px; margin: 14px 0; max-width: 72ch; font-size: 14px; line-height: 1.5; }
 .error-banner strong { color: #f87171; }
-.book-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+.book-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+/* work-first book page: the series line, then one row per format */
+.book-series { font-size: 15px; margin: -4px 0 10px; }
+.formats { display: flex; flex-direction: column; gap: 0; margin-top: 20px; border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--bg2); overflow: hidden; max-width: 640px; }
+.format-row { display: flex; align-items: center; gap: 14px; padding: 13px 16px; }
+.format-row + .format-row { border-top: 1px solid var(--line); }
+.format-ic { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--bg3); color: var(--accent2); }
+.format-ic .fmt-ic { width: 18px; height: 18px; }
+.format-main { flex: 1; min-width: 0; }
+.format-name { font-weight: 700; font-size: 14.5px; }
+.format-name .subtle { font-weight: 500; }
+.format-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 4px; font-size: 13px; }
+.format-detail { font-size: 12.5px; }
+.format-act { flex: none; }
+.format-act .btn { white-space: nowrap; }
+@media (max-width: 560px) {
+  .format-row { flex-wrap: wrap; padding: 12px 13px; }
+  .format-act { flex-basis: 100%; padding-left: 48px; }
+}
+/* cards: the series under the author */
+.media-series { color: var(--subtle); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .book-actions .btn { flex: none; padding: 11px 24px; }
 
 #toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg3);

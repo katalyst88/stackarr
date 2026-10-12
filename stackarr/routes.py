@@ -817,6 +817,62 @@ def _catalogue_book(asin) -> tuple[dict, dict]:
     return b, ax
 
 
+def _series_href(series, series_asin="", author="", asin="", title="") -> str:
+    if not (series or series_asin):
+        return ""
+    q = {k: v for k, v in (("series_asin", series_asin), ("series", series), ("author", _first(author)),
+                           ("asin", asin if (asin or "").startswith("B") else ""), ("title", title)) if v}
+    return url_for("main.series_view", **q)
+
+
+def _work_view(b: dict, st: dict, held: list[dict], asin: str) -> tuple:
+    """The book page as a WORK, not an Audible edition: (work, format rows).
+
+    work: {title, subtitle, series, seq, series_href}. The title is the
+    work's (titles.display: no "(Unabridged)" or series decoration).
+    Format rows, one per format this install offers, each with its status
+    (status.py), what we know of that edition (narrator + length for the
+    audiobook, pages for the eBook) and what you can do: Request / Retry, or
+    Open in Audiobookshelf when it's held there and a public ABS URL is set."""
+    work = {"title": titles.display(b.get("title", ""), b.get("series") or ""),
+            "subtitle": b.get("subtitle") or "", "series": b.get("series") or "",
+            "seq": b.get("sequence"),
+            "series_href": _series_href(b.get("series") or "", b.get("series_asin") or "",
+                                        b.get("author", ""), asin, b.get("title", ""))}
+    abs_pub = _abs_public_url()
+    rows = []
+    for f in formats.available():
+        fs = (st.get("formats") or {}).get(f) or status._entry("none")
+        mine = [r for r in held if (r.get("format") or "audiobook") == f]
+        facts, people = [], []
+        if f == "audiobook" and b.get("format", "audiobook") == "audiobook":
+            people = [n.strip() for n in (b.get("narrator") or "").split(",") if n.strip()]
+            if b.get("runtime_hours"):
+                facts.append(f"{b['runtime_hours']} h")
+        if f == "ebook" and b.get("pages"):
+            facts.append(f"{b['pages']:,} pages")
+        item = next((r for r in mine if r.get("item_id") and ":" not in r["item_id"]), None)
+        rows.append({"fmt": f, "label": "eBook" if f == "ebook" else "Audiobook", "st": fs,
+                     "facts": facts, "narrators": people,
+                     "open_url": f"{abs_pub}/item/{item['item_id']}" if (abs_pub and item) else "",
+                     "can_request": fs["state"] in ("none", "denied", "failed"),
+                     "retry": fs["state"] == "failed"})
+    return work, rows
+
+
+@bp.route("/series/view")
+@auth.login_required
+def series_view():
+    """One series, every book in order, each with where it stands — the
+    series a book page names links here."""
+    u = auth.current_user()
+    t = _series_target(request.args)
+    v = _series_view(u, t) if (t["asin"] or t["series_asin"] or (t["series"] and t["author"])) else None
+    if not v:
+        return redirect(url_for("main.browse_page", author=t["author"]) if t["author"] else url_for("main.series_page"))
+    return render_template("series_view.html", v=v, target=t)
+
+
 @bp.route("/book/<path:asin>")
 @auth.login_required
 def book_page(asin):
@@ -868,10 +924,12 @@ def book_page(asin):
     except Exception:
         tags = {}
     # duplicate/upgrade: which formats of this title you already own
-    owned_formats = []
-    if formats.multi() and b.get("title"):
+    owned_formats, held = [], []
+    if b.get("title"):
         with db.conn() as c:
-            owned_formats = sorted({r["format"] for r in _library_works(c, b["title"], b.get("author", ""))})
+            held = _library_works(c, b["title"], b.get("author", ""))
+        owned_formats = sorted({r["format"] or "audiobook" for r in held})
+    work, fmt_rows = _work_view(b, st, held, asin)
     shelf = db.shelf_state(u["id"], key)
     # "Finished" comes from Audiobookshelf too, not only Stackarr's own Read
     # shelf — the Home "Read" shelf already shows ABS finishes, and the book page
@@ -883,7 +941,8 @@ def book_page(asin):
                                          b.get("author", ""), asin if asin.startswith("B0") else "")
         except Exception as e:
             log.debug("book page: finished check failed: %s", e)
-    return render_template("book.html", b=b, st=st, rate_key=key, owned_formats=owned_formats,
+    return render_template("book.html", b=b, st=st, work=work, fmt_rows=fmt_rows, rate_key=key,
+                           owned_formats=owned_formats,
                            community=db.community_rating(key), reviews=db.reviews_for(key),
                            my_stars=(my["stars"] if my else 0), my_review=(my["review"] if my else ""),
                            tags=tags, shelf=shelf, finished=finished)
@@ -1296,10 +1355,11 @@ def _shelves_data(u):
         put a right title and ASIN on a mangled one ("Reape" → "Reaper")."""
         t = (title or "").strip()
         w = series_work(t, author, series, seq) if (series or seq is not None or not _real_book_id(rkey)) else None
-        return display_title(t, w), (rkey if _real_book_id(rkey) else (w or {}).get("asin", "") or rkey)
+        ser = (series or (w or {}).get("series") or "", seq if seq is not None else (w or {}).get("seq"))
+        return display_title(t, w), (rkey if _real_book_id(rkey) else (w or {}).get("asin", "") or rkey), ser
 
     def _add_reading(title, author, cover, fmt, rkey="", series="", seq=None):
-        title, rkey = _fix(title, author, series, seq, rkey)
+        title, rkey, (series, seq) = _fix(title, author, series, seq, rkey)
         t = (title or "").strip()
         if not t or t.lower() in seen_titles or _listed(shelves["reading"], t, author):
             return
@@ -1308,7 +1368,8 @@ def _shelves_data(u):
             return
         seen_titles.add(t.lower())
         shelves["reading"].append({"rkey": rkey or db.rating_key("", t, author), "title": t,
-                                   "author": author or "", "cover": cover or "", "format": fmt, "auto": True})
+                                   "author": author or "", "cover": cover or "", "format": fmt, "auto": True,
+                                   "series": series, "seq": seq})
 
     # The 'read' shelf mirrors 'reading': seed it from what you've actually
     # FINISHED across connected libraries, merged with anything shelved by hand.
@@ -1317,13 +1378,14 @@ def _shelves_data(u):
     read_titles = {(it.get("title") or "").strip().lower() for it in shelves["read"]}
 
     def _add_read(title, author, cover, fmt, rkey="", series="", seq=None):
-        title, rkey = _fix(title, author, series, seq, rkey)
+        title, rkey, (series, seq) = _fix(title, author, series, seq, rkey)
         t = (title or "").strip()
         if not t or t.lower() in read_titles or _listed(shelves["read"], t, author):
             return
         read_titles.add(t.lower())
         shelves["read"].append({"rkey": rkey or db.rating_key("", t, author), "title": t,
-                                "author": author or "", "cover": cover or "", "format": fmt, "auto": True})
+                                "author": author or "", "cover": cover or "", "format": fmt, "auto": True,
+                                "series": series, "seq": seq})
     try:
         with db.conn() as c:
             lib = {r["item_id"]: dict(r) for r in c.execute(

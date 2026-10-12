@@ -5,7 +5,7 @@ import pytest
 from stackarr import audible, audnexus, db, tagging
 
 
-@pytest.mark.parametrize("mode,label", [("both", 'Stackarr.grabFormat('), ("audiobook", 'Stackarr.bookRequest(')])
+@pytest.mark.parametrize("mode,label", [("both", 'Stackarr.grabFormat('), ("audiobook", 'Stackarr.grabFormat(')])
 def test_add_buttons_appear_once(admin_client, monkeypatch, mode, label):
     db.set_meta("formats", mode)
     monkeypatch.setattr(audible, "by_asin", lambda a: {"asin": a, "title": "Soulsmith", "author": "Will Wight"})
@@ -14,5 +14,5 @@ def test_add_buttons_appear_once(admin_client, monkeypatch, mode, label):
     html = admin_client.get("/book/B0SOULSMTH").get_data(as_text=True)
     bottom = html.split('class="book-actions-bottom"', 1)[1].split("</div>", 1)[0]
     assert "Back to top" in bottom and label not in bottom
-    # both mode: one audiobook + one eBook Add (the dup-note offers the other format separately)
+    # one Request per format row (work-first page: an Audiobook and an eBook row in both mode)
     assert html.count(label) == (2 if mode == "both" else 1)

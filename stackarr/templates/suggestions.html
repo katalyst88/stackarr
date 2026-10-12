@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_fmt.html" import fmt_filter, fmt_badge, status_badge with context %}
+{% from "_fmt.html" import fmt_filter, fmt_badge, status_badge, card_foot with context %}
 {% macro lane_row(lane, items, title, see_all=None) %}
 <section class="section fmt-group">
   <div class="section-head">
@@ -85,7 +85,7 @@
       <div class="media-poster"><img src="{{ (r|bookcover) or url_for('main.coverart', title=r.title, author=r.author, asin=r.asin) }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
         {{ fmt_badge(r.formats[0] if r.formats|length == 1 else 'both') }}
         {{ status_badge(r.st) }}</div>
-      <div class="media-foot"><div class="media-title" title="{{ r.title }}">{{ r.title }}</div><div class="media-author">{{ r.author }}</div></div>
+      {{ card_foot(r) }}
     </a>
     {% endfor %}
   {% endcall %}
@@ -129,7 +129,7 @@
           </div>
         </div>
       </a>
-      <div class="media-foot"><div class="media-title" title="{{ s.title }}">{{ s.title }}</div><div class="media-author">{{ s.author }}</div></div>
+      {{ card_foot(s) }}
     </div>
     {% endfor %}
   {% endcall %}

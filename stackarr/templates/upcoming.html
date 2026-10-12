@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_fmt.html" import fmt_badge with context %}
+{% from "_fmt.html" import fmt_badge, card_foot with context %}
 {% block content %}
 <div class="page-head"><h2 class="page-title">Upcoming &amp; new
   <span class="subtle">fresh and not-yet-released books from authors you read</span></h2></div>
@@ -22,7 +22,7 @@
           <button class="btn ghost" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'reject',this)">Ignore</button>
         </div></div>
     </a>
-    <div class="media-foot"><div class="media-title" title="{{ s.title }}">{{ s.title }}</div><div class="media-author">{{ s.author }}</div></div>
+    {{ card_foot(s) }}
   </div>
   {% endfor %}
 </div>

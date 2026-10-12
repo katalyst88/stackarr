@@ -37,6 +37,14 @@
 {# Can this book be requested from a card? Not when it's held or on its way. #}
 {% macro requestable(st) -%}{{ '1' if (not st or st.state in ('none', 'failed', 'denied')) else '' }}{%- endmacro %}
 
+{# A card's foot, work-first: the work's title, author, and series + position. #}
+{% macro card_foot(b, series=None, seq=None) -%}
+{%- set ser = series if series is not none else (b.series or '') -%}
+{%- set pos = seq if seq is number else (b.sequence if b.sequence is number else (b.seq if b.seq is number else none)) -%}
+<div class="media-foot"><div class="media-title" title="{{ b.title }}">{{ b.title|work_title(ser) }}</div><div class="media-author">{{ b.author }}</div>
+  {%- if ser %}<div class="media-series">{{ ser }}{% if pos is number %} · #{{ pos|int if pos == pos|int else pos }}{% endif %}</div>{% endif %}</div>
+{%- endmacro %}
+
 {# A small format badge for a media card cover (icon only). #}
 {% macro fmt_badge(fmt) -%}
 {% if multi_format %}<span class="fmt-badge {{ fmt or 'audiobook' }}" title="{{ fmt_label(fmt) }}">{{ fmt_icon(fmt) }}</span>{% endif %}

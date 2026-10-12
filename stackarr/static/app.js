@@ -72,6 +72,7 @@ const Stackarr = (() => {
       <div class="media-foot">
         <div class="media-title" title="${esc(b.title)}">${esc(b.title)}</div>
         <div class="media-author">${esc(b.author)}</div>
+        ${b.series ? `<div class="media-series">${esc(b.series)}${b.sequence != null && b.sequence !== "" ? " · #" + esc(String(Number(b.sequence))) : ""}</div>` : ""}
       </div>
     ${href ? "</a>" : "</div>"}`;
   };
