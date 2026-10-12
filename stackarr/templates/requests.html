@@ -53,7 +53,7 @@
       </div>
       {% if r.detail %}<div class="req-detail" title="{{ r.detail }}">{{ r.detail }}</div>{% endif %}
       {% if r.history %}<details class="req-history"><summary>Earlier attempts ({{ r.history|length }})</summary>
-        <ul>{% for h in r.history %}<li><span class="subtle">{{ (h.updated_at or h.created_at or '')[:16] }}</span>
+        <ul>{% for h in r.history %}<li><span class="subtle">{{ (h.updated_at or h.created_at)|localtime }}</span>
           {% if multi_format %}{{ 'eBook' if h.format == 'ebook' else 'Audiobook' if h.format == 'audiobook' else h.format }} · {% endif %}{{ {'failed':'Failed','denied':'Not approved','available':'In library','handed':'Requested','pending_approval':'Needs approval'}.get(h.status, h.status) }}{% if h.detail %} — {{ h.detail }}{% endif %}</li>{% endfor %}</ul>
       </details>{% endif %}
     </div>
