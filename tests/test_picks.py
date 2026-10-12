@@ -136,7 +136,7 @@ def test_retired_picks_are_not_resuggested(tmp_db):
 def test_full_queue_of_stale_picks_no_longer_blocks_the_recommender(tmp_db, monkeypatch):
     uid = _user()
     monkeypatch.setattr(config, "SUGGEST_MAX_PENDING", 3)
-    monkeypatch.setattr(absclient, "listening_history", lambda tok: [])
+    monkeypatch.setattr(absclient, "listening_history", lambda tok, **k: [])
     for i in range(3):
         _pick(uid, f"Owned Book {i}", "Will Wight", asin=f"B0OWNED00{i}")
         _lib(f"li_{i}", f"Owned Book {i}", "Will Wight", asin=f"B0OWNED00{i}")
@@ -151,7 +151,7 @@ def test_library_refresh_retires_for_every_user(tmp_db, monkeypatch):
     a, b = _user("a"), _user("b")
     sa, sb = _pick(a, "The Captain", "Will Wight"), _pick(b, "The Captain", "Will Wight")
     _lib("li_1", "The Captain: The Last Horizon, Book 1", "Will Wight")
-    monkeypatch.setattr(absclient, "listening_history", lambda tok: [])
+    monkeypatch.setattr(absclient, "listening_history", lambda tok, **k: [])
     monkeypatch.setattr(scheduler.backends, "sources", lambda mode: [])
     scheduler.refresh_library()
     assert _status(sa) == _status(sb) == "owned"
@@ -171,7 +171,7 @@ def test_home_drops_a_finished_pick_and_book_page_says_finished(tmp_db, monkeypa
     fresh = _pick(uid, "Iron Prince", "Bryce O'Connor", asin="B0FRESH001")
     _lib("li_1", "The Captain: The Last Horizon, Book 1", "Will Wight")
     calls = []
-    monkeypatch.setattr(absclient, "listening_history", lambda tok: calls.append(tok) or [
+    monkeypatch.setattr(absclient, "listening_history", lambda tok, **k: calls.append(tok) or [
         {"item_id": "li_1", "finished": True, "progress": 1, "last_update": 1}])
     monkeypatch.setattr(scheduler, "start", lambda: None)
     app = create_app()

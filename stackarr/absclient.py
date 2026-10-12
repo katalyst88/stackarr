@@ -58,19 +58,42 @@ def _user_get(token: str, path: str, params: dict | None = None):
     return r.json()
 
 
-def listening_history(token: str) -> list[dict]:
+# A book counts as "being read" from its first real minute, not from 25%: the
+# Home "Currently reading" shelf and Insights' in-progress count used to miss a
+# book you started this morning. Seconds, so a stray tap (an 11-second
+# "progress" on a book you never started) doesn't put it on the shelf.
+STARTED_SECONDS = 60
+
+
+def _started(mp: dict) -> bool:
+    """Unfinished, not hidden from Continue Listening, and really begun."""
+    if mp.get("isFinished") or mp.get("hideFromContinueListening"):
+        return False
+    return ((mp.get("currentTime") or 0) >= STARTED_SECONDS
+            or (mp.get("ebookProgress") or 0) > 0
+            or (mp.get("progress") or 0) >= 0.01)
+
+
+def listening_history(token: str, started: bool = False) -> list[dict]:
     """Books this user has finished or made real progress on, recent first.
-    Each: {item_id, finished, progress, last_update}."""
+    Each: {item_id, finished, progress, last_update, reading}.
+
+    By default an unfinished book needs 25% progress — the recommender's seed
+    threshold (a book abandoned at 5% says little about taste). `started=True`
+    also returns every book that is merely begun (see _started), which is
+    what the shelves and Insights show; `reading` marks those."""
     out = []
     try:
         me = _user_get(token, "/api/me")
         for mp in me.get("mediaProgress", []):
-            if mp.get("isFinished") or (mp.get("progress") or 0) >= 0.25:
+            begun = _started(mp)
+            if mp.get("isFinished") or (mp.get("progress") or 0) >= 0.25 or (started and begun):
                 out.append({
                     "item_id": mp.get("libraryItemId", ""),
                     "finished": bool(mp.get("isFinished")),
                     "progress": mp.get("progress") or 0,
                     "last_update": mp.get("lastUpdate") or 0,
+                    "reading": begun,
                 })
     except Exception as e:
         log.warning("listening_history failed: %s", e)

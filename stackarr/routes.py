@@ -35,7 +35,8 @@ def reading_history(be, u) -> list[dict]:
 def abs_history(u) -> list[dict]:
     """The user's Audiobookshelf listening history, fetched at most ONCE per
     request — Home reads it for the shelves, the goal ring and stale-pick
-    retirement. Same per-request memo as reading_history()."""
+    retirement. Same per-request memo as reading_history(). Includes books
+    that are only just begun (`reading`), not just the recommender's 25%+."""
     from flask import g
     cache = getattr(g, "_abs_history", None)
     if cache is None:
@@ -43,7 +44,7 @@ def abs_history(u) -> list[dict]:
     uid = str((u or {}).get("id", ""))
     if uid not in cache:
         tok = (u or {}).get("abs_token")
-        cache[uid] = absclient.listening_history(tok) if tok else []
+        cache[uid] = absclient.listening_history(tok, started=True) if tok else []
     return cache[uid]
 
 
@@ -144,7 +145,7 @@ def _onboarding_books(u, limit=12):
     """Finished-in-ABS books the user hasn't rated yet — the seed set for the
     quick-rate onboarding card. Most have no ASIN, so we key on rating_key."""
     try:
-        hist = absclient.listening_history(u["abs_token"])
+        hist = abs_history(u)
     except Exception:
         return []
     with db.conn() as c:
@@ -375,7 +376,7 @@ def _heatmap(dates: list[str]) -> dict:
 def insights_page():
     import datetime
     u = auth.current_user()
-    hist = absclient.listening_history(u["abs_token"])
+    hist = abs_history(u)
     stats = absclient.listening_stats(u["abs_token"])
     # ebook reading history from connected ebook sources (joined to library)
     from . import backends
@@ -398,7 +399,7 @@ def insights_page():
             finished += 1; by_format["audiobook"] += 1
             if h.get("last_update"):
                 finish_dates.append(datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat())
-        elif h["progress"] > 0.02:
+        elif h.get("reading"):
             in_prog += 1
         m = lib.get(h["item_id"])
         if m and m["author"]:
@@ -454,7 +455,7 @@ def history_page():
     """Books you've read — finished in Audiobookshelf, rated, or marked read —
     each with a 1-5 star rating control that feeds the recommender."""
     u = auth.current_user()
-    hist = absclient.listening_history(u["abs_token"])
+    hist = abs_history(u)
     with db.conn() as c:
         lib = {r["item_id"]: dict(r) for r in
                c.execute("SELECT item_id,title,author,asin FROM library")}
@@ -567,10 +568,10 @@ def series_page():
     # reading progress separately from what's downloaded.
     finished_ids, inprogress_ids = set(), set()
     try:
-        for h in absclient.listening_history(u["abs_token"]):
+        for h in abs_history(u):
             if h.get("finished"):
                 finished_ids.add(h["item_id"])
-            elif (h.get("progress") or 0) > 0.02:
+            elif h.get("reading"):
                 inprogress_ids.add(h["item_id"])
     except Exception:
         pass
@@ -1193,8 +1194,14 @@ def _shelves_data(u):
     try:
         with db.conn() as c:
             lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,asin,format FROM library")}
+        fetched = 0
         for h in abs_history(u):
             m = lib.get(h["item_id"]) or {}
+            if not m.get("title") and h.get("reading") and fetched < 4:
+                # started before the next library refresh has seen the item
+                # (it was added today): ask ABS for it, a few per render at most
+                fetched += 1
+                m = absclient.item_detail(h["item_id"]) or {}
             if not m.get("title"):
                 continue
             # pass the real ASIN as the key so the card links to the book page
@@ -1202,7 +1209,7 @@ def _shelves_data(u):
             if h.get("finished"):
                 _add_read(m["title"], m.get("author", ""), url_for("main.cover", item_id=h["item_id"]),
                           "audiobook", rkey=rk)
-            elif (h.get("progress") or 0) > 0.02:
+            elif h.get("reading", (h.get("progress") or 0) > 0.02):
                 _add_reading(m["title"], m.get("author", ""), url_for("main.cover", item_id=h["item_id"]),
                              "audiobook", rkey=rk)
         if formats.show("ebook"):

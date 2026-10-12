@@ -45,7 +45,7 @@ def household(tmp_db, monkeypatch):
                   "(?, 'The Knight','Will Wight','handed','audiobook'),"
                   "(?, 'The Pilot','Will Wight','failed','audiobook')", (uid, uid))
     finished_at = (time.time() - 3 * 86400) * 1000
-    monkeypatch.setattr(absclient, "listening_history", lambda tok: [
+    monkeypatch.setattr(absclient, "listening_history", lambda tok, **k: [
         {"item_id": "li_1", "finished": True, "progress": 1, "last_update": finished_at}])
     db.set_meta("formats", "audiobook")
     return uid
@@ -129,7 +129,7 @@ def test_strip_starts_after_the_highest_finished_book(aud, household):
 
 
 def test_strip_starts_after_the_viewed_book_when_nothing_is_finished(aud, household, monkeypatch):
-    monkeypatch.setattr(absclient, "listening_history", lambda tok: [])
+    monkeypatch.setattr(absclient, "listening_history", lambda tok, **k: [])
     start, nxt = seriesmap.strip(_books(household), after=2)
     assert start == 2 and [b["seq"] for b in nxt] == [3, 4, 5]
 
@@ -167,7 +167,7 @@ def test_continue_card_follows_a_recent_finish(aud, household):
 
 def test_continue_card_ignores_an_old_finish(aud, household, monkeypatch):
     old = (time.time() - 30 * 86400) * 1000
-    monkeypatch.setattr(absclient, "listening_history", lambda tok: [
+    monkeypatch.setattr(absclient, "listening_history", lambda tok, **k: [
         {"item_id": "li_1", "finished": True, "progress": 1, "last_update": old}])
     assert _client(household).get("/api/series/continue").get_json() == {"ok": False}
     assert not aud.calls
