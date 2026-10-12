@@ -136,7 +136,13 @@ def queue() -> list[dict] | None:
                 tds = (rec.get("trackedDownloadStatus") or "").lower()
                 tdl = (rec.get("trackedDownloadState") or "").lower()
                 reason = _plain_reason(rec)
-                if "import" in tdl or st == "completed":
+                low = reason.lower()
+                if "409" in low or "already exists" in low or "already in the download client" in low:
+                    # qBittorrent answered 409 Conflict: the torrent is already
+                    # there (another row of the same work grabbed it) — not a failure
+                    state, reason = "waiting", ("Already in the download client — Chaptarr picks it up "
+                                                "when that download finishes")
+                elif "import" in tdl or st == "completed":
                     state = "importing"
                 elif st == "failed" or tdl == "failed" or tds == "error":
                     state = "failed"
@@ -296,6 +302,53 @@ def _match_book(books: list[dict], title: str, asin: str) -> dict | None:
         if hit:
             return hit
     return None
+
+
+def _files(row: dict) -> int:
+    return int(((row or {}).get("statistics") or {}).get("bookFileCount") or 0)
+
+
+def work_rows(rows: list[dict], title: str, asin: str = "", media: str = "") -> list[dict]:
+    """Every row Chaptarr holds for this WORK in `media` — not just the first
+    title match. Chaptarr can list one work two or three times for an author:
+    a series-linked row and a series-less one from another metadata source
+    (Dungeon Crawler Carl #2: audiobook 8798 "gr:" + 8805 "hc:", ebook 8859
+    + 8866 "Carl's Doomsday Scenario: Dungeon Crawler Carl Book 2"). Each row
+    is the same title (brackets aside), or that title plus a subtitle ("…:
+    Dungeon Crawler Carl Book 2"); a different "Book N" never is, and omnibus
+    rows never count."""
+    from . import titles
+    pool = [r for r in (_for_media(rows, media) if media else rows) if not r.get("isOmnibus")]
+    a = (asin or "").strip().upper()
+    want = titles.norm(titles._BRACKETS.sub("", title or ""))
+    out = []
+    for r in pool:
+        rt = r.get("title") or ""
+        full, base, tail = titles.parts(rt)
+        if (a and a in ((r.get("asin") or "").upper(), (r.get("audibleASIN") or "").upper())) \
+                or (want and (titles.norm(titles._BRACKETS.sub("", rt)) == want or (tail and base == want))):
+            out.append(r)
+    return out
+
+
+def pick_row(rows: list[dict], title: str, asin: str = "", media: str = "") -> tuple:
+    """(row to monitor + search, sibling that already has a file) for a work.
+
+    If ANY row of the work holds a file, Chaptarr already has the book: the
+    caller must not search again (DCC #2's ebook was re-downloaded because the
+    file sat on the other row). Otherwise prefer the row with the requested
+    ASIN, then one with any ASIN (the row Chaptarr's import matches: DCC #2's
+    audiobook import was blocked — "grabbed for BookId 8798 … but import
+    matched BookId 8805"), then a monitored one."""
+    sibs = work_rows(rows, title, asin, media)
+    have = next((r for r in sibs if _files(r) > 0), None)
+    if have or not sibs:
+        return (have, have)
+    a = (asin or "").strip().upper()
+    best = sorted(sibs, key=lambda r: (
+        not (a and a in ((r.get("asin") or "").upper(), (r.get("audibleASIN") or "").upper())),
+        not (r.get("asin") or r.get("audibleASIN")), not r.get("monitored"), r.get("id") or 0))
+    return (best[0], None)
 
 
 def _media_edition_id(book_id: int, media: str) -> int:
@@ -464,8 +517,11 @@ def has_book_file(title: str, author: str, asin: str = "", media: str = "audiobo
     books = cache.setdefault(("books", author_id), None)
     if books is None:
         books = cache[("books", author_id)] = _author_books(author_id)
+    # any row of the work counts: the file can sit on a sibling row
+    if any(_files(r) > 0 for r in work_rows(books, title, asin, media)):
+        return True
     target = _match_book(_for_media(books, media), title, asin)
-    return bool(target and ((target.get("statistics") or {}).get("bookFileCount") or 0) > 0)
+    return bool(target and _files(target) > 0)
 
 
 def mark_read(title: str, author: str) -> bool:
@@ -675,14 +731,18 @@ def add_books(author: str, books: list[dict], fmt: str = "audiobook") -> dict:
         ids, out = [], []
         for bk in books:
             title, asin = bk.get("title", ""), bk.get("asin", "")
-            hit = _match_book(_for_media(rows, media), title, asin) or _match_book(rows, title, asin)
+            pick, have = pick_row(rows, title, asin, media) if any(r.get("mediaType") for r in rows) else (None, None)
+            if have:
+                out.append({"ok": True, "available": True, "detail": "Chaptarr already has this one."})
+                continue
+            hit = pick or _match_book(_for_media(rows, media), title, asin) or _match_book(rows, title, asin)
             if not hit:
                 out.append({"ok": False, "detail": f"Chaptarr doesn't list “{title}” for {name} yet."})
                 continue
             # same media resolution as a single request (see add_and_search)
             tid = hit["id"] if hit.get("mediaType") == media else _media_edition_id(hit["id"], media)
             row = next((r for r in rows if r.get("id") == tid), hit)
-            if ((row.get("statistics") or {}).get("bookFileCount") or 0) > 0:
+            if _files(row) > 0:
                 out.append({"ok": True, "available": True, "detail": "Chaptarr already has this one."})
                 continue
             if tid not in ids:
@@ -751,8 +811,13 @@ def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audioboo
         # A series Chaptarr doesn't list falls back to the whole author (the
         # documented "get the rest of the series" behaviour).
         is_author_level = bool(series) or _norm(title) == _norm(author)
-        target = None if is_author_level else (_match_book(_for_media(books, media), title, asin)
-                                               or _match_book(books, title, asin))
+        target = None
+        if not is_author_level:
+            pick, have = pick_row(books, title, asin, media) if any(b.get("mediaType") for b in books) else (None, None)
+            if have:
+                return {"ok": True, "available": True, "ref": str(author_id),
+                        "detail": f"Chaptarr already has “{have.get('title') or title}” — nothing to download."}
+            target = pick or _match_book(_for_media(books, media), title, asin) or _match_book(books, title, asin)
         if target:
             # A title match can land on the wrong-media sibling row; resolve to the
             # row for the requested media so we search/grab the format asked for.

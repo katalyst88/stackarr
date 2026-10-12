@@ -2183,7 +2183,8 @@ def _grab_one(user_id, book, fmt, source):
         if db.open_request(c, user_id, book.get("asin", ""), book.get("title", ""), fmt):
             return {"ok": True, "duplicate": True, "detail": "Already requested — Chaptarr is on it."}
     res = chaptarr.add_and_search(book["title"], book.get("author", ""), book.get("asin", ""), fmt=fmt)
-    st = "handed" if res["ok"] else "failed"
+    # Chaptarr already holds a file for the work (on any of its rows): done
+    st = "available" if res.get("available") else ("handed" if res["ok"] else "failed")
     with db.conn() as c:
         db.record_request(c, user_id, book, fmt, st, res.get("detail", ""), res.get("ref", ""), source)
     return res
