@@ -162,6 +162,7 @@ automatically on every release.
 | `ABS_URL`, `ABS_ADMIN_TOKEN` | Audiobookshelf connection (also editable in Settings) |
 | `ABS_PUBLIC_URL` | Optional. The address your browser opens Audiobookshelf at, for "Open in Audiobookshelf" links (also in Settings) |
 | `TZ` | Optional. Default for Settings → General → Timezone (IANA name, e.g. `Australia/Melbourne`); UTC if unset |
+| `STACKARR_THREADS` | Optional. waitress worker threads (default 16) |
 | `CHAPTARR_URL`, `CHAPTARR_API_KEY`, `CHAPTARR_ROOT_FOLDER` | where approved picks go |
 | `CHAPTARR_EBOOK_ROOT_FOLDER` | Chaptarr root folder for eBook picks (defaults to `CHAPTARR_ROOT_FOLDER`) |
 | `STACKARR_FORMATS` | `audiobook` (default) · `ebook` · `both` (also in Settings → General) |

@@ -4,6 +4,46 @@ All notable changes to Stackarr.
 
 ## [Unreleased]
 
+### Works first (field report 2026-10-12, round 5)
+
+#### Changed
+- **Book page is the work**: the title as a reader writes it, "by" the author,
+  the series as a link with its position, then a **Formats** block: one row
+  per format (Audiobook: narrator and length; eBook: pages), each with its
+  status and one action (Request / Retry / Open in Audiobookshelf).
+  `/book/<id>` URLs keep working. New **series page** (`/series/view`): every
+  book in order with its status, and Request remaining.
+- **Cards** show the work's title ("Reaper: Cradle, Book 10" → "Reaper"),
+  author and series + position.
+
+#### Added
+- **Needs VIP**: books whose every release is VIP-only get a "Needs VIP" flag
+  ("check Chaptarr / indexer"), a "Waiting for VIP" filter on Requests and an
+  admin re-search. Stackarr reads the indexer's "Is VIP" setting in Chaptarr
+  (never writes it) and searches those books again when it turns on.
+- **Stuck requests**: one background Chaptarr release check per stuck request
+  (15 min after hand-off, once a day, one a minute at most; never on a page
+  request) gives the reason: VIP-only, no releases, or every release rejected.
+- **Cover style** (Settings): Audible as is, or Clean print covers from Google
+  Books / Open Library.
+- **"Fetching cover…"** placeholder: a cover is real or this, and the page
+  swaps the real one in when the background worker has it (retries with
+  backoff).
+
+#### Fixed
+- The Stackarr icon vanished on phones and with the menu collapsed.
+- Book pages with no catalogue art (a US ASIN on the AU store) showed no cover
+  although the library had one.
+- Library books titled badly in Audiobookshelf ("Reape", "Ghostwater (Cradle
+  Book 5)") get the right title and open their book page (cached series
+  maps, plus a background lookup for the rest).
+- Chaptarr listing one work twice: the handoff now searches the row its
+  import will match, and skips a book whose file sits on a sibling row (DCC #2
+  was downloaded twice; its audiobook import was blocked). A 409 from the
+  download client reads "Already in the download client".
+- waitress thread starvation: 16 threads, ABS covers cached on disk, Open
+  Library tags off the request path, typeahead cached.
+
 ### Consistency pass (field report 2026-10-12)
 
 One answer per book on every page, and the things that "didn't run fluidly".
