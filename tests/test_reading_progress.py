@@ -69,5 +69,7 @@ def test_insights_in_progress_counts_a_book_started_today(admin_client, monkeypa
     monkeypatch.setattr(absclient, "listening_stats", lambda tok: {"total_seconds": 0})
     with db.conn() as c:
         c.execute("UPDATE users SET abs_token='tok' WHERE id=?", (admin_client.uid,))
+        c.execute("INSERT INTO library (item_id,title,author,asin,format) VALUES "
+                  "('li_dcc','Dungeon Crawler Carl (Unabridged)','Matt Dinniman','','audiobook')")
     html = admin_client.get("/insights").get_data(as_text=True)
     assert '<div class="tile-num">1</div><div class="tile-label">in progress' in html
