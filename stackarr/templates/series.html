@@ -37,7 +37,7 @@
       <div class="series-meta gap-note">⚠️ You have this series across formats but not completely in each.</div>
       {% endif %}
       <div class="series-actions">
-        <button class="btn small ghost" onclick="Stackarr.findMissing({{ s.name|tojson }}, this)">🔍 Find missing books</button>
+        <button class="btn small ghost" onclick='Stackarr.findMissing({{ s.name|tojson }}, this)'>🔍 Find missing books</button>
         {# confirms the exact books first (owned / requested / unreleased skipped; format picked in the dialog) #}
         {% set probe = (s.books|selectattr('asin')|list|first) or s.books[0] %}
         <button class="btn small series-getall" onclick='Stackarr.requestRemaining(this, {{ {"series": s.name, "author": s.author or "", "asin": probe.asin or "", "title": probe.title or ""}|tojson }})'>{{ fmt_icon('all' if multi_format else s.format) }} Request remaining…</button>
