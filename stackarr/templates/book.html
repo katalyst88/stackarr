@@ -30,6 +30,7 @@
       {% if b.narrator %}<span class="subtle"> · narrated by </span>{% for nm in b.narrator.split(',') if nm.strip() %}<a class="author-link" href="{{ url_for('main.narrator_page', name=nm.strip()) }}">{{ nm.strip() }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
     </p>
     <div class="book-meta">
+      {% if finished %}<span class="chip finished-chip" title="{{ 'On your Read shelf' if shelf == 'read' else 'Finished in Audiobookshelf' }}">✓ Finished</span>{% endif %}
       {% if b.series %}<span class="chip">{{ b.series }}{% if b.sequence %} #{{ b.sequence }}{% endif %}</span>{% endif %}
       {% if b.runtime_hours %}<span class="chip">⏱ {{ b.runtime_hours }}h</span>{% endif %}
       {% if b.pages %}<span class="chip">📄 {{ '{:,}'.format(b.pages) }} pages</span>{% endif %}

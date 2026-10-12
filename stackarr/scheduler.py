@@ -7,7 +7,7 @@ import queue
 import threading
 import time
 
-from . import absclient, backends, chaptarr, config, db, formats, notify, recommend, titles
+from . import absclient, backends, chaptarr, config, db, formats, notify, picks, recommend, titles
 
 log = logging.getLogger("stackarr.scheduler")
 
@@ -136,6 +136,9 @@ def refresh_library():
     # covers may have been added or changed this cycle
     db.invalidate_cover_index()
 
+    # pending picks this cycle made stale (now owned / requested / finished)
+    retire_stale_picks()
+
     # notify outside the DB transaction (each channel self-gates on its config)
     base = db.get_meta("public_url", "")
     for r in newly_available:
@@ -143,6 +146,15 @@ def refresh_library():
             notify.request_available(r, base_url=base)
         except Exception as e:
             log.warning("availability notify failed for %s: %s", r.get("title"), e)
+
+
+def retire_stale_picks():
+    """Retire every user's pending picks that are now owned, requested or
+    finished (see picks.py). Runs after each library refresh."""
+    with db.conn() as c:
+        users = [dict(r) for r in c.execute("SELECT id, abs_token FROM users")]
+    for u in users:
+        picks.retire_for(u)
 
 
 def _request_media(fmt: str) -> list[str]:
@@ -200,6 +212,9 @@ def run_for_user(user_id: int, force: bool = False) -> int:
     added = 0
     try:
         db.set_meta(key, str(time.time()))     # inside try so finally always releases the lock
+        # a queue full of picks that are already owned/requested/read has no
+        # room, so retire those first — otherwise the recommender never runs
+        picks.retire_for(db.get_user(user_id))
         with db.conn() as c:
             pending = c.execute("SELECT COUNT(*) n FROM suggestions WHERE user_id=? AND status='pending'",
                                 (user_id,)).fetchone()["n"]

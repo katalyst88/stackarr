@@ -327,6 +327,7 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
 .book-meta { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0; }
 .chip { background: var(--bg3); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font-size: 13px; }
 .subtle-chip { color: var(--subtle); }
+.finished-chip { background: rgba(94,234,212,.14); border-color: rgba(94,234,212,.35); color: #5eead4; font-weight: 600; }
 .book-summary { line-height: 1.6; margin: 16px 0; max-width: 72ch; }
 .error-banner { background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.4); color: #fca5a5;
   border-radius: 10px; padding: 12px 16px; margin: 14px 0; max-width: 72ch; font-size: 14px; line-height: 1.5; }

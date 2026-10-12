@@ -7,7 +7,7 @@ from flask import (Blueprint, jsonify, redirect, render_template, request,
                    session, url_for)
 
 from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
-               discover, ebookmeta, formats, notify, recommend, tagging, titles)
+               discover, ebookmeta, formats, notify, picks, recommend, tagging, titles)
 
 log = logging.getLogger("stackarr.routes")
 
@@ -29,6 +29,23 @@ def reading_history(be, u) -> list[dict]:
     if key not in cache:
         cache[key] = be.reading_history(u)
     return cache[key]
+
+
+def abs_history(u) -> list[dict]:
+    """The user's Audiobookshelf listening history, fetched at most ONCE per
+    request — Home reads it for the shelves, the goal ring and stale-pick
+    retirement. Same per-request memo as reading_history()."""
+    from flask import g
+    cache = getattr(g, "_abs_history", None)
+    if cache is None:
+        cache = g._abs_history = {}
+    uid = str((u or {}).get("id", ""))
+    if uid not in cache:
+        tok = (u or {}).get("abs_token")
+        cache[uid] = absclient.listening_history(tok) if tok else []
+    return cache[uid]
+
+
 bp = Blueprint("main", __name__)
 
 # Recommendation lanes — single source of truth for their display titles and the
@@ -167,6 +184,11 @@ def home_page():
     import datetime
     u = auth.current_user()
     shelves, counts = _shelves_data(u)
+    # don't offer a "fresh pick" that's since been added, requested or finished
+    try:
+        picks.retire(u["id"], picks.finished_works(u, abs_history(u)))
+    except Exception as e:
+        log.debug("home: retiring stale picks failed: %s", e)
     # a few fresh picks + new-from-upcoming + goal + up-next count
     with db.conn() as c:
         fresh = [dict(r) for r in c.execute(
@@ -304,7 +326,7 @@ def _finish_dates_all(u) -> list[str]:
             finishes[key] = date
 
     try:
-        for h in absclient.listening_history(u["abs_token"]):
+        for h in abs_history(u):
             if h.get("finished") and h.get("last_update"):
                 d = datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat()
                 _add(lib.get(h["item_id"]) or "abs:" + str(h["item_id"]), d)
@@ -731,10 +753,21 @@ def book_page(asin):
     if formats.multi() and b.get("title"):
         with db.conn() as c:
             owned_formats = sorted({r["format"] for r in _library_works(c, b["title"], b.get("author", ""))})
+    shelf = db.shelf_state(u["id"], key)
+    # "Finished" comes from Audiobookshelf too, not only Stackarr's own Read
+    # shelf — the Home "Read" shelf already shows ABS finishes, and the book page
+    # used to disagree with it
+    finished = shelf == "read"
+    if not finished:
+        try:
+            finished = picks.is_finished(picks.finished_works(u, abs_history(u)), b.get("title", ""),
+                                         b.get("author", ""), asin if asin.startswith("B0") else "")
+        except Exception as e:
+            log.debug("book page: finished check failed: %s", e)
     return render_template("book.html", b=b, rate_key=key, owned_formats=owned_formats,
                            community=db.community_rating(key), reviews=db.reviews_for(key),
                            my_stars=(my["stars"] if my else 0), my_review=(my["review"] if my else ""),
-                           tags=tags, shelf=db.shelf_state(u["id"], key))
+                           tags=tags, shelf=shelf, finished=finished)
 
 
 @bp.route("/browse")
@@ -965,7 +998,7 @@ def _shelves_data(u):
     try:
         with db.conn() as c:
             lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,asin,format FROM library")}
-        for h in absclient.listening_history(u["abs_token"]):
+        for h in abs_history(u):
             m = lib.get(h["item_id"]) or {}
             if not m.get("title"):
                 continue
