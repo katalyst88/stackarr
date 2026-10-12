@@ -302,6 +302,40 @@ def _series_books(books: list[dict], series: str) -> list[dict]:
                    for part in (b.get("seriesTitle") or "").split(";"))]
 
 
+def series_entries(author: str, series: str) -> list[dict]:
+    """The books Chaptarr lists for `series` by an author it already manages,
+    in series order: [{seq, title, asin, release_date, media}] with one entry
+    per work (a media-split work's audiobook and ebook rows merge, `media`
+    lists both). The fallback series map for series Audible doesn't carry
+    (ebook-only ones). Read-only: it never runs an author lookup or adds
+    anyone, so an author Chaptarr doesn't have yet simply has no entries."""
+    if not configured() or not series:
+        return []
+    aid = _author_id((author or "").split(",")[0].strip(), {})
+    if not aid:
+        return []
+    ns, works = _norm(series), {}
+    for b in _series_books(_author_books(aid), series):
+        seq = None
+        for part in (b.get("seriesTitle") or "").split(";"):
+            m = re.match(r"\s*(.*?)\s*#\s*([\d.]+)\s*$", part)
+            if m and _norm(m.group(1)) == ns:
+                try:
+                    seq = float(m.group(2))
+                except ValueError:
+                    seq = None
+                break
+        if seq is None:
+            continue                     # no position -> can't place it in the order
+        w = works.setdefault(_norm(b.get("title")), {
+            "seq": seq, "title": b.get("title") or "", "media": [],
+            "asin": (b.get("asin") or b.get("audibleASIN") or "").strip(),
+            "release_date": (b.get("releaseDate") or "")[:10]})
+        if b.get("mediaType") and b["mediaType"] not in w["media"]:
+            w["media"].append(b["mediaType"])
+    return sorted(works.values(), key=lambda w: w["seq"])
+
+
 def _ensure_media_monitored(author_obj: dict, media: str, rf: str,
                             qp: int | None = None, mp: int | None = None) -> None:
     """Chaptarr's current schema gates book monitoring behind per-media author

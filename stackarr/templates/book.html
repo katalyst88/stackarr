@@ -88,6 +88,14 @@
   </div>
 </div>
 
+{# "Next in <series>": filled by Stackarr.loadSeriesStrip() from /api/series/next #}
+{% if b.series or b.series_asin %}
+<section class="section series-strip-wrap" id="series-next" data-series-strip hidden
+         data-asin="{{ b.asin if (b.asin or '').startswith('B') else '' }}" data-series-asin="{{ b.series_asin or '' }}"
+         data-series="{{ b.series or '' }}" data-author="{{ (b.author or '').split(',')[0] }}"
+         data-title="{{ b.title }}" data-seq="{{ b.sequence if b.sequence is not none else '' }}"></section>
+{% endif %}
+
 {# below-the-fold: repeat the primary grab actions so they're reachable after reading #}
 <div class="book-actions-bottom">
   {{ grab_actions() }}
@@ -107,4 +115,4 @@
   </div>
 </section>
 {% endblock %}
-{% block scripts %}<script>Stackarr.boot();</script>{% endblock %}
+{% block scripts %}<script>Stackarr.boot();Stackarr.loadSeriesStrip();</script>{% endblock %}

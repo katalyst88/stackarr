@@ -78,6 +78,43 @@ const Stackarr = (() => {
     ${href ? "</a>" : "</div>"}`;
   };
 
+  // "Next in <series>" (book page) / "Continue <series>" (Home): one card per
+  // book with its state. Data is /api/series/next|continue; every catalogue
+  // string is escaped before it reaches innerHTML.
+  const SERIES_TAG = {
+    finished:  ["Finished",   "available"],
+    available: ["In library", "available"],
+    handed:    ["Requested",  "handed"],
+    upcoming:  ["Upcoming",   "upcoming"],
+  };
+  const seqLabel = (n) => (n === null || n === undefined || n === "" ? "" : "#" + Number(n));
+  const seriesCard = (b) => {
+    const tag = SERIES_TAG[b.state];
+    const href = b.asin ? `${B()}/book/${encodeURIComponent(b.asin)}` : "";
+    // no catalogue cover (Chaptarr-mapped series): the local cover endpoint
+    // answers from the library / cover cache, never inline from a third party
+    const cover = b.cover ? hires(b.cover)
+      : `${B()}/coverart?` + new URLSearchParams({ title: b.title || "", author: b.author || "", asin: b.asin || "" });
+    const poster = `<img src="${esc(cover)}" loading="lazy" alt="">` +
+      (tag ? `<span class="corner-badge ${tag[1]}">${tag[0]}</span>` : "");
+    const sub = b.state === "upcoming" && b.release_date ? `Out ${b.release_date}` : (b.author || "");
+    const book = { asin: b.asin || "", title: b.title, author: b.author || "", cover: b.cover || "" };
+    const act = b.state === "missing"
+      ? `<button class="btn small" onclick="Stackarr.request(${esc(JSON.stringify(book))}, this)">Request</button>` : "";
+    return `<div class="media-card" data-seq="${esc(String(b.seq))}">
+      ${href ? `<a class="media-poster" href="${esc(href)}">${poster}</a>` : `<div class="media-poster">${poster}</div>`}
+      <div class="media-foot">
+        <div class="media-title" title="${esc(b.title)}">${esc(seqLabel(b.seq))} · ${esc(b.title)}</div>
+        <div class="media-author">${esc(sub)}</div>${act}
+      </div>
+    </div>`;
+  };
+  const seriesStrip = (d, title, sub) => `
+    <div class="section-head series-strip-head">
+      <h3>${esc(title)}${sub ? ` <span class="subtle">${esc(sub)}</span>` : ""}</h3>
+    </div>
+    <div class="series-strip">${(d.next || []).map(seriesCard).join("")}</div>`;
+
   let pollTimer = null;
   const startLoaderPoll = (firstRun) => {
     const loader = document.getElementById("shelf-loader");
@@ -221,6 +258,34 @@ const Stackarr = (() => {
       if (!r) { if (btn) { btn.disabled = false; btn.textContent = label || "＋ Get full series"; } return; }   // 401 → api() redirected
       toast(r.detail || (r.ok ? "Sent to Chaptarr." : "Couldn't add right now."));
       if (btn) { btn.disabled = false; btn.textContent = r.ok ? "✓ Requested" : (label || "＋ Get full series"); }
+    },
+    async loadSeriesStrip(el) {
+      el = el || document.getElementById("series-next");
+      if (!el) return;
+      const q = new URLSearchParams();
+      for (const k of ["asin", "series_asin", "series", "author", "title", "seq"]) {
+        const v = el.dataset[k.replace(/_(\w)/g, (_, c) => c.toUpperCase())];
+        if (v) q.set(k, v);
+      }
+      const d = await api("/api/series/next?" + q.toString());
+      if (!d || !d.ok || !(d.next || []).length) return;        // not a series we can place, or nothing after it
+      const sub = d.after !== null && d.after !== undefined && d.after_title ? `after ${seqLabel(d.after)} ${d.after_title}` : "";
+      this._showSeriesStrip(el, d, `Next in ${d.series}`, sub);
+    },
+    async loadContinueSeries() {
+      const el = document.getElementById("continue-series");
+      if (!el) return;
+      const d = await api("/api/series/continue");
+      if (!d || !d.ok || !(d.next || []).length) return;
+      const n = d.finished_days, when = n === 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`;
+      this._showSeriesStrip(el, d, `Continue ${d.series}`, `you finished “${d.after_title || d.finished_title}” ${when}`);
+    },
+    _showSeriesStrip(el, d, title, sub) {
+      el._series = d;
+      el.innerHTML = seriesStrip(d, title, sub);
+      el.hidden = false;
+      this.fitCovers();
+      this.initCovers(el);
     },
     toggleTheme() {
       localStorage.setItem("stackarr-theme", localStorage.getItem("stackarr-theme") === "light" ? "dark" : "light");

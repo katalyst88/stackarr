@@ -7,7 +7,8 @@ from flask import (Blueprint, jsonify, redirect, render_template, request,
                    session, url_for)
 
 from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
-               discover, ebookmeta, formats, notify, picks, recommend, tagging, titles)
+               discover, ebookmeta, formats, notify, picks, recommend, seriesmap, tagging,
+               titles)
 
 log = logging.getLogger("stackarr.routes")
 
@@ -727,6 +728,7 @@ def book_page(asin):
             b["genres"] = ax["genres"]
         if ax.get("series") and not b.get("series"):
             b["series"], b["sequence"] = ax["series"], ax.get("sequence")
+            b["series_asin"] = ax.get("series_asin") or ""
     # Catalogue lookups can transiently fail (rate-limit / timeout). Fall back to
     # what Stackarr already knows about this book so the page never shows a bare
     # "Unknown" — we usually have its title/author/cover cached from a suggestion.
@@ -886,6 +888,93 @@ def api_series_missing():
     missing = [e for e in entries if not e["owned"]]
     return jsonify({"ok": True, "series": name, "total": len(entries),
                     "owned": len(entries) - len(missing), "missing": missing, "entries": entries})
+
+
+def _series_target(src) -> dict:
+    """What a series request names: a book (asin, or title + author) and/or a
+    series (series_asin, or series name + author). `seq` is the viewed book's
+    position, the fallback start of the "Next in" strip."""
+    t = {k: (src.get(k) or "").strip() for k in ("asin", "series_asin", "series", "author", "title")}
+    t["author"] = t["author"].split(",")[0].strip()
+    for k in ("asin", "series_asin"):            # ASIN-shaped or nothing — they go into a URL path
+        if not re.fullmatch(r"[A-Za-z0-9]{10}", t[k]):
+            t[k] = ""
+    try:
+        t["seq"] = float(src.get("seq")) if src.get("seq") not in (None, "") else None
+    except (TypeError, ValueError):
+        t["seq"] = None
+    return t
+
+
+def _series_view(u, t: dict) -> dict | None:
+    """The series map for a target, annotated for this user, plus the strip:
+    {ok, series, series_asin, source, author, after, after_title, books, next,
+    formats, multi}. None when the series can't be placed."""
+    data = seriesmap.resolve(asin=t["asin"], title=t["title"], author=t["author"],
+                             series=t["series"], series_asin=t["series_asin"])
+    if not data:
+        return None
+    finished = picks.finished_works(u, abs_history(u))
+    books = seriesmap.annotate(data, finished, default_author=t["author"])
+    if not books:
+        return None
+    start, nxt = seriesmap.strip(books, after=t["seq"])
+    after = next((b for b in books if b["seq"] == start), None)
+    return {"ok": True, "series": data.get("name") or t["series"], "series_asin": data.get("series_asin", ""),
+            "source": data.get("source", ""), "author": t["author"] or _first(books[0]["author"]),
+            "after": start, "after_title": after["title"] if after else "", "books": books, "next": nxt,
+            "formats": formats.available(), "multi": formats.multi()}
+
+
+def _first(author: str) -> str:
+    return (author or "").split(",")[0].strip()
+
+
+@bp.route("/api/series/next")
+@auth.login_required
+def api_series_next():
+    """The "Next in <series>" strip for a book page (or any series target):
+    the next books after the highest one you've finished, each with its state
+    (finished / in library / requested / upcoming / missing). Cached series
+    maps, so a book page view is normally no catalogue call at all."""
+    u = auth.current_user()
+    t = _series_target(request.args)
+    if not (t["asin"] or t["series_asin"] or (t["series"] and t["author"]) or (t["title"] and t["author"])):
+        return jsonify({"ok": False, "detail": "Name a book or a series."}), 400
+    return jsonify(_series_view(u, t) or {"ok": False, "detail": "Couldn't place this series."})
+
+
+CONTINUE_DAYS = 14         # how recent a finish the Home "Continue" card follows
+
+
+@bp.route("/api/series/continue")
+@auth.login_required
+def api_series_continue():
+    """Home's "Continue <series>" card: the series of the book you finished
+    most recently in Audiobookshelf (within CONTINUE_DAYS) that still has books
+    after it. Tries at most three recent finishes, so a run of standalones
+    can't turn one Home view into a dozen catalogue lookups."""
+    import time
+    u = auth.current_user()
+    cutoff = (time.time() - CONTINUE_DAYS * 86400) * 1000
+    tried, seen = 0, set()
+    for r in picks.finished_works(u, abs_history(u)):
+        if (r.get("last_update") or 0) < cutoff or tried >= 3:
+            break
+        name = (r.get("series") or "").strip() or (_infer_series(r["title"])[0] or "")
+        if name and name.lower() in seen:
+            continue
+        tried += 1
+        v = _series_view(u, {"asin": r.get("asin") or "", "series_asin": "", "series": name,
+                             "author": _first(r.get("author")), "title": r["title"], "seq": None})
+        if not v:
+            continue
+        seen.add((v["series"] or name).lower())
+        if v["next"]:
+            v["finished_title"] = r["title"]
+            v["finished_days"] = max(int((time.time() * 1000 - r["last_update"]) // 86_400_000), 0)
+            return jsonify(v)
+    return jsonify({"ok": False})
 
 
 @bp.route("/api/series/repair", methods=["POST"])
