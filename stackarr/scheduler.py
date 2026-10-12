@@ -301,10 +301,7 @@ def auto_approve(user_id: int) -> int:
             continue                    # per-item catalogue miss → skip it, keep going
 
         with db.conn() as c:
-            c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
-                      "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                      (user_id, r.get("asin", ""), r["title"], r.get("author", ""),
-                       r.get("cover", ""), "handed", res.get("detail", ""), res.get("ref", ""), "auto", fmt))
+            db.record_request(c, user_id, r, fmt, "handed", res.get("detail", ""), res.get("ref", ""), "auto")
             c.execute("UPDATE suggestions SET status='approved',decided_at=datetime('now','localtime') WHERE id=?",
                       (r["id"],))
         added += 1

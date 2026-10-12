@@ -254,8 +254,10 @@ const Stackarr = (() => {
       document.querySelectorAll("#fmt-filter .fmt-pill").forEach(p => p.classList.toggle("active", p === pill));
       try { localStorage.setItem("stackarr-fmt", fmt); } catch (e) {}
       // filter every format-tagged item on the page (cards, list rows, series cards…)
+      // an entry may carry several formats (a Requests row for both): data-formats
       document.querySelectorAll("[data-format]").forEach(el => {
-        el.style.display = (fmt === "all" || el.dataset.format === fmt) ? "" : "none";
+        const has = el.dataset.format === fmt || (el.dataset.formats || "").split(",").includes(fmt);
+        el.style.display = (fmt === "all" || has) ? "" : "none";
       });
       // hide any group wrapper (lane section, etc.) left with no visible items
       document.querySelectorAll(".fmt-group").forEach(g => {
@@ -539,17 +541,34 @@ const Stackarr = (() => {
       const c = btn.querySelector(".vcount"); if (c) c.textContent = r.votes;
       btn.classList.toggle("voted");
     },
-    async pollRequestStatus() {
-      try {
-        const s = await api("/api/requests/status");
-        for (const [id, st] of Object.entries(s || {})) {
-          const row = document.querySelector(`.req-row[data-id="${id}"] .badge`);
-          if (row && (st === "downloading" || st === "importing")) {
-            row.textContent = st === "importing" ? "Importing" : "Downloading";
-            row.className = "badge badge-handed";
+    // Requests page: keep each book's status fresh (status.py via
+    // /api/requests/status, which reads Chaptarr's queue at most every 30 s).
+    // Polls while the tab is visible, stops when nothing is left on its way.
+    async pollRequestStatus(once) {
+      const tick = async () => {
+        if (document.hidden) return true;
+        let s;
+        try { s = await api("/api/requests/status"); } catch (e) { return true; }
+        if (!s) return false;
+        for (const [id, st] of Object.entries(s)) {
+          const row = document.querySelector(`.req-row[data-id="${id}"]`);
+          if (!row) continue;
+          for (const [f, fs] of Object.entries(st.formats || {})) {
+            const b = row.querySelector(`.req-st[data-fmt="${f}"] .badge`);
+            if (!b || !fs.label) continue;
+            const icon = b.querySelector("svg");
+            b.className = "badge badge-" + fs.cls; b.title = fs.detail || "";
+            b.textContent = fs.label; if (icon) b.prepend(icon, " ");
           }
+          const d = row.querySelector(".req-detail");
+          if (d && st.detail) { d.textContent = st.detail; d.title = st.detail; }
         }
-      } catch (e) {}
+        return Object.keys(s).length > 0;
+      };
+      if (await tick() && !once) {
+        clearInterval(this._reqPoll);
+        this._reqPoll = setInterval(async () => { if (!(await tick())) clearInterval(this._reqPoll); }, 30000);
+      }
     },
     async checkLibraries(btn) {
       if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
@@ -762,7 +781,12 @@ const Stackarr = (() => {
     },
     async markReadBook(book, btn) { btn.disabled = true; const r = await api("/api/mark-read", { method: "POST", body: JSON.stringify(book) }); if (r && r.ok) toast(`Noted “${r.matched}” as read.`); },
     async retry(id) { const r = await api(`/api/request/${id}/retry`, { method: "POST" }); if (r) location.reload(); },
-    async removeRequest(id) { await api(`/api/request/${id}`, { method: "DELETE" }); document.querySelector(`.req-row[data-id="${id}"]`)?.remove(); },
+    // a Requests entry is one book: remove every attempt it folds (ids "12,9,4")
+    async removeRequest(ids) {
+      const list = String(ids).split(",").filter(Boolean);
+      for (const id of list) await api(`/api/request/${id}`, { method: "DELETE" });
+      document.querySelector(`.req-row[data-id="${list[0]}"]`)?.remove();
+    },
     async approveRequest(id, btn) {
       if (btn) btn.disabled = true;
       const r = await api(`/api/requests/${id}/approve`, { method: "POST" });
