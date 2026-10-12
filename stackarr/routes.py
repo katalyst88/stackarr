@@ -843,6 +843,8 @@ def book_page(asin):
         cached = _cached_book(asin)
         b.update({k: v for k, v in cached.items() if v and not b.get(k)})
     b.setdefault("title", "Unknown")
+    if not b.get("cover"):
+        b["cover"] = _local_cover(asin, b.get("title", ""), b.get("author", ""), b.get("format", ""))
     st = book_status(asin, b.get("title", ""), b.get("author", ""), b.get("release_date") or "")
     b["state"] = st["state"]
     u = auth.current_user()
@@ -1800,6 +1802,20 @@ def _clean_catalogue(books: list[dict]) -> list[dict]:
         at[k] = len(out)
         out.append(b)
     return out
+
+
+def _local_cover(asin, title, author, fmt="") -> str:
+    """A cover URL for a book the catalogue gave no art for — never a network
+    call on this request. Our own copy first (the library item's cover, by
+    ASIN or title), else /coverart, which answers from the cover cache and
+    queues anything unknown for the background worker. Dungeon Crawler Carl's
+    US ASIN (B08V8B2CGV) isn't sold on the AU marketplace, so its book page
+    had no cover although Audiobookshelf holds one."""
+    real = asin if _real_book_id(asin) and not asin.startswith(("gb:", "ol:")) else ""
+    ref = db.library_cover(title, author, real)
+    if ref:
+        return url_for("main.libcover", ref=ref) if ":" in ref else url_for("main.cover", item_id=ref)
+    return url_for("main.coverart", asin=real, title=title or "", author=author or "", fmt=fmt or "")
 
 
 def _cached_book(asin) -> dict:
