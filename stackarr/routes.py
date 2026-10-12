@@ -364,44 +364,72 @@ def requests_page():
                            approvals=approvals)
 
 
-def _finish_dates_all(u) -> list[str]:
-    """Every book the user has FINISHED, as ISO dates — combining Audiobookshelf
-    listening history, connected ebook sources, and the manual 'read' shelf. Each
-    book counts ONCE: a title finished in Audiobookshelf AND marked read on the
-    shelf is deduped by rating-key so the goal/heatmap aren't inflated."""
-    import datetime
-    # library item_id -> rating-key, so a source finish can be matched to a shelf finish
-    with db.conn() as c:
-        lib = {r["item_id"]: db.rating_key(r["asin"] or "", r["title"], r["author"])
-               for r in c.execute("SELECT item_id,title,author,asin FROM library")}
-    finishes: dict[str, str] = {}      # book key -> earliest finish date
+_LEADING_NUM = re.compile(r"^\d{1,3}\s+(?=[A-Za-z])")       # "09 Bloodline" (a numbered rip)
 
-    def _add(key, date):
-        if not key:
+
+def _finished_books(u) -> list[dict]:
+    """Every book the user has FINISHED, each ONCE: {title, author, date
+    (earliest, ISO), formats}. Combines Audiobookshelf listening history,
+    connected ebook sources and the manual Read shelf.
+
+    Once per WORK, not per library item: a library often holds the same book
+    twice ("Unsouled (Cradle Book 1)" and "Unsouled: Cradle, Volume 1", or a
+    numbered rip "09 Bloodline"), and a book finished in ABS and also marked
+    Read must not count twice — Insights showed 30 finished for 13 books.
+    Same author + titles.matches(), so two different "Star Wars: …" books
+    never merge. Home's goal ring and Insights both read this."""
+    import datetime
+    with db.conn() as c:
+        lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,asin,format FROM library")}
+    books: list[dict] = []
+    by_author: dict = {}
+
+    def _add(title, author, date, fmt):
+        t = _LEADING_NUM.sub("", (title or "").strip())
+        if not t or not date:
             return
-        if key not in finishes or date < finishes[key]:
-            finishes[key] = date
+        a = _first(author).lower()
+        same = by_author.setdefault(a, [])
+        hit = titles.matches(same, t) if a else [b for b in same if b["title"].lower() == t.lower()]
+        if hit:
+            b = hit[0]
+            b["date"] = min(b["date"], date)
+            if fmt not in b["formats"]:
+                b["formats"].append(fmt)
+            return
+        b = {"title": t, "author": author or "", "date": date, "formats": [fmt]}
+        same.append(b)
+        books.append(b)
+
+    def _day(ms):
+        return datetime.date.fromtimestamp(ms / 1000).isoformat()
 
     try:
         for h in abs_history(u):
-            if h.get("finished") and h.get("last_update"):
-                d = datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat()
-                _add(lib.get(h["item_id"]) or "abs:" + str(h["item_id"]), d)
-    except Exception:
-        pass
+            m = lib.get(h["item_id"]) or {}
+            if h.get("finished") and h.get("last_update") and m.get("title"):
+                _add(m["title"], m.get("author", ""), _day(h["last_update"]), m.get("format") or "audiobook")
+    except Exception as e:
+        log.debug("finished books: ABS history failed: %s", e)
     if formats.show("ebook"):
         from . import backends
         for be in backends.sources("ebook"):
             try:
                 for h in reading_history(be, u):
-                    if h.get("finished") and h.get("last_update"):
-                        d = datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat()
-                        _add(lib.get(h["item_id"]) or "eb:" + str(h["item_id"]), d)
+                    m = lib.get(h["item_id"]) or {}
+                    if h.get("finished") and h.get("last_update") and m.get("title"):
+                        _add(m["title"], m.get("author", ""), _day(h["last_update"]), "ebook")
             except Exception:
                 pass
-    for rkey, d in db.finished_keyed(u["id"]):     # manual read-shelf finishes
-        _add(rkey, d)
-    return list(finishes.values())
+    for r in db.shelf_list(u["id"], "read"):           # manual Read-shelf finishes
+        if r.get("finished_at"):
+            _add(r.get("title"), r.get("author"), r["finished_at"][:10], r.get("format") or "audiobook")
+    return books
+
+
+def _finish_dates_all(u) -> list[str]:
+    """The finish date of every book the user has finished, once per book."""
+    return [b["date"] for b in _finished_books(u)]
 
 
 def _heatmap(dates: list[str]) -> dict:
@@ -429,11 +457,15 @@ def _heatmap(dates: list[str]) -> dict:
 @bp.route("/insights")
 @auth.login_required
 def insights_page():
+    """Your reading, wrapped — from the same sources as Home, read live on
+    every view: finishes once per book (_finished_books, so the year count
+    matches Home's goal ring), in-progress from Audiobookshelf + ebook
+    sources (a book started today counts), ratings and moods from Stackarr."""
     import datetime
     u = auth.current_user()
     hist = abs_history(u)
     stats = absclient.listening_stats(u["abs_token"])
-    # ebook reading history from connected ebook sources (joined to library)
+    books = _finished_books(u)
     from . import backends
     ebook_hist = []
     if formats.show("ebook"):
@@ -445,30 +477,34 @@ def insights_page():
     with db.conn() as c:
         lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,format FROM library")}
         ratings = [dict(r) for r in c.execute("SELECT stars,asin,title,author,format FROM ratings WHERE user_id=?", (u["id"],))]
-        req_avail = c.execute("SELECT COUNT(*) n FROM requests WHERE user_id=? AND status='available'", (u["id"],)).fetchone()["n"]
-    authors, finished, in_prog = {}, 0, 0
+        # books Stackarr got you: distinct works, not one per format row, and
+        # not the rows back-filled from a library import
+        added = [dict(r) for r in c.execute(
+            "SELECT title, author FROM requests WHERE user_id=? AND status='available' "
+            "AND COALESCE(source,'') <> 'backfill'", (u["id"],))]
+    req_avail = len({(titles.parts(r["title"])[0], _first(r["author"]).lower()) for r in added})
+    finished = len(books)
     by_format = {"audiobook": 0, "ebook": 0}
-    finish_dates = []
+    for b in books:
+        for f in b["formats"]:
+            by_format[f if f in by_format else "audiobook"] += 1
+    reading = {}
     for h in hist:
-        if h["finished"]:
-            finished += 1; by_format["audiobook"] += 1
-            if h.get("last_update"):
-                finish_dates.append(datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat())
-        elif h.get("reading"):
-            in_prog += 1
-        m = lib.get(h["item_id"])
-        if m and m["author"]:
-            a = m["author"].split(",")[0].split(" - ")[0].strip()
-            if a:
-                authors[a] = authors.get(a, 0) + 1
+        m = lib.get(h["item_id"]) or {}
+        if h.get("reading") and m.get("title"):
+            reading.setdefault((titles.parts(m["title"])[0], _first(m.get("author")).lower()), m)
     for h in ebook_hist:
-        if h.get("finished"):
-            finished += 1; by_format["ebook"] += 1
-            if h.get("last_update"):
-                finish_dates.append(datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat())
-        elif (h.get("progress") or 0) > 0.02:
-            in_prog += 1
-    finish_dates += db.finished_dates(u["id"])      # read-shelf finishes
+        m = lib.get(h["item_id"]) or {}
+        if not h.get("finished") and 0.02 < (h.get("progress") or 0) < 1 and m.get("title"):
+            reading.setdefault((titles.parts(m["title"])[0], _first(m.get("author")).lower()), m)
+    in_prog = len(reading)
+    authors = {}
+    for b in books:
+        a = _first(b["author"]).split(" - ")[0].strip()
+        if a:
+            authors[a] = authors.get(a, 0) + 1
+    explored = {a for a in authors} | {_first(m.get("author")) for m in reading.values() if m.get("author")}
+    finish_dates = [b["date"] for b in books]
     # mood profile from cached tags of rated books (bounded, no fetch)
     from collections import Counter
     moodc = Counter()
@@ -499,6 +535,7 @@ def insights_page():
         facts.append(("📚", f"{req_avail}", "books added via Stackarr"))
     top_authors = sorted(authors.items(), key=lambda x: x[1], reverse=True)[:10]
     return render_template("insights.html", total=len(hist), finished=finished, in_progress=in_prog,
+                           explored=len(explored),
                            hours=hours, req_avail=req_avail, facts=facts, top_authors=top_authors,
                            by_format=by_format, heat=heat, top_moods=top_moods,
                            goal=goal, read_year=read_year, year=year)
@@ -1212,11 +1249,21 @@ def _shelves_data(u):
         if r.get("title"):
             read_keys.add(db.rating_key("", r["title"], r.get("author", "")))
 
+    def _listed(shelf, title, author):
+        """Is this work already on the shelf? Same author + titles.matches, so a
+        library that holds a book twice ("The Lamplighter" and "The Lamplighter
+        (The Ember Archive Book 2)", or "09 Bloodline") shows one card."""
+        a = _first(author).lower()
+        same = [{"title": _LEADING_NUM.sub("", x.get("title") or "")} for x in shelf
+                if a and a in (x.get("author") or "").lower()]
+        return bool(same and titles.matches(same, _LEADING_NUM.sub("", title)))
+
     def _add_reading(title, author, cover, fmt, rkey=""):
         t = (title or "").strip()
-        if not t or t.lower() in seen_titles:
+        if not t or t.lower() in seen_titles or _listed(shelves["reading"], t, author):
             return
-        if (rkey and rkey in read_keys) or db.rating_key("", t, author) in read_keys:
+        if (rkey and rkey in read_keys) or db.rating_key("", t, author) in read_keys \
+                or _listed(shelves["read"], t, author):
             return
         seen_titles.add(t.lower())
         shelves["reading"].append({"rkey": rkey or db.rating_key("", t, author), "title": t,
@@ -1230,7 +1277,7 @@ def _shelves_data(u):
 
     def _add_read(title, author, cover, fmt, rkey=""):
         t = (title or "").strip()
-        if not t or t.lower() in read_titles:
+        if not t or t.lower() in read_titles or _listed(shelves["read"], t, author):
             return
         read_titles.add(t.lower())
         shelves["read"].append({"rkey": rkey or db.rating_key("", t, author), "title": t,
