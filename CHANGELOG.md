@@ -2,6 +2,53 @@
 
 All notable changes to Stackarr.
 
+## [Unreleased]
+
+Series follow-through and honest fresh picks, reported with field evidence
+and patches.
+
+### Added
+- **"Next in ‹series›" on the book page**: the next three books after the
+  highest one you've finished in Audiobookshelf (or after the book you're
+  viewing), each marked Finished / In library / Requested / Upcoming, or with a
+  Request button. Series order comes from Audible's series product (one call
+  for the order, one batch lookup for the books), falling back to Chaptarr's
+  `seriesTitle` for ebook-only series. Cached for a day (misses for an hour).
+- **"Continue ‹series›" card on Home** for the book you finished most
+  recently (last 14 days) whose series has more after it.
+- **Request remaining**, on the strip, the Home card and every Up Next card.
+  A confirm dialog lists every book of the series in order: the ones to
+  request ticked (with their formats), the rest greyed out with the reason
+  (In library / Requested / Finished / Out ‹date›). Only ticked books are
+  sent — at most 10 per click, one request row per book per format so
+  each flips to available on its own. Chaptarr monitors only those books and
+  runs one search per format; nothing else by the author is touched. The
+  non-admin approval gate still applies (one pending row per book).
+
+### Fixed
+- **Stale fresh picks.** A pending suggestion that was since requested, added
+  to the library or finished in Audiobookshelf stayed on Home forever. Such
+  picks are now retired on each library refresh, before each recommender run
+  and before Home renders, with their own status (`owned` / `requested` /
+  `finished`) — not `rejected`, so retiring is never a "not interested".
+- **The recommender stopped running for users with a full queue.** Pending
+  picks are capped (`STACKARR_SUGGEST_MAX`, 30); a queue full of stale picks
+  left no room, so no new picks were ever generated. Retiring frees the room.
+- **"Chaptarr couldn't find ‹author›"** for an author Chaptarr already
+  manages: its author lookup can come back empty on back-to-back calls.
+  Requests now reuse the existing Chaptarr author (exact name) before looking
+  anyone up.
+- **The book page showed a finished book as unread** unless it was on
+  Stackarr's own Read shelf; it now also reads Audiobookshelf.
+- **Every Add button appeared twice on the book page**: the bottom bar
+  repeated them next to "Back to top". It now only scrolls back up.
+
+### Deprecated
+- `POST /api/series/add` ("Get full series"): it monitors every Chaptarr row
+  in the series, owned ones included, and falls back to the author's whole
+  backlist. Unchanged for API callers, answers with `Deprecation: true`; the UI
+  uses `POST /api/series/request-remaining`.
+
 ## [1.6.9] - 2026-10-05
 
 Fixes from running Stackarr against Chaptarr's media-split schema (an
