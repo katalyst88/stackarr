@@ -20,7 +20,7 @@
   {% for b in books %}
   <div class="rate-item{{ ' rated' if b.stars }}" data-asin="{{ b.asin }}" data-format="{{ b.format or 'audiobook' }}" data-rated="{{ 1 if b.stars else 0 }}">
     <a class="rate-cover" href="{{ book_href(b.asin or b.rkey, b.title, b.author, b.format) }}">
-      <img src="{{ (b.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt=""
+      <img src="{{ (b|bookcover) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt=""
            onerror="this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
     </a>
     <div class="rate-meta">

@@ -68,7 +68,9 @@ def create_app() -> Flask:
     from . import audible
     app.jinja_env.filters["hires"] = lambda u: audible._hi_res(u or "")
     from . import tz
-    app.jinja_env.filters["localtime"] = tz.fmt          # stored timestamps, in Settings → Timezone
+    app.jinja_env.filters["localtime"] = tz.fmt
+    from . import covers
+    app.jinja_env.filters["bookcover"] = covers.bookcover   # Settings → Cover style          # stored timestamps, in Settings → Timezone
 
     from flask import request, abort
     from urllib.parse import urlparse

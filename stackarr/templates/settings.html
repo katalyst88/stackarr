@@ -44,6 +44,16 @@
         <datalist id="tz-list">{% for z in timezones %}<option value="{{ z }}">{% endfor %}</datalist>
         <button class="btn" onclick="Stackarr.saveTimezone(this)">Save</button>
       </div>
+      <div class="panel"><h3>Cover style</h3>
+        <label class="row"><span>Covers</span>
+          <select onchange="Stackarr.setSetting({cover_style: this.value})">
+            <option value="audible" {{ 'selected' if cover_style != 'clean' }}>Audible — as the catalogue has them</option>
+            <option value="clean" {{ 'selected' if cover_style == 'clean' }}>Clean — the print / eBook cover where there is one</option>
+          </select></label>
+        <p class="muted">Clean swaps Audible's banner art for the book's print cover from Google Books / Open Library,
+          and keeps the Audible cover when there isn't one. Covers are looked up in the background, so they change over
+          a page view or two. Your own library's covers are never replaced.</p>
+      </div>
       <div class="panel"><h3>Stuck requests</h3>
         <label class="row"><span>Check why a request isn't downloading</span>
           <input type="checkbox" class="switch" {{ 'checked' if release_check }}

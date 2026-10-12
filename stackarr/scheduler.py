@@ -457,6 +457,9 @@ def _run_job(kind: str, *args):
     if kind == "bookid":
         from . import routes
         routes.resolve_book_id(*args)
+    elif kind == "pcover":
+        from . import covers
+        covers.resolve(*args)
     elif kind == "tags":
         from . import tagging
         key, title, author, cats = args

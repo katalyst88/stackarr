@@ -49,7 +49,7 @@
   <div class="onboard-grid">
     {% for b in onboard_books %}
     <div class="onboard-item" data-rkey="{{ b.rkey }}">
-      <img class="onboard-cover" src="{{ (b.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy"
+      <img class="onboard-cover" src="{{ (b|bookcover) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy"
            alt="" onerror="this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
       <div class="onboard-title" title="{{ b.title }}">{{ b.title }}</div>
       <div class="rate-stars" data-asin="{{ b.rkey }}" data-title="{{ b.title }}" data-author="{{ b.author }}">
@@ -82,7 +82,7 @@
     {% for r in recent_requests %}
     {# one card per book (a failed try superseded by a later request doesn't show), status from status.py #}
     <a class="media-card" data-format="{{ r.formats[0] if r.formats|length == 1 else 'both' }}" data-formats="{{ r.formats|join(',') }}" href="{{ book_href(r.asin, r.title, r.author, r.formats[0]) }}">
-      <div class="media-poster"><img src="{{ (r.cover|hires) or url_for('main.coverart', title=r.title, author=r.author, asin=r.asin) }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
+      <div class="media-poster"><img src="{{ (r|bookcover) or url_for('main.coverart', title=r.title, author=r.author, asin=r.asin) }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
         {{ fmt_badge(r.formats[0] if r.formats|length == 1 else 'both') }}
         {{ status_badge(r.st) }}</div>
       <div class="media-foot"><div class="media-title" title="{{ r.title }}">{{ r.title }}</div><div class="media-author">{{ r.author }}</div></div>
@@ -113,7 +113,7 @@
     {% for s in items %}
     <div class="media-card" data-id="{{ s.id }}" data-format="{{ s.format or 'audiobook' }}">
       <a class="media-poster" href="{{ book_href(s.asin, s.title, s.author, s.format) }}">
-        <img src="{{ (s.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
+        <img src="{{ (s|bookcover) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
         {{ fmt_badge(s.format) }}
         {% if s.available %}<span class="corner-badge available">In library</span>
         {% elif lane == 'upcoming' %}<span class="corner-badge handed">Coming {{ s.extra }}</span>

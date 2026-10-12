@@ -15,7 +15,7 @@
 <div class="grid">
   {% for b in books %}
   <a class="media-card" href="{{ url_for('main.book_page', asin=b.asin) }}">
-    <div class="media-poster"><img src="{{ (b.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
+    <div class="media-poster"><img src="{{ (b|bookcover) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
       {{ status_badge(b.status) }}</div>
     <div class="media-foot"><div class="media-title" title="{{ b.title }}">{{ b.title }}</div>
       <div class="media-author">{% if b.series %}{{ b.series }}{% if b.sequence %} #{{ b.sequence|int if b.sequence == b.sequence|int else b.sequence }}{% endif %}{% elif b.release_date %}{{ b.release_date[:4] }}{% endif %}</div></div>

@@ -14,7 +14,7 @@
   {% for b in books %}
   <div class="media-card">
     <a class="media-poster" href="{{ url_for('main.book_page', asin=b.asin) }}">
-      <img src="{{ b.cover or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="">
+      <img src="{{ (b|bookcover) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="">
       {{ status_badge(b.status) }}
       <div class="media-overlay">
         <div class="ov-reason">{{ b.author }}{% if b.series %} · {{ b.series }}{% endif %}</div>

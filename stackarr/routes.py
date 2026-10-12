@@ -1031,6 +1031,10 @@ def _series_view(u, t: dict) -> dict | None:
     books = seriesmap.annotate(data, finished, default_author=t["author"], viewer=u["id"])
     if not books:
         return None
+    from . import covers
+    for b in books:
+        if b.get("cover"):
+            b["cover"] = covers.display(b["cover"], b.get("title", ""), b.get("author", ""))
     start, nxt = seriesmap.strip(books, after=t["seq"])
     after = next((b for b in books if b["seq"] == start), None)
     return {"ok": True, "series": data.get("name") or t["series"], "series_asin": data.get("series_asin", ""),
@@ -1606,6 +1610,7 @@ def settings_page():
                            format_mode=formats.mode(),
                            timezone=tz.name(), timezones=tz.zones(), timezone_default=tz.default_name(),
                            release_check=db.get_meta("release_check", "1") == "1",
+                           cover_style=db.get_meta("cover_style", "audible"),
                            cross_format_taste=db.get_pref(auth.current_user()["id"], "cross_format_taste", "0") == "1",
                            adventurousness=db.get_meta(f"adventurousness_{auth.current_user()['id']}", str(config.ADVENTUROUSNESS)),
                            log_level=config.LOG_LEVEL,
@@ -1969,8 +1974,11 @@ def _annotate_status(books: list[dict]) -> list[dict]:
     (the dict the templates' status_badge renders) and `state` (its key, which
     the front-end's cards read)."""
     u = _viewer()
+    from . import covers
     for b, st in zip(books, status.for_books(books, viewer=u["id"] if u else None)):
         b["status"], b["state"] = st, st["state"]
+        if b.get("cover"):
+            b["cover"] = covers.display(b["cover"], b.get("title", ""), b.get("author", ""))
     return books
 
 
@@ -2750,7 +2758,7 @@ SETTING_KEYS = {
     "chaptarr_url", "chaptarr_api_key", "chaptarr_root_folder",
     "chaptarr_quality_profile_id", "chaptarr_metadata_profile_id",
     "goodreads_rss", "hardcover_token", "discord_webhook", "custom_webhook",
-    "auto_add_level", "formats", "timezone",
+    "auto_add_level", "formats", "timezone", "cover_style",
     "kavita_url", "kavita_api_key",
     "calibreweb_url", "calibreweb_user", "calibreweb_pass",
     "komga_url", "komga_user", "komga_pass",
@@ -2772,6 +2780,8 @@ def api_settings():
     """Install-wide configuration — admin only (server URLs, API keys, SMTP,
     format mode, …). Per-user preferences go through /api/prefs."""
     body = request.get_json(force=True)
+    if "cover_style" in body and body["cover_style"] not in ("audible", "clean"):
+        return jsonify({"ok": False, "error": "Cover style is audible or clean."}), 400
     if "timezone" in body and not tz.valid(str(body["timezone"]).strip()):
         return jsonify({"ok": False, "error": "Unknown timezone — pick one from the list."}), 400
     for k, v in body.items():

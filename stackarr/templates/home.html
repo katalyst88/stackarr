@@ -4,7 +4,7 @@
 {# every card opens a book page: book_href resolves a library book (which rarely
    has an ASIN) to the work's page, never "#" (that reloaded Home) #}
 <a class="media-card" data-format="{{ b.format or 'audiobook' }}" href="{{ book_href(b.asin or b.rkey, b.title, b.author, b.format) }}">
-  <div class="media-poster"><img src="{{ (b.cover|hires) if b.cover else url_for('main.coverart', title=b.title, author=b.author, asin=b.asin or '', fmt=b.format or '') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
+  <div class="media-poster"><img src="{{ (b|bookcover) if b.cover else url_for('main.coverart', title=b.title, author=b.author, asin=b.asin or '', fmt=b.format or '') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
     {{ fmt_badge(b.format) }}</div>
   <div class="media-foot"><div class="media-title" title="{{ b.title }}">{{ b.title }}</div><div class="media-author">{{ b.author }}</div></div>
 </a>
@@ -40,7 +40,7 @@
     {% for s in fresh %}
     <div class="media-card" data-format="{{ s.format or 'audiobook' }}">
       <a class="media-poster" href="{{ book_href(s.asin, s.title, s.author, s.format) }}">
-        <img src="{{ (s.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
+        <img src="{{ (s|bookcover) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
         {{ fmt_badge(s.format) }}
         <div class="media-overlay"><div class="ov-reason">{{ s.reason }}</div>
           <div class="ov-actions"><button class="btn" onclick="event.preventDefault();event.stopPropagation();Stackarr.decide({{ s.id }},'approve',this)">Add book</button>
