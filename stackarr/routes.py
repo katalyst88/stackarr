@@ -885,11 +885,7 @@ def browse_page():
         books, title, kind = discover.genre_new([genre], num_per=40), genre, "genre"
     else:
         return redirect(url_for("main.discover_page"))
-    seen, uniq = set(), []
-    for b in books:
-        if b.get("asin") and b["asin"] not in seen:
-            seen.add(b["asin"])
-            uniq.append(b)
+    uniq = [b for b in _clean_catalogue(books) if b.get("asin")]
     _annotate_status(uniq)
     return render_template("browse.html", books=uniq, title=title, kind=kind, author=author)
 
@@ -952,7 +948,7 @@ def api_series_missing():
     if series_author:
         pool += audible.search(f"{name} {series_author}", num=50)
     full = {}
-    for b in pool:
+    for b in _in_language(pool):
         if recommend._norm(b.get("series")) != nn or b.get("sequence") is None:
             continue
         if not _author_ok(b.get("author", "")):
@@ -1455,12 +1451,7 @@ def author_page(name):
         books = ebookmeta.by_author(name, num=40)
         for b in books:
             b["asin"] = b.get("id", "")
-    seen, uniq = set(), []
-    for b in books:
-        k = (b.get("title") or "").lower()
-        if b.get("asin") and k not in seen:
-            seen.add(k)
-            uniq.append(b)
+    uniq = [b for b in _clean_catalogue(books) if b.get("asin")]
     _annotate_status(uniq)
     uniq.sort(key=lambda b: b.get("release_date") or "", reverse=True)
     u = auth.current_user()
@@ -1492,11 +1483,8 @@ def api_follow():
 def narrator_page(name):
     """A narrator hub: audiobooks they narrate + what you own."""
     name = name.strip()
-    seen, uniq = set(), []
-    for b in audible.search(name, num=40):
-        if name.lower() in (b.get("narrator") or "").lower() and b.get("asin") and b["asin"] not in seen:
-            seen.add(b["asin"])
-            uniq.append(b)
+    uniq = [b for b in _clean_catalogue(audible.search(name, num=40))
+            if name.lower() in (b.get("narrator") or "").lower() and b.get("asin")]
     _annotate_status(uniq)
     return render_template("narrator.html", narrator=name, books=uniq)
 
@@ -1752,13 +1740,44 @@ def book_find():
     return redirect(url_for("main.discover_page", q=f"{titles.clean(title)} {author}".strip()))
 
 
+_ISO_LANG = {"en": "english", "de": "german", "es": "spanish", "fr": "french", "it": "italian",
+             "nl": "dutch", "pt": "portuguese", "ja": "japanese"}
+
+
+def _lang(b: dict) -> str:
+    v = (b.get("language") or "").strip().lower()
+    return _ISO_LANG.get(v.split("-")[0], v)
+
+
 def _in_language(books: list[dict]) -> list[dict]:
-    """Catalogue rows in the install's language (Settings → language; "any"
-    keeps everything). A row with no language is kept."""
+    """Catalogue rows in the install's language (Settings → General →
+    language, default English; "any" keeps everything). A row that names no
+    language is kept. Audible's author catalogue for Matt Dinniman is 13
+    English titles among 23 Spanish/French/German/Italian/Portuguese ones."""
     want = (db.get_meta("language", config.TARGET_LANGUAGE) or "english").lower()
     if want == "any":
         return list(books)
-    return [b for b in books if not b.get("language") or b["language"].lower() == want]
+    return [b for b in books if not _lang(b) or _lang(b) == want]
+
+
+def _clean_catalogue(books: list[dict]) -> list[dict]:
+    """A catalogue list as the user should see it: their language only, and
+    one card per work. A work's editions in the same language (a re-release,
+    an "(Unabridged)" duplicate) collapse into the one with the most ratings;
+    with "any" language each language keeps its own card. Order is kept."""
+    out, at = [], {}
+    for b in _in_language(books):
+        k = (titles.parts(b.get("title") or "")[0], _first(b.get("author")).lower(), _lang(b))
+        if not k[0]:
+            continue
+        if k in at:
+            i = at[k]
+            if (b.get("num_ratings") or 0) > (out[i].get("num_ratings") or 0):
+                out[i] = b
+            continue
+        at[k] = len(out)
+        out.append(b)
+    return out
 
 
 def _cached_book(asin) -> dict:
@@ -1834,12 +1853,12 @@ def _search_catalog(q, num):
     if formats.active() == ["ebook"]:
         from . import ebookmeta
         out = []
-        for x in ebookmeta.search(q, num=num):
+        for x in _clean_catalogue(ebookmeta.search(q, num=num)):
             x = dict(x, asin=x.get("id", ""))
             if x["asin"]:
                 out.append(x)
         return out
-    return [x for x in audible.search(q, num=num) if x.get("asin")]
+    return [x for x in _clean_catalogue(audible.search(q, num=num)) if x.get("asin")]
 
 
 @bp.route("/api/suggest")
