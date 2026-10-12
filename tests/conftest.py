@@ -27,9 +27,11 @@ def _fresh_status_cache():
     from stackarr import routes, status
     status.reset_cache()
     routes._BOOK_META.clear()
+    routes._SUGGEST_CACHE.clear()
     yield
     status.reset_cache()
     routes._BOOK_META.clear()
+    routes._SUGGEST_CACHE.clear()
 
 
 @pytest.fixture

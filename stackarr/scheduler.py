@@ -439,7 +439,7 @@ _job_seen: set = set()
 
 def queue_job(kind: str, *args) -> bool:
     """Queue a background lookup once per process. True if newly queued."""
-    key = (kind,) + tuple(str(a).lower() for a in args)
+    key = (kind,) + tuple(str(a).lower() for a in args[:3])
     with _cover_lock:
         if key in _job_seen:
             return False
@@ -457,6 +457,10 @@ def _run_job(kind: str, *args):
     if kind == "bookid":
         from . import routes
         routes.resolve_book_id(*args)
+    elif kind == "tags":
+        from . import tagging
+        key, title, author, cats = args
+        tagging.fetch_for(key, title, author, cats)
 
 
 def _cover_worker():

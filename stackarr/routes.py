@@ -854,8 +854,17 @@ def book_page(asin):
         my = c.execute("SELECT stars, review FROM ratings WHERE user_id=? AND asin=?",
                        (u["id"], key)).fetchone()
     b["req_detail"] = st["detail"] if st["state"] == "failed" else ""
+    # Tags already known are read locally. Unknown ones are derived from the
+    # catalogue categories we already hold, and the Open Library subject
+    # fetch (a network call that used to run inline, on every first view)
+    # goes to the background worker.
     try:
-        tags = tagging.fetch_for(key, b.get("title", ""), b.get("author", ""), b.get("categories"))
+        if db.has_tags(key):
+            tags = db.tags_for(key)
+        else:
+            tags = tagging.derive(b.get("categories") or [])
+            from . import scheduler
+            scheduler.queue_job("tags", key, b.get("title", ""), b.get("author", ""), list(b.get("categories") or []))
     except Exception:
         tags = {}
     # duplicate/upgrade: which formats of this title you already own
@@ -1990,16 +1999,28 @@ def _search_catalog(q, num):
     return [x for x in _clean_catalogue(audible.search(q, num=num)) if x.get("asin")]
 
 
+_SUGGEST_CACHE: dict = {}
+
+
 @bp.route("/api/suggest")
 @auth.login_required
 def api_suggest():
     """Typeahead for the top search box — titles/authors/series as you type."""
+    import time
     q = request.args.get("q", "").strip()
     if len(q) < 2:
         return jsonify([])
-    return jsonify([{"asin": x["asin"], "title": x["title"], "author": x["author"],
-                     "series": x.get("series", ""), "cover": x["cover"]}
-                    for x in _search_catalog(q, 7)])
+    # typing re-asks for the same prefixes; each is a ~0.6 s catalogue search
+    key = q.lower()
+    hit = _SUGGEST_CACHE.get(key)
+    if hit and time.time() - hit[0] < 300:
+        return jsonify(hit[1])
+    out = [{"asin": x["asin"], "title": x["title"], "author": x["author"],
+            "series": x.get("series", ""), "cover": x["cover"]} for x in _search_catalog(q, 7)]
+    if len(_SUGGEST_CACHE) > 400:
+        _SUGGEST_CACHE.clear()
+    _SUGGEST_CACHE[key] = (time.time(), out)
+    return jsonify(out)
 
 
 @bp.route("/api/ignore", methods=["POST"])
@@ -2932,7 +2953,51 @@ def api_logs_download():
                     headers={"Content-Disposition": f"attachment; filename=stackarr-{level.lower()}.log"})
 
 
-_COVER_CACHE = {"Cache-Control": "max-age=86400"}
+_COVER_CACHE = {"Cache-Control": "private, max-age=604800"}
+COVER_CACHE_DAYS = 3
+_COVER_ID = re.compile(r"[A-Za-z0-9_-]{1,80}")
+_COVER_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+                "image/svg+xml": "svg"}
+
+
+def _cover_dir() -> str:
+    import os
+    d = os.path.join(config.DATA_DIR, "covers")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _cover_cache_get(item_id):
+    """(bytes, content type) of a cached ABS cover younger than
+    COVER_CACHE_DAYS, else None. Only safe ids reach the filesystem."""
+    import os
+    import time
+    if not _COVER_ID.fullmatch(item_id or ""):
+        return None
+    try:
+        d = _cover_dir()
+        for ctype, ext in _COVER_TYPES.items():
+            p = os.path.join(d, f"{item_id}.{ext}")
+            if os.path.exists(p) and time.time() - os.path.getmtime(p) < COVER_CACHE_DAYS * 86400:
+                with open(p, "rb") as f:
+                    return f.read(), ctype
+    except OSError:
+        pass
+    return None
+
+
+def _cover_cache_put(item_id, data: bytes, ctype: str):
+    import os
+    ext = _COVER_TYPES.get((ctype or "").split(";")[0].strip())
+    if not ext or not _COVER_ID.fullmatch(item_id or "") or len(data) > 5_000_000:
+        return
+    try:
+        p = os.path.join(_cover_dir(), f"{item_id}.{ext}")
+        with open(p + ".tmp", "wb") as f:
+            f.write(data)
+        os.replace(p + ".tmp", p)
+    except OSError as e:
+        log.debug("cover cache write failed: %s", e)
 
 
 @bp.route("/libcover/<path:ref>")
@@ -2976,15 +3041,24 @@ def libcover(ref):
 @auth.login_required
 def cover(item_id):
     """Proxy an Audiobookshelf cover through Stackarr so the browser (which
-    can't reach host.docker.internal) gets it same-origin, token hidden."""
+    can't reach host.docker.internal) gets it same-origin, token hidden.
+
+    Served from a small disk cache (COVER_CACHE_DAYS) after the first fetch.
+    A Home render asks for ~30 of these at once, and each used to hold a
+    waitress thread for an ABS round trip — the "Task queue depth" warnings
+    in the field log were these bursts."""
     from flask import Response
     import requests as rq
+    hit = _cover_cache_get(item_id)
+    if hit:
+        return Response(hit[0], mimetype=hit[1], headers=_COVER_CACHE)
     try:
         r = rq.get(f"{absclient.abs_url()}/api/items/{item_id}/cover",
                    headers={"Authorization": f"Bearer {absclient.admin_token()}"}, timeout=8)
         if r.ok and r.content:
-            return Response(r.content, mimetype=r.headers.get("Content-Type", "image/jpeg"),
-                            headers={"Cache-Control": "max-age=86400"})
+            ctype = r.headers.get("Content-Type", "image/jpeg")
+            _cover_cache_put(item_id, r.content, ctype)
+            return Response(r.content, mimetype=ctype, headers=_COVER_CACHE)
     except Exception:
         pass
     # ABS has no art for this item. This used to ask ABS for the item and then

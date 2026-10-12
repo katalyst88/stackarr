@@ -16,6 +16,9 @@ def _list(name: str) -> list[str]:
 
 # --- core -------------------------------------------------------------------
 PORT = int(os.environ.get("STACKARR_PORT", "8484"))
+# waitress worker threads. A page fans out into many small requests (a Home
+# render is ~30 cover images); 8 queued up behind one another in the field.
+THREADS = max(4, int(os.environ.get("STACKARR_THREADS", "16")))
 # Which media formats this install surfaces: audiobook | ebook | both.
 # Default audiobook so existing deployments are unchanged until flipped.
 FORMATS = os.environ.get("STACKARR_FORMATS", "audiobook").strip().lower()
