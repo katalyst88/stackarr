@@ -138,16 +138,18 @@ def _media(fmt: str) -> tuple:
     return MEDIA if f == "both" else ((f,) if f in MEDIA else ("audiobook",))
 
 
-def annotate(data: dict, finished: list[dict], default_author: str = "") -> list[dict]:
+def annotate(data: dict, finished: list[dict], default_author: str = "", viewer=None) -> list[dict]:
     """The series' books, each with where it stands:
       owned      formats it's in the library in
       requested  formats with an open request (anyone's — the library is shared)
       finished   this user finished it in Audiobookshelf
       upcoming   its release date is still ahead
-      state      one word for the badge: finished | available | handed | upcoming | missing
+      state      one word for the badge: finished | missing | upcoming, else the
+                 status.py state (available | downloading | waiting | requested …)
+      status     the status.py dict (label, cls, detail) the badge shows
       key        stable id the request-remaining confirm round-trips
     `finished` is picks.finished_works() for the viewing user."""
-    from . import formats, picks
+    from . import formats, picks, status
     today = str(datetime.date.today())
     books = [dict(b, author=b.get("author") or default_author) for b in data.get("books") or []]
     authors = {_first_author(b["author"]).lower() for b in books if b["author"]}
@@ -166,17 +168,17 @@ def annotate(data: dict, finished: list[dict], default_author: str = "") -> list
             q = ",".join("?" * len(asins))
             lib += [dict(r) for r in c.execute(
                 f"SELECT title, author, asin, format FROM library WHERE gone_at IS NULL AND asin IN ({q})", asins)]
-    shown = formats.available()
-    for b in books:
+    sts = status.for_books(books, viewer=viewer)
+    for b, st in zip(books, sts):
         b["owned"] = [f for f in MEDIA if titles.matches(
             [r for r in lib if (r["format"] or "audiobook") == f], b["title"], b.get("asin", ""))]
         b["requested"] = [f for f in MEDIA if titles.matches(
             [r for r in req if f in _media(r["format"])], b["title"], b.get("asin", ""))]
         b["finished"] = picks.is_finished(finished, b["title"], b["author"], b.get("asin", ""))
         b["upcoming"] = bool(b.get("release_date") and b["release_date"] > today)
+        b["status"] = st
         b["state"] = ("finished" if b["finished"]
-                      else "available" if any(f in b["owned"] for f in shown)
-                      else "handed" if any(f in b["requested"] for f in shown)
+                      else st["state"] if st["state"] not in ("none", "upcoming", "failed", "denied")
                       else "upcoming" if b["upcoming"] else "missing")
         b["key"] = b.get("asin") or db.rating_key("", b["title"], b["author"])
     return books

@@ -20,6 +20,15 @@ from fakes import CHAPTARR, FakeChaptarr  # noqa: E402
 from stackarr import chaptarr, db  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _fresh_status_cache():
+    """status.py caches Chaptarr's queue for 30 s — never across tests."""
+    from stackarr import status
+    status.reset_cache()
+    yield
+    status.reset_cache()
+
+
 @pytest.fixture
 def tmp_db(tmp_path, monkeypatch):
     """A fresh, migrated database for one test."""

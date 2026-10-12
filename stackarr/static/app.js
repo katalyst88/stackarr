@@ -35,20 +35,18 @@ const Stackarr = (() => {
     document.body.setAttribute("data-theme", light ? "light" : "dark");
   };
 
-  // status tag system: none -> Requested -> Available
-  const TAG = {
-    available: ["Available", "available", "In library"],
-    handed:    ["Requested", "handed",   "Requested"],
-    queued:    ["Requested", "queued",   "Requested"],
-    failed:    ["Failed",    "failed",   "Retry"],
-  };
+  // Card status comes from the server (status.py, one source for every
+  // page): b.status = {state, label, cls, detail}. A card can request a book
+  // only when nothing is held or on its way.
+  const REQUESTABLE = ["none", "failed", "denied"];
 
   const mediaCard = (b) => {
-    const tag = TAG[b.state];
+    const st = b.status || {};
+    const tag = st.label ? [st.label, st.cls] : null;
     const reason = b.reason || [b.series ? `${b.series}${b.sequence ? " #" + b.sequence : ""}` : "",
       b.runtime_hours ? `${b.runtime_hours}h` : "", b.rating ? `★ ${b.rating}` : ""].filter(Boolean).join(" · ");
-    const canReq = !tag || tag[1] === "failed";
-    const reqLabel = tag ? tag[2] : "Request";
+    const canReq = !b.state || REQUESTABLE.includes(b.state);
+    const reqLabel = !canReq ? st.label : b.state === "failed" ? "Retry" : "Request";
     const j = (o) => JSON.stringify(o).replace(/'/g, "&#39;");
     // The whole card is a link to the book page — same contract as the
     // server-rendered cards (`<a class="media-card">` in suggestions.html) — so
@@ -61,7 +59,7 @@ const Stackarr = (() => {
     return `${open}
       <div class="media-poster">
         ${b.cover ? `<img src="${esc(hires(b.cover))}" loading="lazy" alt="">` : ""}
-        ${tag ? `<span class="corner-badge ${tag[1]}">${tag[0]}</span>` : ""}
+        ${tag ? `<span class="corner-badge ${esc(tag[1])}" title="${esc(st.detail)}">${esc(tag[0])}</span>` : ""}
         <div class="media-overlay">
           <div class="ov-reason">${esc(reason)}</div>
           <div class="media-stars" data-asin="${esc(b.asin)}" data-title="${esc(b.title)}" data-author="${esc(b.author)}">${[1,2,3,4,5].map(n => `<span onclick="${stop}Stackarr.rate('${esc(b.asin)}',${n},this)">★</span>`).join("")}</div>
@@ -83,13 +81,14 @@ const Stackarr = (() => {
   // string is escaped before it reaches innerHTML.
   const SERIES_TAG = {
     finished:  ["Finished",   "available"],
-    available: ["In library", "available"],
-    handed:    ["Requested",  "handed"],
     upcoming:  ["Upcoming",   "upcoming"],
   };
   const seqLabel = (n) => (n === null || n === undefined || n === "" ? "" : "#" + Number(n));
   const seriesCard = (b) => {
-    const tag = SERIES_TAG[b.state];
+    // the status.py label for anything on its way / held; "Finished" and
+    // "Upcoming" are the strip's own
+    const tag = SERIES_TAG[b.state] || (b.status && b.status.label && b.state !== "missing"
+      ? [b.status.label, b.status.cls] : null);
     // no catalogue id (a Chaptarr-mapped series): the resolver opens its page
     const href = b.asin ? `${B()}/book/${encodeURIComponent(b.asin)}`
       : b.title ? `${B()}/book/find?` + new URLSearchParams({ title: b.title, author: b.author || "" }) : "";

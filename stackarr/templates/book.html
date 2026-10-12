@@ -1,17 +1,19 @@
 {% extends "base.html" %}
-{% from "_fmt.html" import fmt_icon, fmt_label with context %}
+{% from "_fmt.html" import fmt_icon, fmt_label, status_badge, status_pill with context %}
 {% block content %}
 {% macro grab_actions(half=False) %}
+  {# what each format offers comes from status.py (st), the same answer every page gives #}
   {% if multi_format %}
     {# both mode: compact 'Add' + format icon, half-width side by side #}
     <div class="grab-pair">
-      <button class="btn grab-half" title="Add audiobook" onclick='Stackarr.grabFormat({{ b|tojson }}, "audiobook", this)'>{{ fmt_icon('audiobook') }} Add</button>
-      <button class="btn grab-half" title="Add eBook" onclick='Stackarr.grabFormat({{ b|tojson }}, "ebook", this)'>{{ fmt_icon('ebook') }} Add</button>
+      {% for f in ('audiobook', 'ebook') %}{% set fs = st.formats.get(f) %}
+      {% if fs and fs.state not in ('none', 'failed', 'denied') %}<button class="btn grab-half" disabled title="{{ fs.detail }}">{{ fmt_icon(f) }} {{ fs.label }}</button>
+      {% else %}<button class="btn grab-half" title="Add {{ 'eBook' if f == 'ebook' else 'audiobook' }}" onclick='Stackarr.grabFormat({{ b|tojson }}, "{{ f }}", this)'>{{ fmt_icon(f) }} {{ 'Retry' if fs and fs.state == 'failed' else 'Add' }}</button>{% endif %}
+      {% endfor %}
     </div>
   {% else %}
-    {% if b.state == 'available' %}<button class="btn" disabled>In library</button>
-    {% elif b.state in ('handed','queued') %}<button class="btn" disabled>Requested</button>
-    {% elif b.state == 'failed' %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>{{ fmt_icon(b.format) }} Retry</button>
+    {% if st.state == 'failed' %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>{{ fmt_icon(b.format) }} Retry</button>
+    {% elif st.state not in ('none', 'denied', 'upcoming') %}<button class="btn" disabled title="{{ st.detail }}">{{ st.label }}</button>
     {% else %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>{{ fmt_icon(b.format) }} Add book</button>{% endif %}
   {% endif %}
 {% endmacro %}
@@ -19,8 +21,7 @@
 <div class="book-detail">
   <div class="book-cover">
     <img src="{{ b.cover or url_for('static', filename='cover-placeholder.svg') }}" alt="">
-    {% if b.state == 'available' %}<span class="corner-badge available">Available</span>
-    {% elif b.state in ('handed','queued') %}<span class="corner-badge handed">Requested</span>{% endif %}
+    {{ status_badge(st) }}
   </div>
   <div class="book-info">
     <h1 class="book-title">{{ b.title }}</h1>
@@ -52,10 +53,15 @@
       <p class="muted" style="font-size:12px">Auto-detected from catalogue subjects — may be incomplete.</p></details>{% endif %}
     {# primary grab actions — above the description so they're reachable at once #}
     <div class="book-actions">
-      {% if multi_format and b.state == 'available' %}<span class="chip">In library</span>{% endif %}
       {{ grab_actions() }}
       <button class="btn ghost" onclick='Stackarr.bookIgnore({{ b|tojson }}, this)'>Not interested</button>
     </div>
+
+    {# per-format progress: "Audiobook: Downloading 3% · about 4 days left", "eBook: Waiting — Held by Chaptarr: …" #}
+    {% set shown = st.formats.items()|selectattr('1.state', 'ne', 'none')|list %}
+    {% if shown and (multi_format or st.detail) %}<div class="status-row">
+      {% for f, fs in shown %}<div class="status-line">{{ status_pill(fs, f if multi_format else None) }}{% if fs.detail and fs.state != 'available' %} <span class="subtle">{{ fs.detail }}</span>{% endif %}</div>{% endfor %}
+    </div>{% endif %}
 
     {% if b.summary %}<p class="book-summary">{{ b.summary }}</p>{% endif %}
 
@@ -74,7 +80,7 @@
       <button class="btn small" onclick='Stackarr.grabFormat({{ b|tojson }}, "{{ other }}", this)'>{{ fmt_icon(other) }} Also get the {{ 'eBook' if other == 'ebook' else 'audiobook' }}</button>
     </div>
     {% endif %}
-    {% if b.state == 'failed' %}
+    {% if st.state == 'failed' %}
     <div class="error-banner">
       <strong>Couldn't grab this one yet.</strong> {{ b.req_detail or "Chaptarr couldn't find or fetch a copy. You can retry below." }}
     </div>

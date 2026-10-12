@@ -167,6 +167,12 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
 .corner-badge.narrator { background: rgba(167,139,250,.55); }
 .corner-badge.available { background: rgba(34,197,94,.55); }
 .corner-badge.handed, .corner-badge.queued { background: rgba(245,158,11,.58); }
+.corner-badge { max-width: calc(100% - 18px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* long status words on narrow cards */
+/* status.py states: downloading (blue), waiting / stalled / not found (amber-red), approval, failed, declined */
+.corner-badge.downloading { background: rgba(14,165,233,.6); }
+.corner-badge.waiting, .corner-badge.stalled { background: rgba(234,88,12,.62); }
+.corner-badge.pending_approval { background: rgba(167,139,250,.6); }
+.corner-badge.failed, .corner-badge.denied { background: rgba(239,68,68,.62); }
 /* the semi-transparent hover overlay */
 .media-overlay { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; justify-content: flex-end;
   gap: 9px; padding: 14px; opacity: 0; transition: opacity .22s ease;
@@ -200,6 +206,11 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
 .badge { padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
 .badge-available { background: #22c55e22; color: #4ade80; } .badge-handed { background: #f59e0b22; color: #fbbf24; }
 .badge-queued { background: #0ea5e922; color: #38bdf8; } .badge-failed { background: #ef444422; color: #f87171; }
+.badge-downloading { background: #0ea5e922; color: #38bdf8; }
+.badge-waiting, .badge-stalled { background: #ea580c22; color: #fb923c; }
+.badge .fmt-ic { width: 12px; height: 12px; vertical-align: -2px; fill: currentColor; }
+.status-row { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 14px; }
+.status-line { font-size: 13px; line-height: 1.5; }
 
 /* ---------- requests list ---------- */
 .req-list { display: flex; flex-direction: column; gap: 10px; }
@@ -512,6 +523,9 @@ body[data-theme="light"] .media-card:hover { box-shadow: 0 18px 38px rgba(15,23,
 .series-badge { display: inline-block; font-size: 11.5px; padding: 3px 10px; border-radius: 999px; }
 .series-badge.available { background: rgba(94,234,212,.16); color: #5eead4; }
 .series-badge.handed { background: rgba(217,140,63,.18); color: var(--accent); }
+.series-badge.downloading { background: rgba(14,165,233,.16); color: #38bdf8; }
+.series-badge.waiting, .series-badge.stalled { background: rgba(234,88,12,.16); color: #fb923c; }
+.series-badge.pending_approval { background: rgba(167,139,250,.16); color: #c4b5fd; }
 /* "Next in <series>" (book page) / "Continue <series>" (Home) */
 .series-strip-wrap { max-width: 860px; padding: 16px 18px 18px; border-radius: var(--radius);
   background: color-mix(in srgb, var(--accent) 6%, var(--bg2));
