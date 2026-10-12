@@ -14,7 +14,6 @@ seriesTitle, for authors Chaptarr already manages.
 Every lookup is cached in meta: a series map for a day, a miss (not a series,
 or the catalogue was down) for an hour, so a page render is a cache hit and a
 failing catalogue isn't asked again on every view."""
-import datetime
 import json
 import logging
 import time
@@ -165,8 +164,8 @@ def annotate(data: dict, finished: list[dict], default_author: str = "", viewer=
       status     the status.py dict (label, cls, detail) the badge shows
       key        stable id the request-remaining confirm round-trips
     `finished` is picks.finished_works() for the viewing user."""
-    from . import formats, picks, status
-    today = str(datetime.date.today())
+    from . import formats, picks, status, tz
+    today = str(tz.today())
     books = [dict(b, author=b.get("author") or default_author) for b in data.get("books") or []]
     authors = {_first_author(b["author"]).lower() for b in books if b["author"]}
     asins = [b["asin"] for b in books if b.get("asin")]

@@ -8,7 +8,7 @@ from flask import (Blueprint, jsonify, make_response, redirect, render_template,
 
 from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
                discover, ebookmeta, formats, notify, picks, recommend, seriesmap, status, tagging,
-               titles)
+               titles, tz)
 
 log = logging.getLogger("stackarr.routes")
 
@@ -201,7 +201,7 @@ def home_page():
             "WHERE user_id=? AND lane='upcoming' AND status='pending' ORDER BY extra LIMIT 6", (u["id"],))]  # ASC: soonest first (match Upcoming page)
         want_n = c.execute("SELECT COUNT(*) n FROM shelf WHERE user_id=? AND state='want'", (u["id"],)).fetchone()["n"]
         avail_n = c.execute("SELECT COUNT(*) n FROM requests WHERE user_id=? AND status='available'", (u["id"],)).fetchone()["n"]
-    year = datetime.date.today().year
+    year = tz.today().year
     read_year = sum(1 for d in _finish_dates_all(u) if d.startswith(str(year)))
     try:
         goal = int(db.get_meta(f"goal_{u['id']}", "0") or 0)
@@ -402,7 +402,7 @@ def _finished_books(u) -> list[dict]:
         books.append(b)
 
     def _day(ms):
-        return datetime.date.fromtimestamp(ms / 1000).isoformat()
+        return tz.day_of_ms(ms)              # the household's calendar day, not the container's
 
     try:
         for h in abs_history(u):
@@ -423,7 +423,7 @@ def _finished_books(u) -> list[dict]:
                 pass
     for r in db.shelf_list(u["id"], "read"):           # manual Read-shelf finishes
         if r.get("finished_at"):
-            _add(r.get("title"), r.get("author"), r["finished_at"][:10], r.get("format") or "audiobook")
+            _add(r.get("title"), r.get("author"), tz.db_day(r["finished_at"]), r.get("format") or "audiobook")
     return books
 
 
@@ -438,7 +438,7 @@ def _heatmap(dates: list[str]) -> dict:
     import datetime
     from collections import Counter
     counts = Counter(d for d in dates if d)
-    today = datetime.date.today()
+    today = tz.today()
     start = today - datetime.timedelta(days=today.weekday() + 1 + 52 * 7)   # Sunday ~53wk ago
     weeks, cur = [], start
     mx = 0
@@ -514,7 +514,7 @@ def insights_page():
             moodc[m] += 1
     top_moods = moodc.most_common(6)
     heat = _heatmap(finish_dates)
-    year = datetime.date.today().year
+    year = tz.today().year
     read_year = sum(1 for d in finish_dates if d.startswith(str(year)))
     try:
         goal = int(db.get_meta(f"goal_{u['id']}", "0") or 0)
@@ -1057,12 +1057,11 @@ def api_series_continue():
     most recently in Audiobookshelf (within CONTINUE_DAYS) that still has books
     after it. Tries at most three recent finishes, so a run of standalones
     can't turn one Home view into a dozen catalogue lookups."""
-    import time
     u = auth.current_user()
-    cutoff = (time.time() - CONTINUE_DAYS * 86400) * 1000
     tried, seen = 0, set()
     for r in picks.finished_works(u, abs_history(u)):
-        if (r.get("last_update") or 0) < cutoff or tried >= 3:
+        # the window is calendar days in the household's timezone
+        if tz.days_ago(r.get("last_update") or 0) > CONTINUE_DAYS or not r.get("last_update") or tried >= 3:
             break
         name = (r.get("series") or "").strip() or (_infer_series(r["title"])[0] or "")
         if name and name.lower() in seen:
@@ -1075,7 +1074,7 @@ def api_series_continue():
         seen.add((v["series"] or name).lower())
         if v["next"]:
             v["finished_title"] = r["title"]
-            v["finished_days"] = max(int((time.time() * 1000 - r["last_update"]) // 86_400_000), 0)
+            v["finished_days"] = tz.days_ago(r["last_update"])      # 0 = today, 1 = yesterday
             return jsonify(v)
     return jsonify({"ok": False})
 
@@ -1458,8 +1457,7 @@ def upcoming_page():
             "SELECT * FROM suggestions WHERE user_id=? AND lane='upcoming' AND status='pending' ORDER BY extra", (u["id"],))]
         for r in rows:
             r["available"] = _owned(c, r["asin"], r["title"], r["author"])
-    import datetime
-    today = str(datetime.date.today())
+    today = str(tz.today())
     return render_template("upcoming.html", rows=rows, today=today)
 
 
@@ -1583,6 +1581,7 @@ def settings_page():
                                     "hardcover_token": g("hardcover_token", config.HARDCOVER_TOKEN) if is_admin else ""},
                            hide_rated_history=db.get_pref(auth.current_user()["id"], "hide_rated_history", "0") == "1",
                            format_mode=formats.mode(),
+                           timezone=tz.name(), timezones=tz.zones(), timezone_default=tz.default_name(),
                            cross_format_taste=db.get_pref(auth.current_user()["id"], "cross_format_taste", "0") == "1",
                            adventurousness=db.get_meta(f"adventurousness_{auth.current_user()['id']}", str(config.ADVENTUROUSNESS)),
                            log_level=config.LOG_LEVEL,
@@ -2621,7 +2620,7 @@ SETTING_KEYS = {
     "chaptarr_url", "chaptarr_api_key", "chaptarr_root_folder",
     "chaptarr_quality_profile_id", "chaptarr_metadata_profile_id",
     "goodreads_rss", "hardcover_token", "discord_webhook", "custom_webhook",
-    "auto_add_level", "formats",
+    "auto_add_level", "formats", "timezone",
     "kavita_url", "kavita_api_key",
     "calibreweb_url", "calibreweb_user", "calibreweb_pass",
     "komga_url", "komga_user", "komga_pass",
@@ -2643,6 +2642,8 @@ def api_settings():
     """Install-wide configuration — admin only (server URLs, API keys, SMTP,
     format mode, …). Per-user preferences go through /api/prefs."""
     body = request.get_json(force=True)
+    if "timezone" in body and not tz.valid(str(body["timezone"]).strip()):
+        return jsonify({"ok": False, "error": "Unknown timezone — pick one from the list."}), 400
     for k, v in body.items():
         if k in BOOL_KEYS:
             db.set_meta(k, "1" if v else "0")

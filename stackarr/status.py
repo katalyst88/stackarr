@@ -33,11 +33,10 @@ book being shown has an open request — a page of cards with nothing on order
 never calls it. Requests are household-wide for the active states (the
 library is shared: a book someone else requested is on its way for you too);
 failed / denied attempts count only for the person who made them."""
-import datetime
 import threading
 import time
 
-from . import chaptarr, db, formats, titles
+from . import chaptarr, db, formats, titles, tz
 
 QUEUE_TTL = 30
 STALE_DAYS = 7
@@ -102,11 +101,8 @@ def _queue_hit(q: list[dict], title: str, author: str, asin: str, media: str) ->
 
 
 def _days_since(ts: str) -> float:
-    try:
-        then = datetime.datetime.fromisoformat((ts or "").replace(" ", "T"))
-    except ValueError:
-        return 0.0
-    return (datetime.datetime.now() - then).total_seconds() / 86400
+    then = tz.from_db(ts)
+    return (tz.now() - then).total_seconds() / 86400 if then else 0.0
 
 
 def _entry(state: str, detail: str = "", **extra) -> dict:
@@ -162,7 +158,7 @@ def _combine(per: dict, release_date: str = "") -> dict:
         if best:
             src = next(v for v in per.values() if v["state"] == best)
             out = dict(src)
-        elif release_date and release_date > str(datetime.date.today()):
+        elif release_date and release_date > str(tz.today()):
             out = _entry("upcoming", f"Out {release_date}")
         else:
             out = _entry("none")

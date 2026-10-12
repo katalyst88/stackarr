@@ -809,6 +809,18 @@ const Stackarr = (() => {
       else { toast(r.error || "Couldn't deny."); if (btn) btn.disabled = false; }
     },
 
+    // Settings → General → Timezone: an IANA zone from the searchable list; the
+    // server rejects anything it can't resolve
+    async saveTimezone(btn) {
+      const v = ((document.getElementById("tz-input") || {}).value || "").trim();
+      const known = [...document.querySelectorAll("#tz-list option")].some(o => o.value === v);
+      if (!known) { toast("Pick a timezone from the list, e.g. Australia/Melbourne."); return; }
+      if (btn) btn.disabled = true;
+      const r = await api("/api/settings", { method: "POST", body: JSON.stringify({ timezone: v }) });
+      if (btn) btn.disabled = false;
+      if (!r) return;
+      toast(r.ok ? `Timezone set to ${v}.` : (r.error || "Couldn't save."));
+    },
     async setSetting(obj, reload) { await api("/api/settings", { method: "POST", body: JSON.stringify(obj) }); toast("Saved."); if (reload) setTimeout(() => location.reload(), 400); },
     async setPref(obj, reload) { await api("/api/prefs", { method: "POST", body: JSON.stringify(obj) }); toast("Saved."); if (reload) setTimeout(() => location.reload(), 400); },
     async setApprovalMode(require) { await api("/api/admin/approval-mode", { method: "POST", body: JSON.stringify({ require_approval: require }) }); toast(require ? "Requests now need your approval." : "Requests now auto-approve."); },

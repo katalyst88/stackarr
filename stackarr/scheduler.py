@@ -7,7 +7,7 @@ import queue
 import threading
 import time
 
-from . import absclient, backends, chaptarr, config, db, formats, notify, picks, recommend, titles
+from . import absclient, backends, chaptarr, config, db, formats, notify, picks, recommend, titles, tz
 
 log = logging.getLogger("stackarr.scheduler")
 
@@ -329,7 +329,7 @@ def new_release_radar():
     import datetime
     if db.get_meta("notify_newrelease_enabled", "0") != "1":
         return
-    today = datetime.date.today()
+    today = tz.today()
     cutoff = str(today - datetime.timedelta(days=30))
     base = db.get_meta("public_url", "")
     # check the catalogue of the primary active format

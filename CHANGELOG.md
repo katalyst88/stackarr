@@ -8,6 +8,13 @@ All notable changes to Stackarr.
 
 One answer per book on every page, and the things that "didn't run fluidly".
 
+#### Added
+- **Settings → General → Timezone** (admin): a searchable IANA zone list,
+  defaulting to the `TZ` variable, else UTC. The reading heatmap, yearly goal,
+  "finished N days ago", the Home Continue window, Insights, Upcoming and
+  request times all use it (stdlib `zoneinfo`, never the process clock), so a
+  07:30 Melbourne finish no longer lands on yesterday in a UTC container.
+
 #### Fixed
 - **Rating stars did nothing** on History, the book page and the Suggestions
   quick-rate card (also Find missing, Clear, Remove, Add all by author): their
