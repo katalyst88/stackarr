@@ -844,3 +844,11 @@ body[data-theme="light"] .series-chip.chip-read { background: #dcfce7; border-co
 body[data-theme="light"] .series-chip.chip-reading { background: #ffedd5; border-color: var(--accent); color: #b45309; }
 .chip-legend { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0 0; font-size: 12px; }
 .chip-legend .series-chip { font-size: 11px; padding: 2px 8px; }
+
+/* "Needs VIP" (status.py needs_vip) */
+.corner-badge.vip { background: rgba(168,85,247,.62); }
+.badge-vip { background: #a855f722; color: #c084fc; }
+.series-badge.vip { background: rgba(168,85,247,.16); color: #c084fc; }
+.vip-note { margin: 0 0 14px; }
+/* a status explanation is for reading: up to two lines, not one clipped line */
+.req-detail { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }

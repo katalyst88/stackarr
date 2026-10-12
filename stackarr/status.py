@@ -19,7 +19,8 @@ book said "Requested" on one page and "Downloading" on the next.
   not_found    Not found yet   no usable release: the background release check
                                found none / only rejected ones, or the request
                                is STALE_DAYS old and never reached the queue
-  unavailable  Not available   every release is VIP-only on the tracker
+  needs_vip    Needs VIP       every release is VIP-only on the indexer
+  unavailable  Not available   every release was rejected (reason attached)
   pending      Needs approval  waiting for an admin
   failed       Failed          the handoff failed (retryable)
   denied       Not approved    an admin declined it
@@ -53,6 +54,7 @@ LABELS = {
     "requested": ("Requested", "handed"),
     "not_found": ("Not found yet", "stalled"),
     "unavailable": ("Not available", "failed"),
+    "needs_vip": ("Needs VIP", "vip"),
     "pending": ("Needs approval", "pending_approval"),
     "failed": ("Failed", "failed"),
     "denied": ("Not approved", "denied"),
@@ -60,7 +62,7 @@ LABELS = {
     "none": ("", ""),
 }
 # most advanced first — the overall state of a book that isn't in the library
-ORDER = ("downloading", "importing", "stalled", "waiting", "requested", "not_found", "unavailable",
+ORDER = ("downloading", "importing", "stalled", "waiting", "requested", "needs_vip", "not_found", "unavailable",
          "pending", "failed", "denied")
 OPEN = ("queued", "handed", "approving")            # stored statuses Chaptarr is working on
 FMT_NAME = {"audiobook": "Audiobook", "ebook": "eBook"}
@@ -148,8 +150,12 @@ def _format_state(fmt, owned, rows, queue_fn, title, author, asin) -> dict:
         from . import releasecheck
         rc = releasecheck.result(r.get("id")) if r.get("id") else None
         if rc and rc.get("kind") == "vip":
-            return _entry("unavailable", f"Not available: {rc['detail']}")
-        if rc and rc.get("kind") in ("none", "rejected"):
+            return _entry("needs_vip", releasecheck.VIP_EXPLAINER)
+        if rc and rc.get("kind") == "vip_retry":
+            return _entry("requested", "Searching again — VIP is on")
+        if rc and rc.get("kind") == "rejected":
+            return _entry("unavailable", "Not available: " + rc["detail"][0].lower() + rc["detail"][1:])
+        if rc and rc.get("kind") == "none":
             return _entry("not_found", rc["detail"] + f" (checked {tz.fmt_epoch(rc.get('at'))})")
         days = _days_since(r.get("created_at") or "")
         if days >= STALE_DAYS:

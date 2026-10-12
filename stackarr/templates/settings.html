@@ -60,8 +60,10 @@
                  onchange="Stackarr.setSetting({release_check: this.checked})"></label>
         <p class="muted">A quarter of an hour after a request goes to Chaptarr, if nothing is downloading,
           Stackarr asks Chaptarr once for that book's releases and says why in plain words (for example
-          <i>Not available: VIP-only on the tracker</i>). It looks again once a day. Each look is one indexer search,
+          <i>Needs VIP</i>). It looks again once a day. Each look is one indexer search,
           one book a minute at most, in the background.</p>
+        <p class="muted">Indexer VIP: <b>{% if vip_state and vip_state.at %}{{ 'on' if vip_state.vip else 'off' }}{% else %}unknown{% endif %}</b>
+          (read from Chaptarr). When it turns on, books that need VIP are searched again.</p>
       </div>
       {% endif %}
     </div>

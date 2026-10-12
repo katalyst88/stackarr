@@ -12,9 +12,10 @@ least CHECK_AFTER_MIN minutes ago and still aren't in Chaptarr's queue, and
 each request at most once per RECHECK_HOURS. The answer is kept in meta
 ("relcheck:<request id>") and status.py turns it into plain words:
 
-  vip       Not available — VIP-only on the tracker
+  vip       Needs VIP — every release is VIP-only (vip.py re-searches these
+            when Chaptarr's indexer turns VIP on)
   none      Not found — no releases on your indexers
-  rejected  Not found — every release was rejected: <reasons>
+  rejected  Not available — every release was rejected: <reasons>
   ok        (nothing to say: there are usable releases, Chaptarr will grab)
 
 Settings → General → "Check stuck requests" turns it off (meta
@@ -27,6 +28,7 @@ from . import chaptarr, db, tz
 
 log = logging.getLogger("stackarr.releasecheck")
 
+VIP_EXPLAINER = "Every release is VIP-only — check Chaptarr / indexer"
 CHECK_AFTER_MIN = 15          # give Chaptarr's own search time to grab first
 RECHECK_HOURS = 24
 PAUSE_SECONDS = 60            # one indexer search per minute, at most
@@ -68,7 +70,7 @@ def classify(payload) -> dict:
         return {"kind": "ok", "detail": ""}
     reasons = [x for r in rels for x in _reasons(r)]
     if any("vip" in x.lower() for x in reasons):
-        return {"kind": "vip", "detail": "VIP-only on the tracker (needs VIP membership)"}
+        return {"kind": "vip", "detail": VIP_EXPLAINER}
     uniq = list(dict.fromkeys(reasons))[:2]
     return {"kind": "rejected", "detail": "Every release was rejected" + (": " + "; ".join(uniq) if uniq else "")}
 
@@ -90,7 +92,10 @@ def candidates(limit: int = 1) -> list[dict]:
         if when and when.timestamp() > cutoff:
             continue
         prev = result(r["id"])
-        wait = (1 if (prev or {}).get("kind") == "error" else RECHECK_HOURS) * 3600
+        kind = (prev or {}).get("kind")
+        # an error retries in an hour; a VIP re-search is looked at again once
+        # Chaptarr has had its CHECK_AFTER_MIN; everything else daily
+        wait = 3600 if kind == "error" else (CHECK_AFTER_MIN * 60 if kind == "vip_retry" else RECHECK_HOURS * 3600)
         if prev and time.time() - float(prev.get("at") or 0) < wait:
             continue
         media = "ebook" if r["format"] == "ebook" else "audiobook"
@@ -144,8 +149,12 @@ def run_once() -> int:
 
 
 def worker():
+    from . import vip
     while True:
         try:
+            if chaptarr.configured():
+                vip.poll()                 # reads Chaptarr's indexer "Is VIP" (read-only)
+                vip.reflow_step()          # VIP turned on: search the VIP-only books again
             run_once()
         except Exception as e:
             log.debug("release check worker error: %s", e)

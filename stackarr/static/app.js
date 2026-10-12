@@ -845,6 +845,12 @@ const Stackarr = (() => {
       if (!r) return;
       toast(r.ok ? `Timezone set to ${v}.` : (r.error || "Couldn't save."));
     },
+    async vipRecheck(btn) {
+      if (btn) btn.disabled = true;
+      const r = await api("/api/admin/vip-recheck", { method: "POST", body: "{}" });
+      if (btn) btn.disabled = false;
+      if (r) toast(r.detail || "Queued.");
+    },
     async setSetting(obj, reload) { await api("/api/settings", { method: "POST", body: JSON.stringify(obj) }); toast("Saved."); if (reload) setTimeout(() => location.reload(), 400); },
     async setPref(obj, reload) { await api("/api/prefs", { method: "POST", body: JSON.stringify(obj) }); toast("Saved."); if (reload) setTimeout(() => location.reload(), 400); },
     async setApprovalMode(require) { await api("/api/admin/approval-mode", { method: "POST", body: JSON.stringify({ require_approval: require }) }); toast(require ? "Requests now need your approval." : "Requests now auto-approve."); },
