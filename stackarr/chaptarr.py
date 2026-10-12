@@ -89,40 +89,87 @@ def can_grab(title: str, author: str) -> bool:
         return False
 
 
-def queue_status() -> dict:
-    """Live download state keyed by lowercased title — {title: status} where
-    status is downloading | importing | queued. Drives real request progress."""
-    out = {}
+def _plain_reason(rec: dict) -> str:
+    """Chaptarr's reason a queue item is held or stuck, in one line."""
+    msgs = []
+    for m in rec.get("statusMessages") or []:
+        msgs += [x for x in (m.get("messages") or []) if x] or ([m.get("title")] if m.get("title") else [])
+    if rec.get("errorMessage"):
+        msgs.insert(0, rec["errorMessage"])
+    return "; ".join(dict.fromkeys(str(x).strip() for x in msgs if str(x).strip()))[:240]
+
+
+def _eta(timeleft) -> str:
+    """Chaptarr's "d.hh:mm:ss" / "hh:mm:ss" time-left as "4 days" / "3 h" / "36 min"."""
+    m = re.fullmatch(r"(?:(\d+)\.)?(\d+):(\d+):(\d+)", str(timeleft or "").strip())
+    if not m:
+        return ""
+    d, h, mi = int(m.group(1) or 0), int(m.group(2)), int(m.group(3))
+    if d:
+        return f"{d} day{'s' if d != 1 else ''}"
+    if h:
+        return f"{h} h"
+    return f"{max(mi, 1)} min"
+
+
+def queue() -> list[dict] | None:
+    """Chaptarr's download queue, one entry per item:
+    {title, author, asin, media, state, pct, eta, reason}. `state` is one of
+    downloading | importing | waiting (Chaptarr is holding it: a delay profile
+    or a pending/blocked release) | stalled (no peers) | failed.
+    None when Chaptarr can't be read, so callers can tell "nothing queued"
+    from "don't know". One GET per page of 200; callers cache it."""
+    out = []
     try:
         page = 1
-        while page <= 50:                                # safety cap
+        while page <= 10:                                # safety cap: 2,000 items
             r = requests.get(f"{url()}/api/v1/queue", headers=_h(),
                              params={"page": page, "pageSize": 200,
-                                     "includeAuthor": "true", "includeBook": "true"}, timeout=20)
+                                     "includeAuthor": "true", "includeBook": "true"}, timeout=8)
             if not r.ok:
-                break
+                return None if page == 1 else out
             data = r.json() or {}
             records = data.get("records", [])
             for rec in records:
-                title = ((rec.get("book") or {}).get("title")
-                         or (rec.get("title") or "")).lower().strip()
-                if not title:
-                    continue
+                book = rec.get("book") or {}
                 st = (rec.get("status") or "").lower()
+                tds = (rec.get("trackedDownloadStatus") or "").lower()
                 tdl = (rec.get("trackedDownloadState") or "").lower()
+                reason = _plain_reason(rec)
                 if "import" in tdl or st == "completed":
-                    out[title] = "importing"
-                elif st in ("downloading", "queued", "paused", "delay"):
-                    out[title] = "downloading"
+                    state = "importing"
+                elif st == "failed" or tdl == "failed" or tds == "error":
+                    state = "failed"
+                elif "stall" in reason.lower():
+                    state = "stalled"
+                elif st in ("delay", "pending") or tds == "warning" or st == "warning":
+                    state = "waiting"
                 else:
-                    out[title] = st or "downloading"
-            # stop once we've seen everything (or the page came back short)
-            if len(records) < 200 or len(out) >= (data.get("totalRecords") or 0):
+                    state = "downloading"
+                size, left = rec.get("size") or 0, rec.get("sizeleft") or 0
+                out.append({
+                    "title": book.get("title") or rec.get("title") or "",
+                    "author": ((rec.get("author") or {}).get("authorName") or book.get("authorTitle") or ""),
+                    "asin": book.get("audibleASIN") or book.get("asin") or "",
+                    "media": (book.get("mediaType") or "").lower(),
+                    "state": state,
+                    "pct": int(round(100 * (size - left) / size)) if size and state == "downloading" else None,
+                    "eta": _eta(rec.get("timeleft")) if state == "downloading" else "",
+                    "reason": reason,
+                })
+            if len(records) < 200:
                 break
             page += 1
     except Exception as e:
-        log.debug("chaptarr queue_status failed: %s", e)
+        log.debug("chaptarr queue failed: %s", e)
+        return None
     return out
+
+
+def queue_status() -> dict:
+    """Live download state keyed by lowercased title — {title: state}. Kept
+    for API callers; Stackarr itself reads queue() through status.py."""
+    return {q["title"].lower().strip(): q["state"] for q in (queue() or []) if q["title"]}
 
 
 def _ensure_tag(label: str = "stackarr") -> int | None:

@@ -119,7 +119,7 @@ def _books(uid):
 
 def test_each_book_gets_its_household_state(aud, household):
     states = [(b["seq"], b["state"]) for b in _books(household)]
-    assert states == [(1, "finished"), (2, "available"), (3, "handed"), (4, "missing"), (5, "upcoming")]
+    assert states == [(1, "finished"), (2, "available"), (3, "requested"), (4, "missing"), (5, "upcoming")]
 
 
 def test_strip_starts_after_the_highest_finished_book(aud, household):
@@ -149,7 +149,7 @@ def test_next_endpoint_for_a_book_page(aud, household):
     assert r["ok"] and r["series"] == "The Last Horizon" and r["after"] == 1
     assert r["after_title"] == "The Captain"
     assert [(b["title"], b["state"]) for b in r["next"]] == [
-        ("The Engineer", "available"), ("The Knight", "handed"), ("The Pilot", "missing")]
+        ("The Engineer", "available"), ("The Knight", "requested"), ("The Pilot", "missing")]
 
 
 def test_next_endpoint_rejects_a_non_asin_in_the_url_path(aud, household):

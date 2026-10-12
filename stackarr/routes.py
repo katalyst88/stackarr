@@ -7,7 +7,7 @@ from flask import (Blueprint, jsonify, make_response, redirect, render_template,
                    session, url_for)
 
 from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
-               discover, ebookmeta, formats, notify, picks, recommend, seriesmap, tagging,
+               discover, ebookmeta, formats, notify, picks, recommend, seriesmap, status, tagging,
                titles)
 
 log = logging.getLogger("stackarr.routes")
@@ -603,8 +603,6 @@ def series_page():
         sugg = [dict(r) for r in c.execute(
             "SELECT id,title,author,series,asin,cover,reason FROM suggestions "
             "WHERE user_id=? AND lane='series' AND status='pending' ORDER BY score DESC", (u["id"],))]
-        reqs = [dict(r) for r in c.execute(
-            "SELECT title,status FROM requests WHERE user_id=?", (u["id"],))]
 
     def norm(s):
         return (s or "").strip().lower()
@@ -612,14 +610,6 @@ def series_page():
     next_by_series = {}
     for s in sugg:
         next_by_series.setdefault(norm(s["series"]), s)
-
-    def req_status(title):
-        nt = norm(title)
-        for rq in reqs:
-            rt = norm(rq["title"])
-            if rt and nt and (rt[:30] in nt or nt[:30] in rt):
-                return rq["status"]
-        return None
 
     def _series_key(name):
         # merge "The Expanse" / "Expanse" and casing variants into one group
@@ -680,7 +670,8 @@ def series_page():
                       "missing_audio": (both and len(all_seqs - audio_seqs) > 0),
                       "missing_ebook": (both and len(all_seqs - ebook_seqs) > 0),
                       "author": (books[0].get("author") if books else ""),
-                      "next": nxt, "next_status": req_status(nxt["title"]) if nxt else None})
+                      "next": nxt,
+                      "next_st": book_status(nxt.get("asin") or "", nxt["title"], nxt.get("author") or "") if nxt else None})
     cards = [x for x in cards if x["owned"] >= 2 or x["next"]]
     cards.sort(key=lambda x: (-x["owned"], x["name"].lower()))
     have_next = sum(1 for c in cards if c["next"])
@@ -744,16 +735,15 @@ def book_page(asin):
         cached = _cached_book(asin)
         b.update({k: v for k, v in cached.items() if v and not b.get(k)})
     b.setdefault("title", "Unknown")
-    b["state"] = _state_for(asin, b.get("title", ""), b.get("author", ""))
+    st = book_status(asin, b.get("title", ""), b.get("author", ""), b.get("release_date") or "")
+    b["state"] = st["state"]
     u = auth.current_user()
     key = db.rating_key(asin if not asin.startswith(("gb:", "ol:")) else "",
                         b.get("title", ""), b.get("author", "")) if asin.startswith(("gb:", "ol:")) else asin
     with db.conn() as c:
-        req = c.execute("SELECT status, detail FROM requests WHERE asin=? AND asin<>'' ORDER BY id DESC LIMIT 1",
-                        (asin,)).fetchone()
         my = c.execute("SELECT stars, review FROM ratings WHERE user_id=? AND asin=?",
                        (u["id"], key)).fetchone()
-    b["req_detail"] = (req["detail"] if req else "") or ""
+    b["req_detail"] = st["detail"] if st["state"] == "failed" else ""
     try:
         tags = tagging.fetch_for(key, b.get("title", ""), b.get("author", ""), b.get("categories"))
     except Exception:
@@ -774,7 +764,7 @@ def book_page(asin):
                                          b.get("author", ""), asin if asin.startswith("B0") else "")
         except Exception as e:
             log.debug("book page: finished check failed: %s", e)
-    return render_template("book.html", b=b, rate_key=key, owned_formats=owned_formats,
+    return render_template("book.html", b=b, st=st, rate_key=key, owned_formats=owned_formats,
                            community=db.community_rating(key), reviews=db.reviews_for(key),
                            my_stars=(my["stars"] if my else 0), my_review=(my["review"] if my else ""),
                            tags=tags, shelf=shelf, finished=finished)
@@ -814,8 +804,8 @@ def browse_page():
     for b in books:
         if b.get("asin") and b["asin"] not in seen:
             seen.add(b["asin"])
-            b["state"] = _state_for(b["asin"], b["title"], b["author"])
             uniq.append(b)
+    _annotate_status(uniq)
     return render_template("browse.html", books=uniq, title=title, kind=kind, author=author)
 
 
@@ -923,7 +913,7 @@ def _series_view(u, t: dict) -> dict | None:
     if not data:
         return None
     finished = picks.finished_works(u, abs_history(u))
-    books = seriesmap.annotate(data, finished, default_author=t["author"])
+    books = seriesmap.annotate(data, finished, default_author=t["author"], viewer=u["id"])
     if not books:
         return None
     start, nxt = seriesmap.strip(books, after=t["seq"])
@@ -1376,8 +1366,8 @@ def author_page(name):
         k = (b.get("title") or "").lower()
         if b.get("asin") and k not in seen:
             seen.add(k)
-            b["state"] = _state_for(b["asin"], b["title"], b["author"])
             uniq.append(b)
+    _annotate_status(uniq)
     uniq.sort(key=lambda b: b.get("release_date") or "", reverse=True)
     u = auth.current_user()
     following = bool(db.get_meta(f"follow_{u['id']}_{name.lower()}"))
@@ -1412,8 +1402,8 @@ def narrator_page(name):
     for b in audible.search(name, num=40):
         if name.lower() in (b.get("narrator") or "").lower() and b.get("asin") and b["asin"] not in seen:
             seen.add(b["asin"])
-            b["state"] = _state_for(b["asin"], b["title"], b["author"])
             uniq.append(b)
+    _annotate_status(uniq)
     return render_template("narrator.html", narrator=name, books=uniq)
 
 
@@ -1704,11 +1694,32 @@ def _cached_book(asin) -> dict:
 
 
 def _state_for(asin, title, author):
-    with db.conn() as c:
-        owned = _owned(c, asin, title, author)
-        req = c.execute("SELECT status FROM requests WHERE asin=? AND asin<>'' ORDER BY id DESC LIMIT 1",
-                        (asin,)).fetchone()
-    return "available" if owned else (req["status"] if req else "none")
+    """The status key for one book (status.py) — kept for callers that only
+    want the word."""
+    return book_status(asin, title, author)["state"]
+
+
+def _viewer():
+    try:
+        return auth.current_user()
+    except RuntimeError:                     # outside a request (scheduler, tests)
+        return None
+
+
+def book_status(asin, title, author, release_date="") -> dict:
+    """status.for_book() for the signed-in user."""
+    u = _viewer()
+    return status.for_book(asin, title, author, viewer=u["id"] if u else None, release_date=release_date)
+
+
+def _annotate_status(books: list[dict]) -> list[dict]:
+    """Give every catalogue row its status (status.py, one batch): `status`
+    (the dict the templates' status_badge renders) and `state` (its key, which
+    the front-end's cards read)."""
+    u = _viewer()
+    for b, st in zip(books, status.for_books(books, viewer=u["id"] if u else None)):
+        b["status"], b["state"] = st, st["state"]
+    return books
 
 
 @bp.route("/api/discover")
@@ -1718,10 +1729,7 @@ def api_discover():
         pg = int(request.args.get("page", "0") or 0)
     except (ValueError, TypeError):
         pg = 0
-    books = discover.page(pg)
-    for b in books:
-        b["state"] = _state_for(b["asin"], b["title"], b["author"])
-    return jsonify(books)
+    return jsonify(_annotate_status(discover.page(pg)))
 
 
 def _search_catalog(q, num):
@@ -1807,10 +1815,7 @@ def api_search():
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify([])
-    books = _search_catalog(q, 12)
-    for b in books:
-        b["state"] = _state_for(b["asin"], b["title"], b["author"])
-    return jsonify(books)
+    return jsonify(_annotate_status(_search_catalog(q, 12)))
 
 
 def _needs_approval(user) -> bool:

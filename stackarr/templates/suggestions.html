@@ -114,7 +114,7 @@
       <a class="media-poster" href="{{ book_href(s.asin, s.title, s.author, s.format) }}">
         <img src="{{ (s.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
         {{ fmt_badge(s.format) }}
-        {% if s.available %}<span class="corner-badge available">Available</span>
+        {% if s.available %}<span class="corner-badge available">In library</span>
         {% elif lane == 'upcoming' %}<span class="corner-badge handed">Coming {{ s.extra }}</span>
         {% elif lane == 'series' %}<span class="corner-badge series">Series</span>{% endif %}
         <div class="media-overlay">

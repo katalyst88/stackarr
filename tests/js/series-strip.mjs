@@ -14,8 +14,10 @@ const NEXT = {
   ok: true, series: "The Last Horizon", series_asin: "B0BVQ26GG1", author: "Will Wight",
   after: 1, after_title: "The Captain", formats: ["audiobook"], multi: false,
   next: [
-    { seq: 2, asin: "B0CL1HY6G4", title: "The Engineer", author: "Will Wight", cover: "https://m.media-amazon.com/images/I/x._SL500_.jpg", state: "available" },
-    { seq: 3, asin: "B0D3915Q9H", title: "The Knight", author: "Will Wight", cover: "", state: "handed" },
+    { seq: 2, asin: "B0CL1HY6G4", title: "The Engineer", author: "Will Wight", cover: "https://m.media-amazon.com/images/I/x._SL500_.jpg", state: "available",
+      status: { state: "available", label: "In library", cls: "available" } },
+    { seq: 3, asin: "B0D3915Q9H", title: "The Knight", author: "Will Wight", cover: "", state: "downloading",
+      status: { state: "downloading", label: "Downloading", cls: "downloading", detail: "3% · about 4 days left" } },
     { seq: 4, asin: "B0F8CJQZM3", title: "The Pilot <img src=x onerror=alert(1)>", author: "Will Wight", cover: "", state: "missing" },
   ],
 };
@@ -54,7 +56,8 @@ if (cards.length !== 3) fail("expected 3 cards, got " + cards.length);
 // 2. badges per state; Request only on the missing book
 const badge = (c) => (c.querySelector(".corner-badge") || {}).textContent || "";
 if (badge(cards[0]) !== "In library") fail("#2 badge: " + badge(cards[0]));
-if (badge(cards[1]) !== "Requested") fail("#3 badge: " + badge(cards[1]));
+// the server's status.py label (the same word the book page and Requests show)
+if (badge(cards[1]) !== "Downloading") fail("#3 badge: " + badge(cards[1]));
 if (badge(cards[2]) !== "") fail("#4 should have no badge: " + badge(cards[2]));
 if (cards[0].querySelector("button") || cards[1].querySelector("button")) fail("Request shown on an owned/requested book");
 const btn = cards[2].querySelector("button");
