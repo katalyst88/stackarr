@@ -402,9 +402,14 @@ def queue_cover(asin: str, title: str, author: str, fmt: str) -> bool:
         return False
 
 
-def _resolve_one(asin: str, title: str, author: str, fmt: str, key: str):
+COVER_RETRY_MINUTES = (1, 5, 30)     # backoff when a lookup ERRORS (rate limit, timeout)
+_cover_retry: list = []              # [(ready_at, item, attempt)]
+
+
+def _resolve_one(asin: str, title: str, author: str, fmt: str, key: str, attempt: int = 0):
     from . import audible, ebookmeta
-    cover = ""
+    cover, failed = "", False
+    before = audible.errors()
     try:
         if asin.startswith("B0"):
             cover = (audible.by_asin(asin) or {}).get("cover", "")
@@ -416,9 +421,18 @@ def _resolve_one(asin: str, title: str, author: str, fmt: str, key: str):
                 cover = hits[0].get("cover", "")
     except Exception as e:
         log.debug("cover resolve failed for %s: %s", title, e)
+        failed = True
+    failed = failed or audible.errors() > before
     cache_key = "cart:" + key
     if cover:
         db.set_meta(cache_key, cover)
+        return
+    if failed and attempt < len(COVER_RETRY_MINUTES):
+        # an error isn't "no cover": try again later instead of caching a miss
+        # (the book stays de-duplicated in _cover_seen meanwhile)
+        with _cover_lock:
+            _cover_retry.append((time.time() + COVER_RETRY_MINUTES[attempt] * 60,
+                                 (asin, title, author, fmt, key), attempt + 1))
         return
     # A miss is remembered, but only for a while. Never caching it made every
     # render retry every miss, which is what exhausted the Google Books daily
@@ -469,8 +483,17 @@ def _run_job(kind: str, *args):
 def _cover_worker():
     while True:
         try:
+            due = None
+            with _cover_lock:
+                now = time.time()
+                for i, (ready, item, attempt) in enumerate(_cover_retry):
+                    if ready <= now:
+                        due = _cover_retry.pop(i)
+                        break
+            if due:
+                _resolve_one(*due[1], attempt=due[2])
             try:
-                item = _cover_q.get(timeout=0.05 if not _job_q.empty() else 5)
+                item = _cover_q.get(timeout=0.05 if (not _job_q.empty() or _cover_retry) else 5)
                 _resolve_one(*item)
             except queue.Empty:
                 pass

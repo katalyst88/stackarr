@@ -3189,13 +3189,17 @@ def coverart():
     cached = db.get_meta(cache_key, "")
     if cached:
         return redirect(placeholder if cached == "none" else cached)
-    # 3) Unknown: queue it and show the placeholder NOW.
+    # 3) Unknown: queue it and show the "fetching" placeholder NOW. The page
+    #    re-asks a little later (app.js initCovers) and gets the real art once
+    #    the background worker has it — never a broken or blank image.
     try:
         from . import scheduler          # local import: scheduler imports routes' siblings
         scheduler.queue_cover(asin, title, author, fmt)
     except Exception as e:
         log.debug("could not queue cover for %s: %s", title, e)
-    return redirect(placeholder)
+    resp = redirect(url_for("static", filename="cover-wip.svg"))
+    resp.headers["Cache-Control"] = "no-store"          # so the re-ask reaches us
+    return resp
 
 
 # ---- KOReader progress sync (kosync protocol) ----------------------------

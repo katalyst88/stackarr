@@ -182,11 +182,34 @@ const Stackarr = (() => {
       if (base !== src && !img.dataset.fbBase) { img.dataset.fbBase = "1"; img.src = base; return; }
       img.dataset.fbDone = "1"; img.src = this.PLACEHOLDER; img.classList.add("cover-ph");
     },
+    // A cover the server is still fetching comes back as the "Fetching cover…"
+    // placeholder (cover-wip.svg). Ask again with growing gaps — the
+    // background worker fills it in — and swap the real art in; after the
+    // last try, the designed "No cover" art. Never a broken image.
+    WIP_RETRY_S: [4, 10, 20, 40, 80],
+    _repoll(img) {
+      const orig = img.dataset.orig || img.getAttribute("src") || "";
+      if (!orig || orig.includes("cover-wip.svg")) return;
+      img.dataset.orig = orig;
+      const n = parseInt(img.dataset.wip || "0", 10);
+      if (n >= this.WIP_RETRY_S.length) { img.src = this.PLACEHOLDER; return; }
+      img.dataset.wip = String(n + 1);
+      clearTimeout(img._wip);
+      img._wip = setTimeout(() => {
+        img.src = orig + (orig.includes("?") ? "&" : "?") + "_r=" + (n + 1);
+      }, this.WIP_RETRY_S[n] * 1000);
+    },
     initCovers(root) {
       const sel = ".media-poster img, .req-cover, .book-cover img, .rate-cover img, .series-next-cover img, .onboard-cover";
       (root || document).querySelectorAll(sel).forEach(img => {
         if (img.dataset.cw) return; img.dataset.cw = "1";
-        const check = () => { if (img.naturalWidth && img.naturalWidth < 10) this.fixCover(img); };
+        const check = () => {
+          // the WIP art: by URL when it was linked directly, else by its marker
+          // size (301x301) when a cover route redirected to it
+          if ((img.currentSrc || img.src || "").includes("cover-wip.svg") ||
+              (img.naturalWidth === 301 && img.naturalHeight === 301)) { this._repoll(img); return; }
+          if (img.naturalWidth && img.naturalWidth < 10) this.fixCover(img);
+        };
         img.addEventListener("error", () => this.fixCover(img));
         img.addEventListener("load", check);
         if (img.complete) check();

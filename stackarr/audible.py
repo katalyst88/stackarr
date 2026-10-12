@@ -10,6 +10,20 @@ from . import config
 
 log = logging.getLogger("stackarr.audible")
 
+# Lookups swallow their errors (a page shows less, never a crash), so a
+# caller that must tell "no result" from "the catalogue failed" — the cover
+# worker's retry — reads this per-thread counter.
+import threading as _threading
+_errs = _threading.local()
+
+
+def errors() -> int:
+    return getattr(_errs, "n", 0)
+
+
+def _failed():
+    _errs.n = errors() + 1
+
 
 def _hi_res(url: str) -> str:
     """Force a larger render from Amazon's image CDN by bumping the size
@@ -29,6 +43,7 @@ def _products(params: dict) -> list[dict]:
         return r.json().get("products", [])
     except Exception as e:
         log.warning("audible query failed: %s", e)
+        _failed()
         return []
 
 
@@ -109,6 +124,8 @@ def by_asin(asin: str) -> dict | None:
         return normalize(p) if p else None
     except Exception as e:
         log.warning("audible asin lookup failed for %s: %s", asin, e)
+        if not (hasattr(e, "response") and getattr(e.response, "status_code", 0) == 404):
+            _failed()
         return None
 
 
