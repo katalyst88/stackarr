@@ -29,11 +29,11 @@
     </div>
     <div class="rate-stars" data-asin="{{ b.rkey }}" data-title="{{ b.title }}" data-author="{{ b.author }}" title="Rate this book">
       {% for n in [1,2,3,4,5] %}
-      <span class="star {{ 'on' if n <= b.stars }}" onclick="Stackarr.rate({{ b.rkey|tojson }},{{ n }},this)">★</span>
+      <span class="star {{ 'on' if n <= b.stars }}" onclick='Stackarr.rate({{ b.rkey|tojson }},{{ n }},this)'>★</span>
       {% endfor %}
     </div>
     <button class="rate-remove" title="Remove from history"
-            onclick="Stackarr.removeFromHistory({{ b.rkey|tojson }}, this)" aria-label="Remove from history">✕</button>
+            onclick='Stackarr.removeFromHistory({{ b.rkey|tojson }}, this)' aria-label="Remove from history">✕</button>
   </div>
   {% endfor %}
 </div>
