@@ -2,6 +2,15 @@
 
 All notable changes to Stackarr.
 
+## [1.6.10] - 2026-10-28
+
+Fixes jinja templates to allow for onclick attribute values containing double quotes.
+
+### Fixed
+
+- **History page remove button** now works again instead of throwing `Uncaught SyntaxError: Invalid or unexpected token` in the console.
+- **Star ratings** work again instead of throwing `Uncaught SyntaxError: Invalid or unexpected token` in the console.
+
 ## [1.6.9] - 2026-10-05
 
 Fixes from running Stackarr against Chaptarr's media-split schema (an

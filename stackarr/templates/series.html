@@ -37,13 +37,13 @@
       <div class="series-meta gap-note">⚠️ You have this series across formats but not completely in each.</div>
       {% endif %}
       <div class="series-actions">
-        <button class="btn small ghost" onclick="Stackarr.findMissing({{ s.name|tojson }}, this)">🔍 Find missing books</button>
+        <button class="btn small ghost" onclick='Stackarr.findMissing({{ s.name|tojson }}, this)''>🔍 Find missing books</button>
         {% if multi_format %}
-          <button class="btn small ghost" onclick="Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this, 'audiobook')">{{ fmt_icon('audiobook') }} Get all audiobooks</button>
-          <button class="btn small ghost" onclick="Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this, 'ebook')">{{ fmt_icon('ebook') }} Get all eBooks</button>
-          <button class="btn small ghost" onclick="Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this, 'both')">{{ fmt_icon('all') }} Get both</button>
+          <button class="btn small ghost" onclick='Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this, 'audiobook')'>{{ fmt_icon('audiobook') }} Get all audiobooks</button>
+          <button class="btn small ghost" onclick='Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this, 'ebook')'>{{ fmt_icon('ebook') }} Get all eBooks</button>
+          <button class="btn small ghost" onclick='Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this, 'both')'>{{ fmt_icon('all') }} Get both</button>
         {% else %}
-          <button class="btn small ghost series-getall" onclick="Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this)">{{ fmt_icon(s.format) }} Get full series</button>
+          <button class="btn small ghost series-getall" onclick='Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this)'>{{ fmt_icon(s.format) }} Get full series</button>
         {% endif %}
       </div>
       <div class="series-missing" hidden></div>
