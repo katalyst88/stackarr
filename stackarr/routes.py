@@ -3,11 +3,12 @@
 import logging
 import re
 
-from flask import (Blueprint, jsonify, redirect, render_template, request,
+from flask import (Blueprint, jsonify, make_response, redirect, render_template, request,
                    session, url_for)
 
 from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
-               discover, ebookmeta, formats, notify, recommend, tagging, titles)
+               discover, ebookmeta, formats, notify, picks, recommend, seriesmap, tagging,
+               titles)
 
 log = logging.getLogger("stackarr.routes")
 
@@ -29,6 +30,23 @@ def reading_history(be, u) -> list[dict]:
     if key not in cache:
         cache[key] = be.reading_history(u)
     return cache[key]
+
+
+def abs_history(u) -> list[dict]:
+    """The user's Audiobookshelf listening history, fetched at most ONCE per
+    request — Home reads it for the shelves, the goal ring and stale-pick
+    retirement. Same per-request memo as reading_history()."""
+    from flask import g
+    cache = getattr(g, "_abs_history", None)
+    if cache is None:
+        cache = g._abs_history = {}
+    uid = str((u or {}).get("id", ""))
+    if uid not in cache:
+        tok = (u or {}).get("abs_token")
+        cache[uid] = absclient.listening_history(tok) if tok else []
+    return cache[uid]
+
+
 bp = Blueprint("main", __name__)
 
 # Recommendation lanes — single source of truth for their display titles and the
@@ -167,6 +185,11 @@ def home_page():
     import datetime
     u = auth.current_user()
     shelves, counts = _shelves_data(u)
+    # don't offer a "fresh pick" that's since been added, requested or finished
+    try:
+        picks.retire(u["id"], picks.finished_works(u, abs_history(u)))
+    except Exception as e:
+        log.debug("home: retiring stale picks failed: %s", e)
     # a few fresh picks + new-from-upcoming + goal + up-next count
     with db.conn() as c:
         fresh = [dict(r) for r in c.execute(
@@ -304,7 +327,7 @@ def _finish_dates_all(u) -> list[str]:
             finishes[key] = date
 
     try:
-        for h in absclient.listening_history(u["abs_token"]):
+        for h in abs_history(u):
             if h.get("finished") and h.get("last_update"):
                 d = datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat()
                 _add(lib.get(h["item_id"]) or "abs:" + str(h["item_id"]), d)
@@ -705,6 +728,7 @@ def book_page(asin):
             b["genres"] = ax["genres"]
         if ax.get("series") and not b.get("series"):
             b["series"], b["sequence"] = ax["series"], ax.get("sequence")
+            b["series_asin"] = ax.get("series_asin") or ""
     # Catalogue lookups can transiently fail (rate-limit / timeout). Fall back to
     # what Stackarr already knows about this book so the page never shows a bare
     # "Unknown" — we usually have its title/author/cover cached from a suggestion.
@@ -731,10 +755,21 @@ def book_page(asin):
     if formats.multi() and b.get("title"):
         with db.conn() as c:
             owned_formats = sorted({r["format"] for r in _library_works(c, b["title"], b.get("author", ""))})
+    shelf = db.shelf_state(u["id"], key)
+    # "Finished" comes from Audiobookshelf too, not only Stackarr's own Read
+    # shelf — the Home "Read" shelf already shows ABS finishes, and the book page
+    # used to disagree with it
+    finished = shelf == "read"
+    if not finished:
+        try:
+            finished = picks.is_finished(picks.finished_works(u, abs_history(u)), b.get("title", ""),
+                                         b.get("author", ""), asin if asin.startswith("B0") else "")
+        except Exception as e:
+            log.debug("book page: finished check failed: %s", e)
     return render_template("book.html", b=b, rate_key=key, owned_formats=owned_formats,
                            community=db.community_rating(key), reviews=db.reviews_for(key),
                            my_stars=(my["stars"] if my else 0), my_review=(my["review"] if my else ""),
-                           tags=tags, shelf=db.shelf_state(u["id"], key))
+                           tags=tags, shelf=shelf, finished=finished)
 
 
 @bp.route("/browse")
@@ -855,6 +890,187 @@ def api_series_missing():
                     "owned": len(entries) - len(missing), "missing": missing, "entries": entries})
 
 
+def _series_target(src) -> dict:
+    """What a series request names: a book (asin, or title + author) and/or a
+    series (series_asin, or series name + author). `seq` is the viewed book's
+    position, the fallback start of the "Next in" strip."""
+    t = {k: (src.get(k) or "").strip() for k in ("asin", "series_asin", "series", "author", "title")}
+    t["author"] = t["author"].split(",")[0].strip()
+    for k in ("asin", "series_asin"):            # ASIN-shaped or nothing — they go into a URL path
+        if not re.fullmatch(r"[A-Za-z0-9]{10}", t[k]):
+            t[k] = ""
+    try:
+        t["seq"] = float(src.get("seq")) if src.get("seq") not in (None, "") else None
+    except (TypeError, ValueError):
+        t["seq"] = None
+    return t
+
+
+def _series_view(u, t: dict) -> dict | None:
+    """The series map for a target, annotated for this user, plus the strip:
+    {ok, series, series_asin, source, author, after, after_title, books, next,
+    formats, multi}. None when the series can't be placed."""
+    data = seriesmap.resolve(asin=t["asin"], title=t["title"], author=t["author"],
+                             series=t["series"], series_asin=t["series_asin"])
+    if not data:
+        return None
+    finished = picks.finished_works(u, abs_history(u))
+    books = seriesmap.annotate(data, finished, default_author=t["author"])
+    if not books:
+        return None
+    start, nxt = seriesmap.strip(books, after=t["seq"])
+    after = next((b for b in books if b["seq"] == start), None)
+    return {"ok": True, "series": data.get("name") or t["series"], "series_asin": data.get("series_asin", ""),
+            "source": data.get("source", ""), "author": t["author"] or _first(books[0]["author"]),
+            "after": start, "after_title": after["title"] if after else "", "books": books, "next": nxt,
+            "formats": formats.available(), "multi": formats.multi(), "cap": seriesmap.MAX_REQUEST,
+            "needs_approval": _needs_approval(u)}
+
+
+def _first(author: str) -> str:
+    return (author or "").split(",")[0].strip()
+
+
+@bp.route("/api/series/next")
+@auth.login_required
+def api_series_next():
+    """The "Next in <series>" strip for a book page (or any series target):
+    the next books after the highest one you've finished, each with its state
+    (finished / in library / requested / upcoming / missing). Cached series
+    maps, so a book page view is normally no catalogue call at all."""
+    u = auth.current_user()
+    t = _series_target(request.args)
+    if not (t["asin"] or t["series_asin"] or (t["series"] and t["author"]) or (t["title"] and t["author"])):
+        return jsonify({"ok": False, "detail": "Name a book or a series."}), 400
+    return jsonify(_series_view(u, t) or {"ok": False, "detail": "Couldn't place this series."})
+
+
+CONTINUE_DAYS = 14         # how recent a finish the Home "Continue" card follows
+
+
+@bp.route("/api/series/continue")
+@auth.login_required
+def api_series_continue():
+    """Home's "Continue <series>" card: the series of the book you finished
+    most recently in Audiobookshelf (within CONTINUE_DAYS) that still has books
+    after it. Tries at most three recent finishes, so a run of standalones
+    can't turn one Home view into a dozen catalogue lookups."""
+    import time
+    u = auth.current_user()
+    cutoff = (time.time() - CONTINUE_DAYS * 86400) * 1000
+    tried, seen = 0, set()
+    for r in picks.finished_works(u, abs_history(u)):
+        if (r.get("last_update") or 0) < cutoff or tried >= 3:
+            break
+        name = (r.get("series") or "").strip() or (_infer_series(r["title"])[0] or "")
+        if name and name.lower() in seen:
+            continue
+        tried += 1
+        v = _series_view(u, {"asin": r.get("asin") or "", "series_asin": "", "series": name,
+                             "author": _first(r.get("author")), "title": r["title"], "seq": None})
+        if not v:
+            continue
+        seen.add((v["series"] or name).lower())
+        if v["next"]:
+            v["finished_title"] = r["title"]
+            v["finished_days"] = max(int((time.time() * 1000 - r["last_update"]) // 86_400_000), 0)
+            return jsonify(v)
+    return jsonify({"ok": False})
+
+
+def _remaining_formats(f) -> list[str]:
+    """Formats a "Request remaining" asks for: the dialog's pick when it's on
+    offer ('both' only when both are), else every format this install offers."""
+    f = (f or "").strip().lower()
+    if f in formats.available():
+        return [f]
+    return formats.available()
+
+
+@bp.route("/api/series/request-remaining", methods=["POST"])
+@auth.login_required
+def api_series_request_remaining():
+    """Request the books of a series you don't have yet — exactly the ones the
+    confirm dialog listed (`keys`), never anything else by the author.
+
+    The server recomputes the plan (seriesmap.plan) and sends only books that
+    are BOTH in it and confirmed: finished, owned, already-requested and
+    not-yet-released books are skipped, at most MAX_REQUEST per click. Each book
+    gets its own request row per format, so each flips to available on its own.
+    Chaptarr monitors just those books (one search per format) — unlike the
+    deprecated /api/series/add, which monitored every row in the series and
+    fell back to the author's whole backlist. Non-admins go through the usual
+    approval gate: one pending row per book, one notification."""
+    u = auth.current_user()
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"ok": False, "detail": "Bad request."}), 400
+    keys = body.get("keys")
+    if not isinstance(keys, list) or not keys or not all(isinstance(k, str) for k in keys):
+        return jsonify({"ok": False, "detail": "Confirm which books to request."}), 400
+    t = _series_target(body)
+    if not (t["asin"] or t["series_asin"] or (t["series"] and t["author"]) or (t["title"] and t["author"])):
+        return jsonify({"ok": False, "detail": "Name a book or a series."}), 400
+    wait = _cooldown("series_remaining", 10)
+    if wait:
+        return jsonify({"ok": False, "detail": f"Just requested — try again in {wait}s."}), 429
+    v = _series_view(u, t)
+    if not v:
+        return jsonify({"ok": False, "detail": "Couldn't place this series in the catalogue."})
+    fmts = _remaining_formats(body.get("format"))
+    want = set(keys)
+    # confirmed AND in the plan, then capped: the dialog may tick a book past the
+    # first ten (after unticking others), so cap after intersecting, not before
+    todo = [b for b in seriesmap.plan(v["books"], fmts, cap=len(v["books"]))["todo"]
+            if b["key"] in want][:seriesmap.MAX_REQUEST]
+    name = v["series"]
+    if not todo:
+        return jsonify({"ok": False, "detail": f"Nothing left to request in “{name}” — those books are in the "
+                                               "library, requested or not out yet."})
+    for b in todo:
+        b["author"] = _first(b.get("author")) or v["author"]
+
+    if _needs_approval(u):
+        with db.conn() as c:
+            for b in todo:
+                fmt = "both" if len(b["need"]) > 1 else b["need"][0]
+                c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,source,format) "
+                          "VALUES (?,?,?,?,?,?,?,?,?)",
+                          (u["id"], b.get("asin", ""), b["title"], b["author"], b.get("cover", ""),
+                           "pending_approval", "Waiting for an admin to approve", "series_book", fmt))
+        try:     # one heads-up for the batch, not one per book
+            notify.request_pending({"title": f"{len(todo)} books from {name}", "author": v["author"],
+                                    "format": fmts[0]}, u.get("username", "A user"), db.admin_emails(), _base_url())
+        except Exception as e:
+            log.debug("pending-approval notify failed: %s", e)
+        return jsonify({"ok": True, "pending": True, "count": len(todo),
+                        "detail": f"Sent {len(todo)} book{'s' if len(todo) != 1 else ''} from “{name}” "
+                                  "for an admin to approve."})
+
+    rows, sent = [], 0
+    for f in fmts:
+        for author in dict.fromkeys(b["author"] for b in todo if f in b["need"]):
+            group = [b for b in todo if f in b["need"] and b["author"] == author]
+            res = chaptarr.add_books(author, [{"title": b["title"], "asin": b.get("asin", "")} for b in group], fmt=f)
+            for b, r in zip(group, res.get("books") or []):
+                status = "available" if r.get("available") else ("handed" if r.get("ok") else "failed")
+                sent += status == "handed"
+                rows.append((u["id"], b.get("asin", ""), b["title"], b["author"], b.get("cover", ""), status,
+                             r.get("detail", ""), res.get("ref", ""), "series_book", f))
+    with db.conn() as c:
+        c.executemany("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
+    failed = [r for r in rows if r[5] == "failed"]
+    if sent:
+        detail = f"Requested {len(todo)} book{'s' if len(todo) != 1 else ''} from “{name}” — Chaptarr is searching now."
+        if failed:
+            detail += f" {len(failed)} couldn't be sent — see Requests."
+    else:
+        detail = failed[0][6] if failed else "Chaptarr already has these."
+    return jsonify({"ok": bool(sent) or not failed, "count": len(todo), "detail": detail,
+                    "results": [{"title": r[2], "format": r[9], "status": r[5], "detail": r[6]} for r in rows]})
+
+
 @bp.route("/api/series/repair", methods=["POST"])
 @auth.admin_required
 def api_series_repair():
@@ -891,7 +1107,19 @@ def api_series_repair():
 @auth.login_required
 def api_series_add():
     """Get the rest of a series: hand its author to Chaptarr, which monitors and
-    searches all their books (covering the remaining entries in the series)."""
+    searches all their books (covering the remaining entries in the series).
+
+    DEPRECATED — the UI uses /api/series/request-remaining. This monitors every
+    row Chaptarr lists for the series (owned books included), falls back to the
+    author's WHOLE backlist when Chaptarr doesn't list the series, and records
+    one "Full series: X" request that never flips to available. Kept, unchanged,
+    for API callers; responses carry a `Deprecation: true` header."""
+    resp = make_response(_series_add())
+    resp.headers["Deprecation"] = "true"
+    return resp
+
+
+def _series_add():
     u = auth.current_user()
     body = request.get_json(force=True)
     name = (body.get("series") or "").strip()
@@ -965,7 +1193,7 @@ def _shelves_data(u):
     try:
         with db.conn() as c:
             lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,asin,format FROM library")}
-        for h in absclient.listening_history(u["abs_token"]):
+        for h in abs_history(u):
             m = lib.get(h["item_id"]) or {}
             if not m.get("title"):
                 continue

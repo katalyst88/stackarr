@@ -31,6 +31,9 @@
   <a class="home-stat" href="{{ url_for('main.requests_page') }}"><div class="home-stat-num">{{ avail_n }}</div><div class="muted">ready in library</div></a>
 </div>
 
+{# "Continue <series>": the series of a book you just finished, filled by Stackarr.loadContinueSeries() #}
+<section class="section series-strip-wrap" id="continue-series" data-series-strip hidden></section>
+
 {% if fresh %}
 <section class="section">
   <div class="section-head"><a class="section-link" href="{{ url_for('main.suggestions_page') }}"><h3>Fresh picks for you</h3><span class="chev">›</span></a></div>
@@ -74,4 +77,4 @@
   what's next, and fresh picks. Start on the <a href="{{ url_for('main.suggestions_page') }}">Suggestions</a> page.</p></div>
 {% endif %}
 {% endblock %}
-{% block scripts %}<script>Stackarr.initFormatFilter&&Stackarr.initFormatFilter();</script>{% endblock %}{# boot() runs unconditionally from app.js — a second call double-binds listeners #}
+{% block scripts %}<script>Stackarr.initFormatFilter&&Stackarr.initFormatFilter();Stackarr.loadContinueSeries();</script>{% endblock %}{# boot() runs unconditionally from app.js — a second call double-binds listeners #}

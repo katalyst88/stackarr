@@ -94,6 +94,50 @@ class FakeChaptarr:
         return self._route("PUT", url, **kw)
 
 
+class FakeAudible:
+    """The Audible catalogue calls the series map makes: a series product's
+    `relationships`, a batch `asins` lookup, product-by-ASIN, and the title
+    search behind find_asin. `calls` records (path, params)."""
+
+    def __init__(self):
+        self.calls = []
+        self.products = {}         # asin -> raw catalogue product
+        self.series = {}           # series asin -> [(asin, sequence-string)]
+
+    def add_series(self, series_asin, name, books, author="Will Wight"):
+        """books: [(asin, seq, title, release_date)] — seq may be "1-3" etc."""
+        self.series[series_asin] = [(a, str(s)) for a, s, _, _ in books]
+        for a, s, t, rd in books:
+            self.products[a] = {
+                "asin": a, "title": t, "authors": [{"name": author}], "release_date": rd,
+                "series": [{"asin": series_asin, "title": name, "sequence": str(s)}],
+                "product_images": {"500": f"https://m.media-amazon.com/images/I/{a}._SL500_.jpg"}}
+
+    def get(self, url, params=None, **_):
+        path = urlparse(url).path
+        params = dict(params or {})
+        self.calls.append((path, params))
+        m = re.fullmatch(r"/1\.0/catalog/products/(\w+)", path)
+        if m:
+            a = m.group(1)
+            if a in self.series:
+                return Resp(200, {"product": {"asin": a, "content_delivery_type": "BookSeries", "relationships": [
+                    {"asin": c, "relationship_to_product": "child", "relationship_type": "series",
+                     "sequence": s, "sort": str(i)} for i, (c, s) in enumerate(self.series[a])]}})
+            if a in self.products:
+                return Resp(200, {"product": self.products[a]})
+            return Resp(404, {})
+        if path == "/1.0/catalog/products":
+            if params.get("asins"):
+                return Resp(200, {"products": [self.products[a] for a in params["asins"].split(",")
+                                               if a in self.products]})
+            want = (params.get("title") or params.get("keywords") or "").lower()
+            hits = [p for p in self.products.values()
+                    if want and (want in p["title"].lower() or p["title"].lower() in want)]
+            return Resp(200, {"products": hits[:int(params.get("num_results", 10))]})
+        return Resp(404, None)
+
+
 def book(bid, title, media="audiobook", asin="", files=0, monitored=False, series=""):
     """A Chaptarr book row (media-split schema: one row per media edition)."""
     return {"id": bid, "title": title, "mediaType": media, "asin": asin,
