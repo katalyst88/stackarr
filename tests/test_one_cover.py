@@ -124,3 +124,20 @@ def test_the_library_refresh_records_the_cover_version(tmp_db, monkeypatch):
     monkeypatch.setattr(scheduler.backends, "sources", lambda mode: [_Src()])
     scheduler.refresh_library()
     assert db.cover_version(ITEM) == 1_731_100_000
+
+
+@pytest.mark.parametrize("stored,author,want", [
+    ("Dungeon Crawler Carl (Unabridged)", "Matt Dinniman", "Dungeon Crawler Carl"),
+    ("Dungeon Crawler Carl, Book 3 - The Dungeon Anarchist's Cookbook", "Matt Dinniman",
+     "The Dungeon Anarchist's Cookbook"),
+    ("The Eye of the Bedlam Bride: Dungeon Crawler Carl, Book 6", "Matt Dinniman", "The Eye of the Bedlam Bride"),
+    ("A Parade of Horribles", "Jeff Hays, Matt Dinniman", "A Parade of Horribles"),
+    ("This Inevitable Ruin", "Dinniman, Matt", "This Inevitable Ruin"),
+])
+def test_decorated_library_titles_still_find_their_cover(tmp_db, stored, author, want):
+    with db.conn() as c:
+        c.execute("INSERT INTO library (item_id,title,author,series,format,source,cover_at) VALUES (?,?,?,?,?,?,?)",
+                  ("abc123", stored, author, "Dungeon Crawler Carl", "audiobook", "abs", 5))
+    db.invalidate_cover_index()
+    assert db.library_cover(want, "Matt Dinniman", strict=True) == "abc123"
+    assert db.library_cover(want, "Someone Else", strict=True) == ""

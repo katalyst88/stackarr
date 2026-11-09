@@ -322,6 +322,51 @@ def invalidate_cover_index():
     _COVER_INDEX_AT = 0.0
 
 
+def _author_keys(author: str) -> set[str]:
+    """Every way a library row names its authors: "Jeff Hays, Matt Dinniman"
+    → both, "Dinniman, Matt" → "dinniman", "matt" and "matt dinniman"."""
+    from . import titles
+    parts = [p.strip() for p in re.split(r",|&|\band\b", author or "") if p.strip()]
+    keys = {titles.norm(p) for p in parts}
+    if len(parts) == 2 and all(" " not in p for p in parts):
+        keys.add(titles.norm(f"{parts[1]} {parts[0]}"))
+    return {k for k in keys if k}
+
+
+def _index_work(work: dict, work_base: dict, title: str, author: str, series: str, ref: str) -> None:
+    """Index a library row by its work title (titles.display: no "(Unabridged)",
+    no "Series, Book 3 - …", no series-name subtitle) per author, and by the
+    part before a subtitle — dropped when two different works share it."""
+    from . import titles
+    full, base, tail = titles.parts(titles.display(title or "", series or ""))
+    if not full:
+        return
+    for a in _author_keys(author):
+        work.setdefault((full, a), ref)
+        if tail:
+            k = (base, a)
+            if k not in work_base:
+                work_base[k] = (full, ref)
+            elif work_base[k] and work_base[k][0] != full:
+                work_base[k] = None                       # ambiguous stem: refuse to guess
+
+
+def _work_cover(idx: dict, title: str, author: str) -> str:
+    """A library cover for the same work by the same first author, with the
+    subtitle tolerance of titles.matches; "" if none or ambiguous."""
+    from . import titles
+    full, base, tail = titles.parts(titles.display(title or ""))
+    a = titles.norm((author or "").split(",")[0])
+    if not full or not a:
+        return ""
+    hit = idx["work"].get((full, a))
+    if hit:
+        return hit
+    if tail:                                # "Dungeon Crawler Carl: A LitRPG…" vs "Dungeon Crawler Carl"
+        return idx["work"].get((base, a), "")
+    return idx["work_base"].get((full, a), "")    # "The Captain" vs "The Captain: The Last Horizon"
+
+
 def _cover_index() -> dict[str, dict[str, str]]:
     """{title+author key -> ref}, {title-only key -> ref} and {asin -> ref}.
 
@@ -342,9 +387,11 @@ def _cover_index() -> dict[str, dict[str, str]]:
         by_title: dict[str, str] = {}
         by_asin: dict[str, str] = {}
         ver: dict[str, int] = {}
+        work: dict[tuple, str] = {}
+        work_base: dict[tuple, tuple] = {}
         with conn() as c:
             rows = c.execute(
-                "SELECT title,author,asin,cover,item_id,source,cover_at FROM library "
+                "SELECT title,author,asin,cover,item_id,source,cover_at,series FROM library "
                 "WHERE gone_at IS NULL AND (cover<>'' OR source IN ('abs','abs_ebooks'))").fetchall()
         rank = {"abs": 0, "abs_ebooks": 1}
         for r in sorted(rows, key=lambda r: rank.get(r["source"], 2)):
@@ -354,13 +401,15 @@ def _cover_index() -> dict[str, dict[str, str]]:
                 continue
             if is_abs:
                 ver[ref] = int(r["cover_at"] or 0)
+            _index_work(work, work_base, r["title"], r["author"], r["series"], ref)
             by_key.setdefault(rating_key("", r["title"], r["author"]), ref)
             # title-only too: Kavita stores a series with no author, so an
             # author-bearing render would otherwise never match its own book
             by_title.setdefault(rating_key("", r["title"], ""), ref)
             if r["asin"]:
                 by_asin.setdefault(r["asin"], ref)
-        _COVER_INDEX = {"key": by_key, "title": by_title, "asin": by_asin, "ver": ver}
+        _COVER_INDEX = {"key": by_key, "title": by_title, "asin": by_asin, "ver": ver,
+                        "work": work, "work_base": {k: v[1] for k, v in work_base.items() if v}}
         _COVER_INDEX_AT = time.time()
         return _COVER_INDEX
 
@@ -384,9 +433,10 @@ def library_cover(title: str, author: str = "", asin: str = "", strict: bool = F
     idx = _cover_index()
     if asin and asin in idx["asin"]:
         return idx["asin"][asin]
-    if strict and (author or "").strip():
-        return idx["key"].get(want) or ""
-    return idx["key"].get(want) or idx["title"].get(rating_key("", title, "")) or ""
+    hit = idx["key"].get(want) or _work_cover(idx, title, author)
+    if hit or (strict and (author or "").strip()):
+        return hit or ""
+    return idx["title"].get(rating_key("", title, "")) or ""
 
 
 def cover_version(item_id: str) -> int:
