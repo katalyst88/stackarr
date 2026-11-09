@@ -7,7 +7,7 @@ import queue
 import threading
 import time
 
-from . import absclient, backends, chaptarr, config, db, formats, notify, recommend, titles
+from . import absclient, backends, chaptarr, config, db, formats, notify, picks, recommend, titles, tz
 
 log = logging.getLogger("stackarr.scheduler")
 
@@ -136,6 +136,9 @@ def refresh_library():
     # covers may have been added or changed this cycle
     db.invalidate_cover_index()
 
+    # pending picks this cycle made stale (now owned / requested / finished)
+    retire_stale_picks()
+
     # notify outside the DB transaction (each channel self-gates on its config)
     base = db.get_meta("public_url", "")
     for r in newly_available:
@@ -143,6 +146,15 @@ def refresh_library():
             notify.request_available(r, base_url=base)
         except Exception as e:
             log.warning("availability notify failed for %s: %s", r.get("title"), e)
+
+
+def retire_stale_picks():
+    """Retire every user's pending picks that are now owned, requested or
+    finished (see picks.py). Runs after each library refresh."""
+    with db.conn() as c:
+        users = [dict(r) for r in c.execute("SELECT id, abs_token FROM users")]
+    for u in users:
+        picks.retire_for(u)
 
 
 def _request_media(fmt: str) -> list[str]:
@@ -200,6 +212,9 @@ def run_for_user(user_id: int, force: bool = False) -> int:
     added = 0
     try:
         db.set_meta(key, str(time.time()))     # inside try so finally always releases the lock
+        # a queue full of picks that are already owned/requested/read has no
+        # room, so retire those first — otherwise the recommender never runs
+        picks.retire_for(db.get_user(user_id))
         with db.conn() as c:
             pending = c.execute("SELECT COUNT(*) n FROM suggestions WHERE user_id=? AND status='pending'",
                                 (user_id,)).fetchone()["n"]
@@ -286,10 +301,7 @@ def auto_approve(user_id: int) -> int:
             continue                    # per-item catalogue miss → skip it, keep going
 
         with db.conn() as c:
-            c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
-                      "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                      (user_id, r.get("asin", ""), r["title"], r.get("author", ""),
-                       r.get("cover", ""), "handed", res.get("detail", ""), res.get("ref", ""), "auto", fmt))
+            db.record_request(c, user_id, r, fmt, "handed", res.get("detail", ""), res.get("ref", ""), "auto")
             c.execute("UPDATE suggestions SET status='approved',decided_at=datetime('now','localtime') WHERE id=?",
                       (r["id"],))
         added += 1
@@ -317,7 +329,7 @@ def new_release_radar():
     import datetime
     if db.get_meta("notify_newrelease_enabled", "0") != "1":
         return
-    today = datetime.date.today()
+    today = tz.today()
     cutoff = str(today - datetime.timedelta(days=30))
     base = db.get_meta("public_url", "")
     # check the catalogue of the primary active format

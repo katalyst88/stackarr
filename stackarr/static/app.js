@@ -35,20 +35,18 @@ const Stackarr = (() => {
     document.body.setAttribute("data-theme", light ? "light" : "dark");
   };
 
-  // status tag system: none -> Requested -> Available
-  const TAG = {
-    available: ["Available", "available", "In library"],
-    handed:    ["Requested", "handed",   "Requested"],
-    queued:    ["Requested", "queued",   "Requested"],
-    failed:    ["Failed",    "failed",   "Retry"],
-  };
+  // Card status comes from the server (status.py, one source for every
+  // page): b.status = {state, label, cls, detail}. A card can request a book
+  // only when nothing is held or on its way.
+  const REQUESTABLE = ["none", "failed", "denied"];
 
   const mediaCard = (b) => {
-    const tag = TAG[b.state];
+    const st = b.status || {};
+    const tag = st.label ? [st.label, st.cls] : null;
     const reason = b.reason || [b.series ? `${b.series}${b.sequence ? " #" + b.sequence : ""}` : "",
       b.runtime_hours ? `${b.runtime_hours}h` : "", b.rating ? `★ ${b.rating}` : ""].filter(Boolean).join(" · ");
-    const canReq = !tag || tag[1] === "failed";
-    const reqLabel = tag ? tag[2] : "Request";
+    const canReq = !b.state || REQUESTABLE.includes(b.state);
+    const reqLabel = !canReq ? st.label : b.state === "failed" ? "Retry" : "Request";
     const j = (o) => JSON.stringify(o).replace(/'/g, "&#39;");
     // The whole card is a link to the book page — same contract as the
     // server-rendered cards (`<a class="media-card">` in suggestions.html) — so
@@ -61,7 +59,7 @@ const Stackarr = (() => {
     return `${open}
       <div class="media-poster">
         ${b.cover ? `<img src="${esc(hires(b.cover))}" loading="lazy" alt="">` : ""}
-        ${tag ? `<span class="corner-badge ${tag[1]}">${tag[0]}</span>` : ""}
+        ${tag ? `<span class="corner-badge ${esc(tag[1])}" title="${esc(st.detail)}">${esc(tag[0])}</span>` : ""}
         <div class="media-overlay">
           <div class="ov-reason">${esc(reason)}</div>
           <div class="media-stars" data-asin="${esc(b.asin)}" data-title="${esc(b.title)}" data-author="${esc(b.author)}">${[1,2,3,4,5].map(n => `<span onclick="${stop}Stackarr.rate('${esc(b.asin)}',${n},this)">★</span>`).join("")}</div>
@@ -76,6 +74,66 @@ const Stackarr = (() => {
         <div class="media-author">${esc(b.author)}</div>
       </div>
     ${href ? "</a>" : "</div>"}`;
+  };
+
+  // "Next in <series>" (book page) / "Continue <series>" (Home): one card per
+  // book with its state. Data is /api/series/next|continue; every catalogue
+  // string is escaped before it reaches innerHTML.
+  const SERIES_TAG = {
+    finished:  ["Finished",   "available"],
+    upcoming:  ["Upcoming",   "upcoming"],
+  };
+  const seqLabel = (n) => (n === null || n === undefined || n === "" ? "" : "#" + Number(n));
+  const seriesCard = (b) => {
+    // the status.py label for anything on its way / held; "Finished" and
+    // "Upcoming" are the strip's own
+    const tag = SERIES_TAG[b.state] || (b.status && b.status.label && b.state !== "missing"
+      ? [b.status.label, b.status.cls] : null);
+    // no catalogue id (a Chaptarr-mapped series): the resolver opens its page
+    const href = b.asin ? `${B()}/book/${encodeURIComponent(b.asin)}`
+      : b.title ? `${B()}/book/find?` + new URLSearchParams({ title: b.title, author: b.author || "" }) : "";
+    // no catalogue cover (Chaptarr-mapped series): the local cover endpoint
+    // answers from the library / cover cache, never inline from a third party
+    const cover = b.cover ? hires(b.cover)
+      : `${B()}/coverart?` + new URLSearchParams({ title: b.title || "", author: b.author || "", asin: b.asin || "" });
+    const poster = `<img src="${esc(cover)}" loading="lazy" alt="">` +
+      (tag ? `<span class="corner-badge ${tag[1]}">${tag[0]}</span>` : "");
+    const sub = b.state === "upcoming" && b.release_date ? `Out ${b.release_date}` : (b.author || "");
+    const book = { asin: b.asin || "", title: b.title, author: b.author || "", cover: b.cover || "" };
+    const act = b.state === "missing"
+      ? `<button class="btn small" onclick="Stackarr.request(${esc(JSON.stringify(book))}, this)">Request</button>` : "";
+    return `<div class="media-card" data-seq="${esc(String(b.seq))}">
+      ${href ? `<a class="media-poster" href="${esc(href)}">${poster}</a>` : `<div class="media-poster">${poster}</div>`}
+      <div class="media-foot">
+        <div class="media-title" title="${esc(b.title)}">${esc(seqLabel(b.seq))} · ${esc(b.title)}</div>
+        <div class="media-author">${esc(sub)}</div>${act}
+      </div>
+    </div>`;
+  };
+  // What "Request remaining" would send — the same rules as seriesmap.plan()
+  // on the server (which recomputes it before sending anything): skip what
+  // you've finished, what isn't out yet, and formats already in the library or
+  // requested; cap the batch.
+  const seriesPlan = (books, fmts, cap) => {
+    const todo = [], skipped = [];
+    for (const b of books || []) {
+      if (b.finished) { skipped.push([b, "finished"]); continue; }
+      if (b.upcoming) { skipped.push([b, "upcoming"]); continue; }
+      const need = fmts.filter(f => !(b.owned || []).includes(f) && !(b.requested || []).includes(f));
+      if (!need.length) { skipped.push([b, fmts.some(f => (b.owned || []).includes(f)) ? "owned" : "requested"]); continue; }
+      todo.push({ ...b, need });
+    }
+    return { todo: todo.slice(0, cap), more: Math.max(todo.length - cap, 0), skipped };
+  };
+  const FMT_NAME = { audiobook: "audiobook", ebook: "eBook" };
+  const seriesStrip = (d, title, sub, eyebrow) => {
+    const n = seriesPlan(d.books, d.formats || [], Infinity).todo.length;
+    return `
+    <div class="section-head series-strip-head">
+      <h3>${eyebrow ? `<span class="series-next-label">${esc(eyebrow)}</span>` : ""}${esc(title)}${sub ? ` <span class="subtle">${esc(sub)}</span>` : ""}</h3>
+      ${n ? `<button class="btn small" onclick="Stackarr.requestRemaining(this)">Request remaining ${n}</button>` : ""}
+    </div>
+    <div class="series-strip">${(d.next || []).map(seriesCard).join("")}</div>`;
   };
 
   let pollTimer = null;
@@ -196,8 +254,10 @@ const Stackarr = (() => {
       document.querySelectorAll("#fmt-filter .fmt-pill").forEach(p => p.classList.toggle("active", p === pill));
       try { localStorage.setItem("stackarr-fmt", fmt); } catch (e) {}
       // filter every format-tagged item on the page (cards, list rows, series cards…)
+      // an entry may carry several formats (a Requests row for both): data-formats
       document.querySelectorAll("[data-format]").forEach(el => {
-        el.style.display = (fmt === "all" || el.dataset.format === fmt) ? "" : "none";
+        const has = el.dataset.format === fmt || (el.dataset.formats || "").split(",").includes(fmt);
+        el.style.display = (fmt === "all" || has) ? "" : "none";
       });
       // hide any group wrapper (lane section, etc.) left with no visible items
       document.querySelectorAll(".fmt-group").forEach(g => {
@@ -213,6 +273,8 @@ const Stackarr = (() => {
       const pill = document.querySelector(`#fmt-filter .fmt-pill[data-fmt="${f}"]`);
       if (pill) this.filterFormat(f, pill);
     },
+    // Deprecated: the client for /api/series/add. Up Next now uses requestRemaining();
+    // kept for the static demo pages (docs/) built from older templates.
     async getSeries(name, author, btn, format) {
       if (!author) { toast("No author found for this series."); return; }
       const label = btn ? btn.textContent : "";
@@ -222,6 +284,139 @@ const Stackarr = (() => {
       toast(r.detail || (r.ok ? "Sent to Chaptarr." : "Couldn't add right now."));
       if (btn) { btn.disabled = false; btn.textContent = r.ok ? "✓ Requested" : (label || "＋ Get full series"); }
     },
+    async loadSeriesStrip(el) {
+      el = el || document.getElementById("series-next");
+      if (!el) return;
+      const q = new URLSearchParams();
+      for (const k of ["asin", "series_asin", "series", "author", "title", "seq"]) {
+        const v = el.dataset[k.replace(/_(\w)/g, (_, c) => c.toUpperCase())];
+        if (v) q.set(k, v);
+      }
+      const d = await api("/api/series/next?" + q.toString());
+      if (!d || !d.ok || !(d.next || []).length) return;        // not a series we can place, or nothing after it
+      const sub = d.after !== null && d.after !== undefined && d.after_title ? `after ${seqLabel(d.after)} ${d.after_title}` : "";
+      this._showSeriesStrip(el, d, `Next in ${d.series}`, sub, "Your series");
+    },
+    async loadContinueSeries() {
+      const el = document.getElementById("continue-series");
+      if (!el) return;
+      const d = await api("/api/series/continue");
+      if (!d || !d.ok || !(d.next || []).length) return;
+      const n = d.finished_days, when = n === 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`;
+      this._showSeriesStrip(el, d, `Continue ${d.series}`, `you finished “${d.after_title || d.finished_title}” ${when}`, "Keep going");
+    },
+    _showSeriesStrip(el, d, title, sub, eyebrow) {
+      el._series = d;
+      el.innerHTML = seriesStrip(d, title, sub, eyebrow);
+      el.hidden = false;
+      this.fitCovers();
+      this.initCovers(el);
+    },
+    // "Request remaining": confirm the exact books (and formats) in the in-app
+    // modal, then send only those. A strip carries its loaded series data;
+    // Up Next cards pass a `target` ({series, author, asin, title}) instead.
+    async requestRemaining(btn, target) {
+      const host = btn && btn.closest("[data-series-strip]");
+      let d = host && host._series;
+      if (!d) {
+        const q = new URLSearchParams();
+        for (const [k, v] of Object.entries(target || {})) if (v) q.set(k, v);
+        if (btn) btn.disabled = true;
+        d = await api("/api/series/next?" + q.toString());
+        if (btn) btn.disabled = false;
+        if (!d) return;                                          // 401 → api() redirected
+        if (!d.ok) { toast("Couldn't map this series in the catalogue."); return; }
+      }
+      const offered = d.formats || ["audiobook"], multi = offered.length > 1;
+      let fmt = multi ? "both" : offered[0];
+      const fmtsOf = (f) => (f === "both" ? offered : [f]);
+      const cap = d.cap || 10;
+      if (!seriesPlan(d.books, offered, cap).todo.length) {
+        toast(`Nothing left to request in ${d.series} — it's in the library, requested or not out yet.`);
+        return;
+      }
+      // Why a book can't be picked, in its own row: "In library · Finished",
+      // "Requested", "Out 2027-03-01". On a both-formats pick a book held in
+      // one format names it ("Audiobook in library").
+      const LABEL = { audiobook: "Audiobook", ebook: "eBook" };
+      const status = (b, fs) => {
+        const part = (list, word) => {
+          const hit = fs.filter(f => (list || []).includes(f));
+          return !hit.length ? "" : hit.length === fs.length ? word : `${LABEL[hit[0]]} ${word.toLowerCase()}`;
+        };
+        return [part(b.owned, "In library"), part(b.requested, "Requested"), b.finished ? "Finished" : "",
+                b.upcoming ? (b.release_date ? `Out ${b.release_date}` : "Not out yet") : ""].filter(Boolean).join(" · ");
+      };
+      const okBtn = () => document.querySelector("#modal .modal-actions .btn:not(.ghost)");
+      const updateOk = () => {
+        const n = document.querySelectorAll("#modal-body .rr-item input:checked").length;
+        const ok = okBtn();
+        if (ok) { ok.textContent = n ? `Request ${n}` : "Request"; ok.disabled = !n; }
+      };
+      // Every book in series order. Requestable ones are ticked up to the cap
+      // (any beyond it are listed unticked, still selectable, and ticking past
+      // the cap is refused); the rest are greyed with a disabled checkbox and
+      // say why in the row.
+      const renderPlan = () => {
+        const fs = fmtsOf(fmt);
+        const p = seriesPlan(d.books, fs, Infinity);
+        const pos = new Map(p.todo.map((b, i) => [b.key, b]));
+        const box = document.querySelector("#modal-body .rr-plan");
+        if (!box) return;
+        let ticked = 0;
+        box.innerHTML = '<div class="rr-list">' + (d.books || []).map(b => {
+          const t = pos.get(b.key);
+          const head = `<span class="missing-seq">${esc(seqLabel(b.seq))}</span><span class="rr-title">${esc(b.title)}</span>`;
+          if (!t) {
+            const why = status(b, fs) || "Nothing to request";
+            return `<label class="rr-item is-off" aria-disabled="true" title="${esc(why)}">
+              <input type="checkbox" value="${esc(b.key)}" disabled>${head}<span class="rr-status">${esc(why)}</span></label>`;
+          }
+          const on = ticked++ < cap;
+          return `<label class="rr-item">
+            <input type="checkbox" value="${esc(b.key)}"${on ? " checked" : ""}>${head}
+            ${multi ? `<span class="rr-fmts">${t.need.map(f => FMT_NAME[f] || f).join(" + ")}</span>` : ""}</label>`;
+        }).join("") + "</div>"
+          + (!p.todo.length ? '<p class="muted rr-note">Nothing to request in this format.</p>' : "")
+          + (p.todo.length > cap ? `<p class="muted rr-note">Up to ${cap} per request — the rest are listed unticked; run it again for them.</p>` : "")
+          + (d.needs_approval ? '<p class="muted rr-note">An admin approves these before anything is downloaded.</p>' : "");
+        updateOk();
+      };
+      const capGuard = (e) => {
+        if (e.target.checked && document.querySelectorAll("#modal-body .rr-item input:checked").length > cap) {
+          e.target.checked = false;
+          toast(`Up to ${cap} books per request.`);
+        }
+        updateOk();
+      };
+      const pick = multi ? '<div class="rr-fmt" role="radiogroup" aria-label="Format">' +
+        [["audiobook", "Audiobook"], ["ebook", "eBook"], ["both", "Both"]].map(([v, l]) =>
+          `<label class="chip"><input type="radio" name="rr-fmt" value="${v}"${v === fmt ? " checked" : ""}> ${l}</label>`).join("") +
+        "</div>" : "";
+      const open = this._openModal(`Request the rest of ${d.series}`,
+        `<p class="muted rr-intro">Only these books go to Chaptarr — nothing else by ${esc(d.author || "this author")}.</p>
+         ${pick}<div class="rr-plan"></div>`, "Request");
+      const mb = document.getElementById("modal-body");
+      renderPlan();
+      if (mb) mb.onchange = (e) => { if (e.target.name === "rr-fmt") { fmt = e.target.value; renderPlan(); } else capGuard(e); };
+      const vals = await open;
+      const keys = mb ? [...mb.querySelectorAll(".rr-item input:checked")].map(i => i.value) : [];
+      if (mb) mb.onchange = null;
+      if (okBtn()) okBtn().disabled = false;                     // the modal is shared — leave it usable
+      if (!vals) return;                                         // cancelled
+      if (!keys.length) { toast("Nothing selected."); return; }
+      const label = btn ? btn.textContent : "";
+      if (btn) { btn.disabled = true; btn.textContent = "Requesting…"; }
+      const r = await api("/api/series/request-remaining", { method: "POST", body: JSON.stringify({
+        series_asin: d.series_asin || "", series: d.series || "", author: d.author || "",
+        asin: (target && target.asin) || (host && host.dataset.asin) || "", title: (target && target.title) || "",
+        format: fmt, keys }) });
+      if (!r) { if (btn) { btn.disabled = false; btn.textContent = label; } return; }
+      toast(r.detail || (r.ok ? "Requested." : "Couldn't request right now."));
+      if (btn) { btn.disabled = !!r.ok; btn.textContent = r.ok ? (r.pending ? "✓ Sent for approval" : "✓ Requested") : label; }
+      if (r.ok && host) host.id === "continue-series" ? this.loadContinueSeries() : this.loadSeriesStrip(host);
+    },
+    _seriesPlan: seriesPlan,
     toggleTheme() {
       localStorage.setItem("stackarr-theme", localStorage.getItem("stackarr-theme") === "light" ? "dark" : "light");
       applyTheme();
@@ -346,17 +541,34 @@ const Stackarr = (() => {
       const c = btn.querySelector(".vcount"); if (c) c.textContent = r.votes;
       btn.classList.toggle("voted");
     },
-    async pollRequestStatus() {
-      try {
-        const s = await api("/api/requests/status");
-        for (const [id, st] of Object.entries(s || {})) {
-          const row = document.querySelector(`.req-row[data-id="${id}"] .badge`);
-          if (row && (st === "downloading" || st === "importing")) {
-            row.textContent = st === "importing" ? "Importing" : "Downloading";
-            row.className = "badge badge-handed";
+    // Requests page: keep each book's status fresh (status.py via
+    // /api/requests/status, which reads Chaptarr's queue at most every 30 s).
+    // Polls while the tab is visible, stops when nothing is left on its way.
+    async pollRequestStatus(once) {
+      const tick = async () => {
+        if (document.hidden) return true;
+        let s;
+        try { s = await api("/api/requests/status"); } catch (e) { return true; }
+        if (!s) return false;
+        for (const [id, st] of Object.entries(s)) {
+          const row = document.querySelector(`.req-row[data-id="${id}"]`);
+          if (!row) continue;
+          for (const [f, fs] of Object.entries(st.formats || {})) {
+            const b = row.querySelector(`.req-st[data-fmt="${f}"] .badge`);
+            if (!b || !fs.label) continue;
+            const icon = b.querySelector("svg");
+            b.className = "badge badge-" + fs.cls; b.title = fs.detail || "";
+            b.textContent = fs.label; if (icon) b.prepend(icon, " ");
           }
+          const d = row.querySelector(".req-detail");
+          if (d && st.detail) { d.textContent = st.detail; d.title = st.detail; }
         }
-      } catch (e) {}
+        return Object.keys(s).length > 0;
+      };
+      if (await tick() && !once) {
+        clearInterval(this._reqPoll);
+        this._reqPoll = setInterval(async () => { if (!(await tick())) clearInterval(this._reqPoll); }, 30000);
+      }
     },
     async checkLibraries(btn) {
       if (btn) { btn.disabled = true; btn.textContent = "Checking…"; }
@@ -569,7 +781,12 @@ const Stackarr = (() => {
     },
     async markReadBook(book, btn) { btn.disabled = true; const r = await api("/api/mark-read", { method: "POST", body: JSON.stringify(book) }); if (r && r.ok) toast(`Noted “${r.matched}” as read.`); },
     async retry(id) { const r = await api(`/api/request/${id}/retry`, { method: "POST" }); if (r) location.reload(); },
-    async removeRequest(id) { await api(`/api/request/${id}`, { method: "DELETE" }); document.querySelector(`.req-row[data-id="${id}"]`)?.remove(); },
+    // a Requests entry is one book: remove every attempt it folds (ids "12,9,4")
+    async removeRequest(ids) {
+      const list = String(ids).split(",").filter(Boolean);
+      for (const id of list) await api(`/api/request/${id}`, { method: "DELETE" });
+      document.querySelector(`.req-row[data-id="${list[0]}"]`)?.remove();
+    },
     async approveRequest(id, btn) {
       if (btn) btn.disabled = true;
       const r = await api(`/api/requests/${id}/approve`, { method: "POST" });
@@ -592,6 +809,18 @@ const Stackarr = (() => {
       else { toast(r.error || "Couldn't deny."); if (btn) btn.disabled = false; }
     },
 
+    // Settings → General → Timezone: an IANA zone from the searchable list; the
+    // server rejects anything it can't resolve
+    async saveTimezone(btn) {
+      const v = ((document.getElementById("tz-input") || {}).value || "").trim();
+      const known = [...document.querySelectorAll("#tz-list option")].some(o => o.value === v);
+      if (!known) { toast("Pick a timezone from the list, e.g. Australia/Melbourne."); return; }
+      if (btn) btn.disabled = true;
+      const r = await api("/api/settings", { method: "POST", body: JSON.stringify({ timezone: v }) });
+      if (btn) btn.disabled = false;
+      if (!r) return;
+      toast(r.ok ? `Timezone set to ${v}.` : (r.error || "Couldn't save."));
+    },
     async setSetting(obj, reload) { await api("/api/settings", { method: "POST", body: JSON.stringify(obj) }); toast("Saved."); if (reload) setTimeout(() => location.reload(), 400); },
     async setPref(obj, reload) { await api("/api/prefs", { method: "POST", body: JSON.stringify(obj) }); toast("Saved."); if (reload) setTimeout(() => location.reload(), 400); },
     async setApprovalMode(require) { await api("/api/admin/approval-mode", { method: "POST", body: JSON.stringify({ require_approval: require }) }); toast(require ? "Requests now need your approval." : "Requests now auto-approve."); },
@@ -706,6 +935,8 @@ const Stackarr = (() => {
         loading = false;
         if (!books || !books.length) { done = true; if (sentinel) sentinel.textContent = ""; return; }
         disc.insertAdjacentHTML("beforeend", books.map(mediaCard).join(""));
+        Stackarr.fitCovers();
+        Stackarr.initCovers(disc);               // blank/broken covers fall back on these too
         page++;
       };
       if (sentinel && "IntersectionObserver" in window) {
@@ -724,6 +955,7 @@ const Stackarr = (() => {
         if (discSec) discSec.style.display = "none"; rhead.hidden = false;
         results.innerHTML = books.map(mediaCard).join("") || `<div class="empty"><p>No results.</p></div>`;
         Stackarr.fitCovers();
+        Stackarr.initCovers(results);
       };
       const q = document.getElementById("topsearch");
       if (q) { q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => doSearch(q.value.trim()), 350); }); }

@@ -74,13 +74,18 @@ with a plain-English reason you can argue with.
   Short listens · Epic listens · New & upcoming · From your reading list · Popular.
 - **Browse cards** for genres and *suggested* authors → full grid, with **"add all
   books by this author"**.
-- **Book detail pages** (cover, series, narrator, rating, full description, genres).
+- **Book detail pages** (cover, series, narrator, rating, full description, genres), with a
+  **"Next in ‹series›"** strip: the next three books after the last one you finished,
+  each marked Finished / In library / Requested / Upcoming, or with a Request button.
 - **Multi-user** — everyone signs in with their own Audiobookshelf account and gets
   suggestions from *their* history; admins can auto-approve.
 - **Approve / Ignore / Already-read** with learning (passes, DNFs, deletions, and
   optional 1–5★ ratings feed back in). "I've already read this" seeding too.
 - **Up Next** — a series tracker: every series you're collecting, how far you are,
   and the next book with its state (in library / requested / ready to add).
+  **Request remaining** confirms the exact books first (finished, owned, requested
+  and unreleased ones are skipped) and asks Chaptarr for just those. Home shows a
+  **Continue ‹series›** card for a series you've just finished a book in.
 - **Taste** — see and undo everything that shapes your picks (ratings, did-not-finish,
   passed, already-read seeds, removed books) in one place.
 - **Quick-rate onboarding** — when your ratings are thin, a home-page card lets you
@@ -155,6 +160,8 @@ automatically on every release.
 | Variable | Purpose |
 |---|---|
 | `ABS_URL`, `ABS_ADMIN_TOKEN` | Audiobookshelf connection (also editable in Settings) |
+| `ABS_PUBLIC_URL` | Optional. The address your browser opens Audiobookshelf at, for "Open in Audiobookshelf" links (also in Settings) |
+| `TZ` | Optional. Default for Settings → General → Timezone (IANA name, e.g. `Australia/Melbourne`); UTC if unset |
 | `CHAPTARR_URL`, `CHAPTARR_API_KEY`, `CHAPTARR_ROOT_FOLDER` | where approved picks go |
 | `CHAPTARR_EBOOK_ROOT_FOLDER` | Chaptarr root folder for eBook picks (defaults to `CHAPTARR_ROOT_FOLDER`) |
 | `STACKARR_FORMATS` | `audiobook` (default) · `ebook` · `both` (also in Settings → General) |

@@ -34,6 +34,16 @@
           </select></label>
         <p class="muted">Changing this reloads the page so format-specific menus update.</p>
       </div>
+      <div class="panel"><h3>Timezone</h3>
+        <p class="muted">The day a book counts as finished on (reading activity, the yearly goal,
+          "finished yesterday", the Continue card) and the times shown on Requests. Type to search —
+          e.g. <i>Melbourne</i>. Default: {{ timezone_default }}{% if timezone_default != 'UTC' %} (the TZ variable){% endif %}.</p>
+        <label class="row"><span>Zone</span>
+          <input id="tz-input" list="tz-list" value="{{ timezone }}" autocomplete="off" spellcheck="false"
+                 placeholder="Area/City" aria-label="Timezone"></label>
+        <datalist id="tz-list">{% for z in timezones %}<option value="{{ z }}">{% endfor %}</datalist>
+        <button class="btn" onclick="Stackarr.saveTimezone(this)">Save</button>
+      </div>
       {% endif %}
     </div>
 
@@ -157,6 +167,7 @@
       <div class="panel"><h3>Audiobookshelf</h3>
         <label class="row"><span>URL</span><input data-setting="abs_url" value="{{ conn.abs_url }}"></label>
         <label class="row"><span>Admin API token</span><input type="password" data-setting="abs_admin_token" value="{{ conn.abs_admin_token }}"></label>
+        <label class="row"><span>Public URL <span class="subtle">(optional — the address your browser opens ABS at, for "Open in Audiobookshelf" links)</span></span><input data-setting="abs_public_url" value="{{ conn.abs_public_url }}" placeholder="https://abs.example.com"></label>
         <div class="conn-actions"><button class="btn small ghost" onclick="Stackarr.testConn('abs', this)">Test</button>
           <span class="conn-result" id="test-abs"></span></div>
       </div>

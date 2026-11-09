@@ -19,7 +19,7 @@ import re
 import time
 
 from . import (absclient, audible, audnexus, config, db, discover, importlists,
-               tagging, taste, titles)
+               tagging, taste, titles, tz)
 
 log = logging.getLogger("stackarr.recommend")
 
@@ -263,7 +263,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
                 consider(b, config.W_NARRATOR * wt, "narrator", f"Narrated by {nm}, whom you listen to often")
 
     top_genres = [g for g, _ in sorted(genres_seen.items(), key=lambda x: x[1], reverse=True)[:2]]
-    today = str(datetime.date.today())
+    today = str(tz.today())
 
     # mood lane -> books that match your strongest reading moods (StoryGraph-style)
     MOOD_TERMS = {"funny": "humorous fantasy", "dark": "grimdark fantasy", "romantic": "romantasy",
@@ -307,7 +307,7 @@ def run(user_id: int, max_new: int | None = None) -> int:
 
     # new & upcoming from authors you read — both not-yet-released AND recently
     # released (last ~120 days) so the Upcoming page is well-stocked.
-    recent_cut = str(datetime.date.today() - datetime.timedelta(days=120))
+    recent_cut = str(tz.today() - datetime.timedelta(days=120))
     for a in list(read_authors)[:18]:
         for b in audible.by_author(a, num=10):
             rd = b.get("release_date") or ""

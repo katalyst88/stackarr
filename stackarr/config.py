@@ -42,6 +42,8 @@ FRAME_ANCESTORS = os.environ.get("STACKARR_FRAME_ANCESTORS", "'self'")
 # is used for server-wide ops (library listing, scans) and admin fallback.
 ABS_URL = os.environ.get("ABS_URL", "").rstrip("/")
 ABS_ADMIN_TOKEN = os.environ.get("ABS_ADMIN_TOKEN", "")
+# optional: the address the BROWSER opens Audiobookshelf at ("Open in Audiobookshelf" links)
+ABS_PUBLIC_URL = os.environ.get("ABS_PUBLIC_URL", "")
 # ABS usernames that are Stackarr admins (auto-approve, see all queues).
 ADMIN_USERS = _list("STACKARR_ADMINS")
 # Limit which ABS libraries count as "owned"/seed history; empty = all book libs.
