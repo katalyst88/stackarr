@@ -16,12 +16,11 @@ book said "Requested" on one page and "Downloading" on the next.
   waiting      Waiting         Chaptarr is holding the release (a delay
                                profile, a tracker check) — reason attached
   requested    Requested       handed to Chaptarr, searching
-  not_found    Needs attention no usable release: the background release check
-                               found none / only rejected ones, or the request
-                               is STALE_DAYS old and never reached the queue
-  needs_vip    Needs VIP       every release is VIP-only on the indexer
-  unavailable  Needs attention every release was rejected (both say "Might need
-                               Check upstream", not the reasons)
+  needs        Needs VIP, …    the background release check found no usable
+                               release, and why — "what this download needs"
+                               (needs.py), e.g. VIP, ratio, no ebook release
+  not_found    Needs attention the request is STALE_DAYS old and never reached
+                               the queue, and no release check has looked
   pending      Needs approval  waiting for an admin
   failed       Failed          the handoff failed (retryable)
   denied       Not approved    an admin declined it
@@ -36,16 +35,19 @@ Chaptarr's queue is read at most once per QUEUE_TTL seconds, and only when a
 book being shown has an open request — a page of cards with nothing on order
 never calls it. Requests are household-wide for the active states (the
 library is shared: a book someone else requested is on its way for you too);
-failed / denied attempts count only for the person who made them."""
+failed / denied attempts count only for the person who made them.
+
+Every entry may carry `needs`: a list of {key, label, text} saying what the
+download needs, in plain words — from the release check, or from Chaptarr's
+queue message for a held / stalled / failed download (needs.py)."""
 import threading
 import time
 
-from . import chaptarr, db, formats, titles, tz
+from . import chaptarr, db, formats, needs, titles, tz
 
 QUEUE_TTL = 30
 STALE_DAYS = 7
-# Stackarr flags a stuck request; the why lives in Chaptarr (its search, its
-# indexers, its rejections), so the flag points there instead of retelling it.
+# a request that never reached the queue and no release check has explained
 CHECK_UPSTREAM = "Check upstream"
 MEDIA = ("audiobook", "ebook")
 
@@ -57,8 +59,7 @@ LABELS = {
     "waiting": ("Waiting", "waiting"),
     "requested": ("Requested", "handed"),
     "not_found": ("Needs attention", "stalled"),
-    "unavailable": ("Needs attention", "failed"),
-    "needs_vip": ("Needs VIP", "vip"),
+    "needs": ("Needs attention", "needs"),          # the label is the first need's
     "pending": ("Needs approval", "pending_approval"),
     "failed": ("Failed", "failed"),
     "denied": ("Not approved", "denied"),
@@ -66,7 +67,7 @@ LABELS = {
     "none": ("", ""),
 }
 # most advanced first — the overall state of a book that isn't in the library
-ORDER = ("downloading", "importing", "stalled", "waiting", "requested", "needs_vip", "not_found", "unavailable",
+ORDER = ("downloading", "importing", "stalled", "waiting", "requested", "needs", "not_found",
          "pending", "failed", "denied")
 OPEN = ("queued", "handed", "approving")            # stored statuses Chaptarr is working on
 FMT_NAME = {"audiobook": "Audiobook", "ebook": "eBook"}
@@ -116,7 +117,15 @@ def _days_since(ts: str) -> float:
 
 def _entry(state: str, detail: str = "", **extra) -> dict:
     label, cls = LABELS[state]
-    return {"state": state, "label": label, "cls": cls, "detail": detail, **extra}
+    return {"state": state, "label": label, "cls": cls, "detail": detail, "needs": [], **extra}
+
+
+def _queue_needs(hit: dict) -> list[dict]:
+    """What a held / stalled / failed download needs, from Chaptarr's queue words."""
+    got = needs.classify([hit.get("reason") or ""])
+    if not got and hit.get("state") == "stalled":
+        got = [needs._need(needs.rule("no_seeders"))]
+    return got
 
 
 def _format_state(fmt, owned, rows, queue_fn, title, author, asin) -> dict:
@@ -144,23 +153,20 @@ def _format_state(fmt, owned, rows, queue_fn, title, author, asin) -> dict:
                         f"about {hit['eta']} left" if hit.get("eta") else ""]
                 return _entry("downloading", " · ".join(b for b in bits if b), pct=hit.get("pct"), eta=hit.get("eta"))
             if s == "waiting":
-                return _entry("waiting", "Held upstream")
+                return _entry("waiting", "Held upstream", needs=_queue_needs(hit))
             if s == "stalled":
-                return _entry("stalled", "Stalled upstream")
+                return _entry("stalled", "Stalled upstream", needs=_queue_needs(hit))
             if s == "failed":
-                return _entry("failed", "Failed upstream — you can retry")
+                return _entry("failed", "Failed upstream — you can retry", needs=_queue_needs(hit))
             return _entry(s if s in LABELS else "downloading")
         # what the background release check (releasecheck.py) found, if it looked
         from . import releasecheck
         rc = releasecheck.result(r.get("id")) if r.get("id") else None
-        if rc and rc.get("kind") == "vip":
-            return _entry("needs_vip", releasecheck.VIP_EXPLAINER)
-        if rc and rc.get("kind") == "vip_retry":
-            return _entry("requested", "Searching again — VIP is on")
-        if rc and rc.get("kind") == "rejected":
-            return _entry("unavailable", CHECK_UPSTREAM)
-        if rc and rc.get("kind") == "none":
-            return _entry("not_found", CHECK_UPSTREAM)
+        if rc and rc.get("kind") in releasecheck.HELD and rc.get("needs"):
+            got = rc["needs"]
+            return _entry("needs", got[0].get("text") or got[0]["label"], label=needs.badge(got), needs=got)
+        if rc and rc.get("kind") == "retry":
+            return _entry("requested", rc.get("detail") or "Searching again")
         days = _days_since(r.get("created_at") or "")
         if days >= STALE_DAYS:
             return _entry("not_found", CHECK_UPSTREAM)

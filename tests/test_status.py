@@ -78,10 +78,13 @@ def test_stalled_and_held_are_named(tmp_db, queue):
     db.set_meta("formats", "both")
     _req(1, "The Knight", "Will Wight", "handed", "audiobook")
     _req(1, "The Engineer", "Travis Baldree", "handed", "ebook")
-    assert status.for_book("", "The Knight", "Will Wight")["state"] == "stalled"
+    knight = status.for_book("", "The Knight", "Will Wight")
+    assert knight["state"] == "stalled" and [n["key"] for n in knight["needs"]] == ["no_seeders"]
     held = status.for_book("", "The Engineer", "Travis Baldree")
     assert held["state"] == "waiting" and held["detail"] == "Held upstream"
     assert "Chaptarr" not in held["detail"]
+    # what it needs, in plain words: the tracker's unsatisfied-torrent limit
+    assert [n["key"] for n in held["needs"]] == ["ratio"] and held["needs"][0]["label"] == "Needs ratio"
 
 
 def test_a_request_that_never_reaches_the_queue_is_not_found_yet(tmp_db, queue):

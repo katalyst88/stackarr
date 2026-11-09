@@ -17,15 +17,24 @@ All notable changes to Stackarr.
   author and series + position.
 
 #### Added
-- **Needs VIP**: books whose every release is VIP-only get a "Needs VIP" flag
-  ("check Chaptarr / indexer"), a "Waiting for VIP" filter on Requests and an
-  admin re-search. Stackarr reads the indexer's "Is VIP" setting in Chaptarr
-  (never writes it) and searches those books again when it turns on.
+- **What this download needs**: a request that isn't downloading says why, in
+  plain words, on its Requests card and the book page — "Needs VIP", "Needs
+  freeleech", "Needs ratio", "Needs bonus points", "Removed from tracker",
+  "No seeders", "Needs connection set up", "Needs another client", "Doesn't
+  fit profile", "No ebook release", "Indexer unavailable". Stackarr reads the
+  reasons from Chaptarr's release rejections and download-client queue
+  messages; words it doesn't recognise are shown as they are. A "Needs
+  something" filter on Requests, and an admin "Look again now".
+- **Automatic retry**: each need is looked at again on its own schedule (an
+  indexer outage hourly, no seeders every 6 hours, account limits daily), and
+  at once when Chaptarr's indexer or download-client settings change (only a
+  hash of them is kept; never written). When a look finds a usable release,
+  Stackarr asks Chaptarr to search once and the request moves on by itself.
+- **`STACKARR_NEEDS_RULES`** (optional): a JSON file of extra or replacement
+  reason rules (`key`, `label`, `text`, `scope`, `retry_hours`, `patterns`),
+  for indexers that word their rejections differently. No tracker is built in.
 - **Stuck requests**: one background Chaptarr release check per stuck request
-  (15 min after hand-off, once a day, one a minute at most; never on a page
-  request) flags it: "Needs VIP", or "Needs attention · Might need a look in
-  Chaptarr" (no usable release, or a week with none). The reasons stay in
-  Chaptarr; Stackarr doesn't retell them.
+  (15 min after hand-off, one a minute at most; never on a page request).
 - **Cover style** (Settings): Audible as is, or Clean print covers from Google
   Books / Open Library.
 - **"Fetching cover…"** placeholder: a cover is real or this, and the page
@@ -33,6 +42,11 @@ All notable changes to Stackarr.
   backoff).
 
 #### Fixed
+- A title or author holding quotes or `&quot;` could break out of a card's
+  Request / Read it button (search, discover) and run script.
+- Requesting a book again kept the old request's release-check answer.
+- "Mark read" could unmonitor another author's same-titled book when the
+  named author wasn't found in Chaptarr; it now does nothing instead.
 - The Stackarr icon vanished on phones and with the menu collapsed.
 - Book pages with no catalogue art (a US ASIN on the AU store) showed no cover
   although the library had one.

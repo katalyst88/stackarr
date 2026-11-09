@@ -746,9 +746,13 @@ def record_request(c, user_id: int, book: dict, fmt: str, status: str, detail: s
                   "updated_at=datetime('now','localtime') WHERE id=?",
                   (status, detail, ref, source, asin, asin, book.get("cover", "") or "",
                    book.get("cover", "") or "", rid))
-        return rid
-    return c.execute(
-        "INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (user_id, asin, title, book.get("author", "") or "", book.get("cover", "") or "",
-         status, detail, ref, source, fmt or "audiobook")).lastrowid
+    else:
+        rid = c.execute(
+            "INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (user_id, asin, title, book.get("author", "") or "", book.get("cover", "") or "",
+             status, detail, ref, source, fmt or "audiobook")).lastrowid
+    # a new attempt starts with a clean slate: the last release check (what the
+    # download needed) was about the previous attempt on this row id
+    c.execute("DELETE FROM meta WHERE k=?", (f"relcheck:{rid}",))
+    return rid

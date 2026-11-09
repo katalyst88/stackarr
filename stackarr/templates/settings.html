@@ -59,10 +59,10 @@
           <input type="checkbox" class="switch" {{ 'checked' if release_check }}
                  onchange="Stackarr.setSetting({release_check: this.checked})"></label>
         <p class="muted">A quarter of an hour after a request goes upstream, if nothing is downloading,
-          Stackarr checks once and flags it (<i>Needs VIP</i> or <i>Needs attention</i>; the details stay
-          upstream). It looks again once a day, one book a minute at most, in the background.</p>
-        <p class="muted">Upstream VIP: <b>{% if vip_state and vip_state.at %}{{ 'on' if vip_state.vip else 'off' }}{% else %}unknown{% endif %}</b>
-          When it turns on, books that need VIP are searched again.</p>
+          Stackarr checks once and says what the download needs, in plain words (<i>Needs VIP</i>,
+          <i>Needs ratio</i>, <i>No seeders</i>, <i>No ebook release</i>…). It looks again by itself — hourly
+          for an indexer outage, daily for the rest, and straight away when the indexer or download-client
+          settings change — one book a minute at most, and searches as soon as the need clears.</p>
       </div>
       {% endif %}
     </div>

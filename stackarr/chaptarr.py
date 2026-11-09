@@ -221,13 +221,14 @@ def _author_books(author_id: int) -> list[dict]:
         return []
 
 
-def _pick_author(results: list[dict], author: str) -> dict:
+def _pick_author(results: list[dict], author: str, strict: bool = False) -> dict | None:
     """Choose the author the request actually named. Chaptarr's /author/lookup is
     a fuzzy search that does NOT always rank the requested author first — e.g. for
     "James Baldwin" another author whose book metadata mentions the name can
     outrank him, so blindly taking results[0] adds the wrong author and the title
     is never found. Prefer an exact normalized name match, then a contains match,
-    before falling back to the top result."""
+    before falling back to the top result. strict: no fallback — None when the
+    named author isn't among the results (for callers that change things)."""
     na = _norm(author)
     if na:
         for r in results:
@@ -237,6 +238,8 @@ def _pick_author(results: list[dict], author: str) -> dict:
             rn = _norm(r.get("authorName"))
             if rn and (na in rn or rn in na):
                 return r
+    if strict:
+        return None
     return results[0]
 
 
@@ -529,17 +532,20 @@ def mark_read(title: str, author: str) -> bool:
     it and the book is monitored, unmonitor it so it won't be searched/downloaded.
     Best-effort; returns True only if something was actually unmonitored. Chaptarr
     has no 'read' state, so unmonitoring is the meaningful equivalent."""
-    if not configured():
-        return False
+    if not configured() or not (author or "").strip():
+        return False                  # never unmonitor a same-titled book by someone else
     try:
         look = requests.get(f"{url()}/api/v1/author/lookup", headers=_h(),
-                            params={"term": author or title}, timeout=30)
+                            params={"term": author}, timeout=30)
         results = look.json() if look.ok else []
         if not results:
             return False
         # Same fuzzy lookup as add_and_search — take the author actually named,
         # not the top hit, or we look for the book under someone else.
-        a = _pick_author(results, author)
+        # Unmonitoring is a change, so only for that author — no top-hit fallback.
+        a = _pick_author(results, author, strict=True)
+        if not a:
+            return False
         existing = _find_author(a.get("foreignAuthorId", ""), a.get("authorName") or author)
         if not existing:
             return False

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_fmt.html" import fmt_icon, fmt_label, status_badge, status_pill with context %}
+{% from "_fmt.html" import fmt_icon, fmt_label, status_badge, status_pill, needs_list with context %}
 {% block content %}
 {# The page is the WORK: title, author, series — then its formats, each with
    its own status and action (_work_view in routes.py; status from status.py). #}
@@ -12,7 +12,8 @@
       <div class="format-name">{{ r.label }}{% for x in r.facts %}<span class="subtle"> · {{ x }}</span>{% endfor %}
         {% if r.narrators %}<span class="subtle"> · narrated by </span>{% for nm in r.narrators %}<a class="author-link" href="{{ url_for('main.narrator_page', name=nm) }}">{{ nm }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</div>
       <div class="format-status">{% if r.st.label %}{{ status_pill(r.st) }}{% else %}<span class="muted">Not in your library</span>{% endif %}
-        {% if r.st.detail and r.st.state != 'available' %}<span class="subtle format-detail">{{ r.st.detail }}</span>{% endif %}</div>
+        {% if r.st.detail and r.st.state != 'available' and not r.st.needs %}<span class="subtle format-detail">{{ r.st.detail }}</span>{% endif %}</div>
+      {{ needs_list(r.st) }}
     </div>
     <div class="format-act">
       {% if r.can_request %}<button class="btn small" title="{{ 'Retry' if r.retry else 'Request' }} the {{ r.label }}" onclick='Stackarr.grabFormat({{ b|tojson }}, "{{ r.fmt }}", this)'>{{ 'Retry' if r.retry else 'Request' }}</button>

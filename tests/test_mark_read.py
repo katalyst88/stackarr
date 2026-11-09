@@ -15,3 +15,14 @@ def test_unmonitors_under_the_named_author_not_the_top_hit(fake_chaptarr):
     assert chaptarr.mark_read("Giovanni's Room", "James Baldwin") is True
     puts = fake_chaptarr.calls_to("PUT", "/api/v1/book/monitor")
     assert [c[3] for c in puts] == [{"bookIds": [80], "monitored": False}]
+
+
+def test_never_unmonitors_when_the_named_author_is_not_found(fake_chaptarr):
+    # the lookup only knows someone else with a same-titled book
+    fake_chaptarr.lookup = [{"authorName": "Anna Malaika Tubbs", "foreignAuthorId": "a1"}]
+    fake_chaptarr.authors = [{"id": 7, "authorName": "Anna Malaika Tubbs", "foreignAuthorId": "a1"}]
+    fake_chaptarr.books = {7: [book(70, "Giovanni's Room", monitored=True)]}
+
+    assert chaptarr.mark_read("Giovanni's Room", "James Baldwin") is False
+    assert chaptarr.mark_read("Giovanni's Room", "") is False
+    assert fake_chaptarr.calls_to("PUT", "/api/v1/book/monitor") == []

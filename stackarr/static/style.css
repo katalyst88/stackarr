@@ -845,10 +845,15 @@ body[data-theme="light"] .series-chip.chip-reading { background: #ffedd5; border
 .chip-legend { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0 0; font-size: 12px; }
 .chip-legend .series-chip { font-size: 11px; padding: 2px 8px; }
 
-/* "Needs VIP" (status.py needs_vip) */
-.corner-badge.vip { background: rgba(168,85,247,.62); }
-.badge-vip { background: #a855f722; color: #c084fc; }
-.series-badge.vip { background: rgba(168,85,247,.16); color: #c084fc; }
-.vip-note { margin: 0 0 14px; }
+/* "What this download needs" (status.py "needs", needs.py) */
+.corner-badge.needs { background: rgba(168,85,247,.62); }
+.badge-needs { background: #a855f722; color: #c084fc; }
+.series-badge.needs { background: rgba(168,85,247,.16); color: #c084fc; }
+.needs-note { margin: 0 0 14px; }
+.needs { margin: 6px 0 0; font-size: 13px; }
+.needs-head { color: var(--muted, #9ca3af); font-size: 12px; margin-bottom: 2px; }
+.needs ul { margin: 0; padding-left: 18px; }
+.needs li { margin: 2px 0; }
+.needs li b { font-weight: 600; }
 /* a status explanation is for reading: up to two lines, not one clipped line */
 .req-detail { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }

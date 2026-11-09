@@ -101,3 +101,15 @@ def test_display_titles():
                               ("Project Hail Mary: A Novel", "", "Project Hail Mary: A Novel"),
                               ("Star Wars: Thrawn", "", "Star Wars: Thrawn")):
         assert titles.display(raw, series) == want, raw
+
+
+def test_book_page_says_what_the_download_needs(admin_client, monkeypatch):
+    """A held-back format shows "What this download needs" in plain words."""
+    with db.conn() as c:                                   # _page's ebook request is the next row
+        nxt = (c.execute("SELECT COALESCE(MAX(id), 0) FROM requests").fetchone()[0] or 0) + 1
+    db.set_meta(f"relcheck:{nxt}", json.dumps({"kind": "needs", "at": int(time.time()), "needs": [
+        {"key": "freeleech", "label": "Needs freeleech", "text": "Only freeleech releases are allowed."}]}))
+    rows = dict(_rows(_page(admin_client, monkeypatch)))
+    e = rows["ebook"]
+    assert "What this download needs" in e and "Needs freeleech" in e and "Only freeleech releases" in e
+    assert "What this download needs" not in rows["audiobook"]

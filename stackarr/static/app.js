@@ -47,7 +47,10 @@ const Stackarr = (() => {
       b.runtime_hours ? `${b.runtime_hours}h` : "", b.rating ? `★ ${b.rating}` : ""].filter(Boolean).join(" · ");
     const canReq = !b.state || REQUESTABLE.includes(b.state);
     const reqLabel = !canReq ? st.label : b.state === "failed" ? "Retry" : "Request";
-    const j = (o) => JSON.stringify(o).replace(/'/g, "&#39;");
+    // JSON for a single-quoted inline handler: the HTML parser decodes entities
+    // in attributes, so & < > ' are \u-escaped (as Jinja's |tojson does) —
+    // a title holding "&quot;" can't close the JS string.
+    const j = (o) => JSON.stringify(o).replace(/[&<>']/g, (ch) => "\\u" + ch.charCodeAt(0).toString(16).padStart(4, "0"));
     // The whole card is a link to the book page — same contract as the
     // server-rendered cards (`<a class="media-card">` in suggestions.html) — so
     // search results and discover tiles open their detail page on click/tap,
@@ -586,6 +589,28 @@ const Stackarr = (() => {
           }
           const d = row.querySelector(".req-detail");
           if (d && st.detail) { d.textContent = st.detail; d.title = st.detail; }
+          // "What this download needs" — rebuilt with textContent (never innerHTML)
+          const box = row.querySelector(".req-needs");
+          if (box) {
+            box.replaceChildren();
+            let any = false;
+            for (const [f, fs] of Object.entries(st.formats || {})) {
+              if (!(fs.needs || []).length) continue;
+              any = true;
+              const wrap = document.createElement("div"); wrap.className = "needs"; wrap.dataset.needsFmt = f;
+              const head = document.createElement("div"); head.className = "needs-head";
+              head.textContent = "What this download needs" + (Object.keys(st.formats).length > 1 ? (f === "ebook" ? " (eBook)" : " (Audiobook)") : "");
+              const ul = document.createElement("ul");
+              for (const n of fs.needs) {
+                const li = document.createElement("li"), b = document.createElement("b");
+                b.textContent = n.label || ""; li.append(b);
+                if (n.text && n.text !== n.label) li.append(" — " + n.text);
+                ul.append(li);
+              }
+              wrap.append(head, ul); box.append(wrap);
+            }
+            if (d) d.hidden = any;
+          }
         }
         return Object.keys(s).length > 0;
       };
@@ -845,9 +870,9 @@ const Stackarr = (() => {
       if (!r) return;
       toast(r.ok ? `Timezone set to ${v}.` : (r.error || "Couldn't save."));
     },
-    async vipRecheck(btn) {
+    async needsRecheck(btn) {
       if (btn) btn.disabled = true;
-      const r = await api("/api/admin/vip-recheck", { method: "POST", body: "{}" });
+      const r = await api("/api/admin/needs-recheck", { method: "POST", body: "{}" });
       if (btn) btn.disabled = false;
       if (r) toast(r.detail || "Queued.");
     },

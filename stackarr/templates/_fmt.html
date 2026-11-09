@@ -34,6 +34,13 @@
 {% macro status_pill(st, fmt=None) -%}
 {% if st and st.label %}<span class="badge badge-{{ st.cls }}" title="{{ st.detail }}">{% if fmt %}{{ fmt_icon(fmt) }} {% endif %}{{ st.label }}</span>{% endif %}
 {%- endmacro %}
+{# What a held-back download needs (status.py `needs`, needs.py), in plain
+   words. Empty when it needs nothing. `id` lets the Requests page poller
+   find and refresh it. #}
+{% macro needs_list(st, fmt='') -%}
+{% if st and st.needs %}<div class="needs"{% if fmt %} data-needs-fmt="{{ fmt }}"{% endif %}><div class="needs-head">What this download needs{% if fmt and multi_format %} ({{ fmt_label(fmt) }}){% endif %}</div>
+<ul>{% for n in st.needs %}<li><b>{{ n.label }}</b>{% if n.text and n.text != n.label %} — {{ n.text }}{% endif %}</li>{% endfor %}</ul></div>{% endif %}
+{%- endmacro %}
 {# Can this book be requested from a card? Not when it's held or on its way. #}
 {% macro requestable(st) -%}{{ '1' if (not st or st.state in ('none', 'failed', 'denied')) else '' }}{%- endmacro %}
 

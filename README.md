@@ -102,6 +102,11 @@ with a plain-English reason you can argue with.
 - **Shared ratings & reviews** *(new in 1.5)* — ratings are community-wide: every
   book page shows the average ★ and everyone's written reviews, and the home page
   carries a **Recently rated by readers** row.
+- **What this download needs** — a request that isn't downloading says why in
+  plain words (needs VIP, freeleech, ratio, bonus points; removed; no seeders;
+  connection or client set-up; doesn't fit the profile; no release in the format;
+  indexer down), read from Chaptarr's release rejections and queue, and is
+  retried by itself when that clears.
 - **Notifications** — alerts when a requested book lands in your library, a
   **new-release radar** *(new in 1.5)* that pings you when an author you read
   publishes, plus suggestion digests. Email (3 themes + live preview), Discord,
@@ -165,6 +170,7 @@ automatically on every release.
 | `STACKARR_THREADS` | Optional. waitress worker threads (default 16) |
 | `CHAPTARR_URL`, `CHAPTARR_API_KEY`, `CHAPTARR_ROOT_FOLDER` | where approved picks go |
 | `CHAPTARR_EBOOK_ROOT_FOLDER` | Chaptarr root folder for eBook picks (defaults to `CHAPTARR_ROOT_FOLDER`) |
+| `STACKARR_NEEDS_RULES` | Optional. JSON file of extra/replacement "what this download needs" rules, for indexers that word rejections differently |
 | `STACKARR_FORMATS` | `audiobook` (default) · `ebook` · `both` (also in Settings → General) |
 | `KAVITA_URL`, `KAVITA_API_KEY` | eBook library + reading progress (or set in Settings) |
 | `CALIBREWEB_URL`, `CALIBREWEB_USER`, `CALIBREWEB_PASS` | eBook library via OPDS (or in Settings) |

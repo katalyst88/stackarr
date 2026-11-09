@@ -356,32 +356,31 @@ def requests_page():
                 "SELECT r.*, u.username FROM requests r JOIN users u ON u.id=r.user_id "
                 "WHERE r.status='pending_approval' ORDER BY r.id")]
     entries = group_requests(rows)
-    from . import vip
-    needs_vip = [e for e in entries
-                 if any(f.get("state") == "needs_vip" for f in (e["st"].get("formats") or {}).values())]
-    vip_only = bool(request.args.get("vip"))
+    # books held back by something the download needs (VIP, ratio, no seeders…)
+    held = [e for e in entries if any(f.get("needs") for f in (e["st"].get("formats") or {}).values())]
+    needs_only = bool(request.args.get("needs"))
     if wanted:
         entries = [e for e in entries if e["retry_id"]]
-    if vip_only:
-        entries = needs_vip
+    if needs_only:
+        entries = held
     # a normal user shouldn't see their pending_approval rows twice; they already
     # appear in their own list with a 'Needs approval' status.
     return render_template("requests.html", requests=entries, admin=admin, wanted=wanted,
-                           approvals=approvals, vip_only=vip_only, vip_count=len(needs_vip),
-                           vip_state=vip.state(), vip_reflow=vip.progress())
+                           approvals=approvals, needs_only=needs_only, needs_count=len(held))
 
 
-@bp.route("/api/admin/vip-recheck", methods=["POST"])
+@bp.route("/api/admin/needs-recheck", methods=["POST"])
 @auth.admin_required
-def api_admin_vip_recheck():
-    """Search every "Needs VIP" request again (trickled by the background
-    worker, a few a minute) — for after VIP was turned on in Chaptarr.
-    Stackarr never changes Chaptarr's indexer settings itself."""
-    from . import vip
-    n = vip.start_reflow()
+def api_admin_needs_recheck():
+    """Look at every held-back request again now (the background worker
+    takes one a minute; any whose need has cleared is searched again) — for
+    after something was sorted upstream. Stackarr never changes Chaptarr's
+    indexer or download-client settings itself."""
+    from . import releasecheck
+    n = releasecheck.recheck()
     return jsonify({"ok": True, "total": n,
-                    "detail": (f"Searching {n} VIP-only book{'s' if n != 1 else ''} again — a few a minute."
-                               if n else "No requests are waiting for VIP.")})
+                    "detail": (f"Looking at {n} book{'s' if n != 1 else ''} again — one a minute."
+                               if n else "No requests are held back.")})
 
 
 _LEADING_NUM = re.compile(r"^\d{1,3}\s+(?=[A-Za-z])")       # "09 Bloodline" (a numbered rip)
@@ -1692,7 +1691,6 @@ def settings_page():
                            format_mode=formats.mode(),
                            timezone=tz.name(), timezones=tz.zones(), timezone_default=tz.default_name(),
                            release_check=db.get_meta("release_check", "1") == "1",
-                           vip_state=_vip_state(),
                            cover_style=db.get_meta("cover_style", "audible"),
                            cross_format_taste=db.get_pref(auth.current_user()["id"], "cross_format_taste", "0") == "1",
                            adventurousness=db.get_meta(f"adventurousness_{auth.current_user()['id']}", str(config.ADVENTUROUSNESS)),
@@ -1704,11 +1702,6 @@ def settings_page():
                            notify_prefs=_notify_prefs_ctx(auth.current_user()),
                            smtp_ready=notify.smtp_ready(),
                            is_admin=is_admin)
-
-
-def _vip_state() -> dict:
-    from . import vip
-    return vip.state()
 
 
 def _manage_users_ctx() -> list[dict]:
@@ -2540,7 +2533,7 @@ def api_requests_status():
         if any(r["status"] in db.OPEN_REQUEST for r in e["current"]):
             st = e["st"]
             out[e["id"]] = {"state": st["state"], "label": st["label"], "cls": st["cls"], "detail": st["detail"],
-                            "formats": {f: {k: v.get(k) for k in ("state", "label", "cls", "detail")}
+                            "formats": {f: {k: v.get(k) for k in ("state", "label", "cls", "detail", "needs")}
                                         for f, v in st["formats"].items()}}
     return jsonify(out)
 

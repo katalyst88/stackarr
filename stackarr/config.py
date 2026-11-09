@@ -90,6 +90,11 @@ CHAPTARR_EBOOK_METADATA_PROFILE_ID = int(os.environ.get("CHAPTARR_EBOOK_METADATA
 # first added for audiobooks get filed into the audiobook folder. Falls back to
 # CHAPTARR_ROOT_FOLDER when unset (legacy single-root installs unchanged).
 CHAPTARR_EBOOK_ROOT_FOLDER = os.environ.get("CHAPTARR_EBOOK_ROOT_FOLDER", "")
+# "What this download needs" (needs.py): extra or replacement rules for your
+# trackers' and download client's own wording, as a JSON file — a list of
+# {"key", "label", "text", "scope", "retry_hours", "patterns": [regex, ...]}.
+# Same key replaces a built-in rule; a new key is tried before the built-ins.
+NEEDS_RULES_FILE = os.environ.get("STACKARR_NEEDS_RULES", "").strip()
 
 # --- metadata sources (no API key needed; deterministic, no AI) -------------
 AUDIBLE_DOMAIN = os.environ.get("AUDIBLE_DOMAIN", "com")           # com, co.uk, com.au, de…

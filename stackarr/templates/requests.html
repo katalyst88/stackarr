@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_fmt.html" import fmt_filter, fmt_badge, fmt_icon, status_pill with context %}
+{% from "_fmt.html" import fmt_filter, fmt_badge, fmt_icon, status_pill, needs_list with context %}
 {% block content %}
 <div class="page-head">
   <h2 class="page-title">{{ 'Wanted' if wanted else 'Requests' }} <span class="subtle">{{ "couldn't be grabbed" if wanted else '' }}</span></h2>
@@ -8,7 +8,7 @@
     <div class="seg">
       <a class="btn small ghost {{ 'on' if not wanted }}" href="{{ url_for('main.requests_page') }}">All</a>
       <a class="btn small ghost {{ 'on' if wanted }}" href="?wanted=1">Wanted</a>
-      {% if vip_count %}<a class="btn small ghost {{ 'on' if vip_only }}" href="?vip=1" title="Needs VIP — check upstream">Waiting for VIP <span class="subtle">{{ vip_count }}</span></a>{% endif %}
+      {% if needs_count %}<a class="btn small ghost {{ 'on' if needs_only }}" href="?needs=1" title="Requests held back by something the download needs">Needs something <span class="subtle">{{ needs_count }}</span></a>{% endif %}
       {% if admin %}<a class="btn small ghost" href="?all=1">All users</a>{% endif %}
       <button class="btn small ghost" onclick="Stackarr.checkLibraries(this)" title="Re-scan your libraries for books added outside Stackarr">↻ Check libraries</button>
       {% if requests | selectattr('retry_id') | list | length %}
@@ -37,10 +37,10 @@
   </div>
 </section>
 {% endif %}
-{% if vip_only %}
-<p class="muted vip-note">Needs VIP — check upstream.
-  {% if vip_reflow and vip_reflow.total and vip_reflow.todo %}Searching again: {{ vip_reflow.total - vip_reflow.todo|length }} of {{ vip_reflow.total }} done.{% endif %}
-  {% if admin %}<button class="btn small ghost" onclick="Stackarr.vipRecheck(this)">↻ Search these again</button>{% endif %}</p>
+{% if needs_only %}
+<p class="muted needs-note">These downloads are held back by something on the tracker or download side. Stackarr
+  looks again by itself and searches as soon as it clears.
+  {% if admin %}<button class="btn small ghost" onclick="Stackarr.needsRecheck(this)">↻ Look again now</button>{% endif %}</p>
 {% endif %}
 {% if not requests %}
 <div class="empty"><p>No requests yet. Approve a suggestion or add one from Discover.</p></div>
@@ -57,7 +57,8 @@
       <div class="req-status">
         {% for f, fs in r.st.formats.items() %}<span class="req-st" data-fmt="{{ f }}">{{ status_pill(fs, f if multi_format else None) }}</span>{% endfor %}
       </div>
-      {% if r.detail %}<div class="req-detail" title="{{ r.detail }}">{{ r.detail }}</div>{% endif %}
+      {% if r.detail %}<div class="req-detail" title="{{ r.detail }}"{% if r.st.needs %} hidden{% endif %}>{{ r.detail }}</div>{% endif %}
+      <div class="req-needs">{% for f, fs in r.st.formats.items() %}{{ needs_list(fs, f) }}{% endfor %}</div>
       {% if r.history %}<details class="req-history"><summary>Earlier attempts ({{ r.history|length }})</summary>
         <ul>{% for h in r.history %}<li><span class="subtle">{{ (h.updated_at or h.created_at)|localtime }}</span>
           {% if multi_format %}{{ 'eBook' if h.format == 'ebook' else 'Audiobook' if h.format == 'audiobook' else h.format }} · {% endif %}{{ {'failed':'Failed','denied':'Not approved','available':'In library','handed':'Requested','pending_approval':'Needs approval'}.get(h.status, h.status) }}{% if h.detail %} — {{ h.detail }}{% endif %}</li>{% endfor %}</ul>
