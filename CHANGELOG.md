@@ -2,6 +2,191 @@
 
 All notable changes to Stackarr.
 
+## [Unreleased]
+
+### Works first (field report 2026-10-12, round 5)
+
+#### Changed
+- **Book page is the work**: the title as a reader writes it, "by" the author,
+  the series as a link with its position, then a **Formats** block: one row
+  per format (Audiobook: narrator and length; eBook: pages), each with its
+  status and one action (Request / Retry / Open in Audiobookshelf).
+  `/book/<id>` URLs keep working. New **series page** (`/series/view`): every
+  book in order with its status, and Request remaining.
+- **Cards** show the work's title ("Reaper: Cradle, Book 10" → "Reaper"),
+  author and series + position.
+
+#### Added
+- **What this download needs**: a request that isn't downloading says why, in
+  plain words, on its Requests card and the book page — "Needs VIP", "Needs
+  freeleech", "Needs ratio", "Needs bonus points", "Removed from tracker",
+  "No seeders", "Needs connection set up", "Needs another client", "Doesn't
+  fit profile", "No ebook release", "Indexer unavailable". Stackarr reads the
+  reasons from Chaptarr's release rejections and download-client queue
+  messages; words it doesn't recognise are shown as they are. A "Needs
+  something" filter on Requests, and an admin "Look again now".
+- **Automatic retry**: each need is looked at again on its own schedule (an
+  indexer outage hourly, no seeders every 6 hours, account limits daily), and
+  at once when Chaptarr's indexer or download-client settings change (only a
+  hash of them is kept; never written). When a look finds a usable release,
+  Stackarr asks Chaptarr to search once and the request moves on by itself.
+- **`STACKARR_NEEDS_RULES`** (optional): a JSON file of extra or replacement
+  reason rules (`key`, `label`, `text`, `scope`, `retry_hours`, `patterns`),
+  for indexers that word their rejections differently. No tracker is built in.
+- **Stuck requests**: one background Chaptarr release check per stuck request
+  (15 min after hand-off, one a minute at most; never on a page request).
+- **Cover style** (Settings): Audible as is, or Clean print covers from Google
+  Books / Open Library.
+- **"Fetching cover…"** placeholder: a cover is real or this, and the page
+  swaps the real one in when the background worker has it (retries with
+  backoff).
+
+#### Fixed
+- A title or author holding quotes or `&quot;` could break out of a card's
+  Request / Read it button (search, discover) and run script.
+- Requesting a book again kept the old request's release-check answer.
+- "Mark read" could unmonitor another author's same-titled book when the
+  named author wasn't found in Chaptarr; it now does nothing instead.
+- The Stackarr icon vanished on phones and with the menu collapsed.
+- Book pages with no catalogue art (a US ASIN on the AU store) showed no cover
+  although the library had one.
+- Library books titled badly in Audiobookshelf ("Reape", "Ghostwater (Cradle
+  Book 5)") get the right title and open their book page (cached series
+  maps, plus a background lookup for the rest).
+- Chaptarr listing one work twice: the handoff now searches the row its
+  import will match, and skips a book whose file sits on a sibling row (DCC #2
+  was downloaded twice; its audiobook import was blocked). A 409 from the
+  download client reads "Already in the download client".
+- waitress thread starvation: 16 threads, ABS covers cached on disk, Open
+  Library tags off the request path, typeahead cached.
+- A request stuck as "Requested" (held back, or a week without reaching the
+  queue) said "Already requested" when asked for again. It can now be
+  requested again, and Requests shows Retry for it ("Retry all" too); a
+  re-request restarts the week.
+- Someone else's newer request (waiting for approval, say) no longer hides
+  where your own request stands; an active request by anyone still beats your
+  own failed or unapproved one.
+- An admin's Remove on another person's request (Everyone's requests) removed
+  nothing but hid the row. Admins can remove any request; when the server
+  removes nothing, the row stays and says so.
+- A cover that is an SVG is served sandboxed, and one that isn't an image at
+  all (HTML from a misconfigured backend) shows the placeholder.
+- An author with `%` or `_` in the name no longer matches other authors'
+  requests (LIKE wildcards taken literally); a card's id lookup reads the
+  author's rows once per page, not five scans per card.
+- Background lookups (a card's book id, a print cover) are asked again after
+  an hour once their cached answer expires, instead of never until a restart;
+  an empty or failed print-cover search is a 6-hour miss, not a week.
+- A cold Chaptarr queue cache is fetched once, not by every page thread at
+  the same moment.
+- Release check: a cleared request whose search couldn't be sent is tried
+  again later (not shown as "Searching again"), and a Chaptarr outage between
+  "held" and "cleared" no longer loses the search.
+- One book, one cover: Home's "Continue <series>" strip showed the
+  catalogue's Audible art (banner and all) while the shelves showed the
+  library's cover. Every section, book page and series page now asks one
+  resolver: the library's own cover when you own the book (Audiobookshelf
+  first, where covers are curated; then the other ebook servers), the
+  catalogue's only when you don't. A same-titled book by another author never
+  lends its cover.
+- A cover fixed in Audiobookshelf shows after the next library refresh, not
+  days later: the cover URL carries the item's update time (so browsers fetch
+  it again) and the disk cache treats a copy older than that as stale.
+
+### Consistency pass (field report 2026-10-12)
+
+One answer per book on every page, and the things that "didn't run fluidly".
+
+#### Added
+- **Settings → General → Timezone** (admin): a searchable IANA zone list,
+  defaulting to the `TZ` variable, else UTC. The reading heatmap, yearly goal,
+  "finished N days ago", the Home Continue window, Insights, Upcoming and
+  request times all use it (stdlib `zoneinfo`, never the process clock), so a
+  07:30 Melbourne finish no longer lands on yesterday in a UTC container.
+
+#### Fixed
+- **Rating stars did nothing** on History, the book page and the Suggestions
+  quick-rate card (also Find missing, Clear, Remove, Add all by author): their
+  `onclick="…{{ x|tojson }}…"` attribute ended at tojson's first `"`. Single-
+  quoted now, with a template guard test. Ratings — and Insights' average and
+  moods — update again.
+- **Cards that linked nowhere.** Home's Read shelf linked 2 of 23 books (only
+  ones with an ASIN; the rest reloaded Home). Every card now opens a book
+  page: its id, an id Stackarr already holds for the work, or `/book/find`,
+  which resolves the title on click (one catalogue search, remembered).
+- **Recently added** linked to the server's internal ABS address
+  (`http://audiobookshelf:80`). It opens the Stackarr book page; "Open in
+  Audiobookshelf" appears only when the new optional Settings → Audiobookshelf
+  → Public URL (or `ABS_PUBLIC_URL`) is set.
+- **Duplicate requests.** One entry per book on Requests and Recent requests,
+  its formats each with a status, earlier attempts folded underneath. A new
+  attempt updates the book's row for that format instead of adding one; asking
+  again while it's open makes no second Chaptarr search. Existing rows are
+  grouped on display — no migration, nothing deleted.
+- **"Requested" here, "Downloading" there.** `status.py` decides for every page:
+  In library / Downloading (% and ETA) / Importing / Stalled / Waiting ("Held
+  by Chaptarr: …") / Requested / Not found yet (a week with no usable release)
+  / Needs approval / Failed / Not approved / Upcoming. Chaptarr's queue is read
+  once per 30 s, only when something on screen is on order.
+- **A book started today wasn't "Currently reading"**: unfinished books under
+  25% progress were dropped. Now from the first minute.
+- **Insights** counted library duplicates (30 finished for 13 books) and
+  disagreed with Home's goal ring; it now uses Home's once-per-book finishes.
+- **Foreign-language editions** cluttered author, search, browse and series
+  pages (Matt Dinniman: 23 of 36). Lists follow Settings → language (default
+  English; "any" keeps all) and show one card per work; series maps prefer the
+  language and drop "Embargo title" placeholders.
+- Covers: no inline Audible search per coverless ABS item; Discover scroll and
+  search results get the blank-cover fallback. Book page lookups run in
+  parallel and are kept ten minutes.
+
+### Series follow-through
+
+Series follow-through and honest fresh picks, reported with field evidence
+and patches.
+
+### Added
+- **"Next in ‹series›" on the book page**: the next three books after the
+  highest one you've finished in Audiobookshelf (or after the book you're
+  viewing), each marked Finished / In library / Requested / Upcoming, or with a
+  Request button. Series order comes from Audible's series product (one call
+  for the order, one batch lookup for the books), falling back to Chaptarr's
+  `seriesTitle` for ebook-only series. Cached for a day (misses for an hour).
+- **"Continue ‹series›" card on Home** for the book you finished most
+  recently (last 14 days) whose series has more after it.
+- **Request remaining**, on the strip, the Home card and every Up Next card.
+  A confirm dialog lists every book of the series in order: the ones to
+  request ticked (with their formats), the rest greyed out with the reason
+  (In library / Requested / Finished / Out ‹date›). Only ticked books are
+  sent — at most 10 per click, one request row per book per format so
+  each flips to available on its own. Chaptarr monitors only those books and
+  runs one search per format; nothing else by the author is touched. The
+  non-admin approval gate still applies (one pending row per book).
+
+### Fixed
+- **Stale fresh picks.** A pending suggestion that was since requested, added
+  to the library or finished in Audiobookshelf stayed on Home forever. Such
+  picks are now retired on each library refresh, before each recommender run
+  and before Home renders, with their own status (`owned` / `requested` /
+  `finished`) — not `rejected`, so retiring is never a "not interested".
+- **The recommender stopped running for users with a full queue.** Pending
+  picks are capped (`STACKARR_SUGGEST_MAX`, 30); a queue full of stale picks
+  left no room, so no new picks were ever generated. Retiring frees the room.
+- **"Chaptarr couldn't find ‹author›"** for an author Chaptarr already
+  manages: its author lookup can come back empty on back-to-back calls.
+  Requests now reuse the existing Chaptarr author (exact name) before looking
+  anyone up.
+- **The book page showed a finished book as unread** unless it was on
+  Stackarr's own Read shelf; it now also reads Audiobookshelf.
+- **Every Add button appeared twice on the book page**: the bottom bar
+  repeated them next to "Back to top". It now only scrolls back up.
+
+### Deprecated
+- `POST /api/series/add` ("Get full series"): it monitors every Chaptarr row
+  in the series, owned ones included, and falls back to the author's whole
+  backlist. Unchanged for API callers, answers with `Deprecation: true`; the UI
+  uses `POST /api/series/request-remaining`.
+
 ## [1.6.9] - 2026-10-05
 
 Fixes from running Stackarr against Chaptarr's media-split schema (an

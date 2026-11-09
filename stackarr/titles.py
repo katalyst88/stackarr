@@ -104,3 +104,28 @@ class KnownWorks:
         if tail:                               # "Beware of Chicken: A Xianxia…" vs "Beware of Chicken"
             return (base, a) in self._full
         return (full, a) in self._base         # "The Captain" vs "The Captain: The Last Horizon"
+
+
+_LEAD_NUM = re.compile(r"^\d{1,3}\s*[.\-–:]?\s+(?=[A-Za-z])")                 # "09 Bloodline", "03. The…"
+_SERIES_LEAD = re.compile(r"^(.+?)\s+(?:book|volume|vol\.?)\s*\d+(?:\.\d+)?\s*[-–:]\s*(.+)$", re.I)
+
+
+def display(title: str, series: str = "") -> str:
+    """A work's title as a reader would write it, for cards and the book page:
+    no edition note ("(Unabridged)"), no series decoration (", Book 1",
+    "(Cradle Book 5)", "Cradle Book 9 - Bloodline", "Reaper: Cradle, Book 10",
+    a leading track number). A real subtitle stays ("Project Hail Mary: A
+    Novel" keeps it; "…: Cradle" loses it when Cradle is the series)."""
+    t = (title or "").strip()
+    if not t:
+        return t
+    m = _SERIES_LEAD.match(t)
+    if m and (not series or norm(m.group(1)).endswith(norm(series)) or norm(series).endswith(norm(m.group(1)))):
+        t = m.group(2).strip()
+    t = _LEAD_NUM.sub("", t)
+    c = clean(t)
+    p = _SUBTITLE.split(c, 1)
+    if len(p) > 1 and series and norm(re.sub(r"\b(series|saga|trilogy|book|vol(?:ume)?)\b", "", p[1])).strip() \
+            in (norm(series), norm(re.sub(r"^the\s+", "", series, flags=re.I))):
+        c = p[0]
+    return c.strip() or t

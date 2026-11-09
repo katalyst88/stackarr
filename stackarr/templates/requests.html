@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_fmt.html" import fmt_filter, fmt_badge, fmt_icon with context %}
+{% from "_fmt.html" import fmt_filter, fmt_badge, fmt_icon, status_pill, needs_list with context %}
 {% block content %}
 <div class="page-head">
   <h2 class="page-title">{{ 'Wanted' if wanted else 'Requests' }} <span class="subtle">{{ "couldn't be grabbed" if wanted else '' }}</span></h2>
@@ -8,9 +8,10 @@
     <div class="seg">
       <a class="btn small ghost {{ 'on' if not wanted }}" href="{{ url_for('main.requests_page') }}">All</a>
       <a class="btn small ghost {{ 'on' if wanted }}" href="?wanted=1">Wanted</a>
+      {% if needs_count %}<a class="btn small ghost {{ 'on' if needs_only }}" href="?needs=1" title="Requests held back by something the download needs">Needs something <span class="subtle">{{ needs_count }}</span></a>{% endif %}
       {% if admin %}<a class="btn small ghost" href="?all=1">All users</a>{% endif %}
-      <button class="btn small ghost" onclick="Stackarr.checkLibraries(this)" title="Re-scan your libraries for books added outside Chaptarr">↻ Check libraries</button>
-      {% if requests | selectattr('status', 'equalto', 'failed') | list | length %}
+      <button class="btn small ghost" onclick="Stackarr.checkLibraries(this)" title="Re-scan your libraries for books added outside Stackarr">↻ Check libraries</button>
+      {% if requests | selectattr('retry_id') | list | length %}
       <button class="btn small" onclick="Stackarr.retryAll(this)">↻ Retry all failed</button>
       {% endif %}
     </div>
@@ -36,22 +37,36 @@
   </div>
 </section>
 {% endif %}
+{% if needs_only %}
+<p class="muted needs-note">These downloads are held back by something on the tracker or download side. Stackarr
+  looks again by itself and searches as soon as it clears.
+  {% if admin %}<button class="btn small ghost" onclick="Stackarr.needsRecheck(this)">↻ Look again now</button>{% endif %}</p>
+{% endif %}
 {% if not requests %}
 <div class="empty"><p>No requests yet. Approve a suggestion or add one from Discover.</p></div>
 {% endif %}
 <div class="req-list fmt-group">
+  {# one entry per book: its formats, each with its status (status.py — the
+     same words as the book page); earlier attempts folded underneath #}
   {% for r in requests %}
-  <div class="req-row" data-id="{{ r.id }}" data-format="{{ r.format or 'audiobook' }}">
-    <img class="req-cover" src="{{ r.cover or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
+  <div class="req-row" data-id="{{ r.id }}" data-format="{{ r.formats[0] if r.formats|length == 1 else 'both' }}" data-formats="{{ r.formats|join(',') }}">
+    <a class="req-cover-link" href="{{ book_href(r.asin, r.title, r.author, r.formats[0]) }}"><img class="req-cover" src="{{ r.cover or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'"></a>
     <div class="req-info">
-      <div class="req-title">{% if multi_format %}<span class="req-fmt" title="{{ 'eBook' if r.format=='ebook' else 'Audiobook' }}">{{ fmt_icon(r.format) }}</span> {% endif %}{{ r.title }}{% if r.username %} <span class="subtle">· {{ r.username }}</span>{% endif %}</div>
+      <div class="req-title">{{ r.title }}{% if r.username %} <span class="subtle">· {{ r.username }}</span>{% endif %}</div>
       <div class="req-author">{{ r.author }}</div>
-      {% if r.detail %}<div class="req-detail" title="{{ r.detail }}">{{ r.detail }}</div>{% endif %}
+      <div class="req-status">
+        {% for f, fs in r.st.formats.items() %}<span class="req-st" data-fmt="{{ f }}">{{ status_pill(fs, f if multi_format else None) }}</span>{% endfor %}
+      </div>
+      {% if r.detail %}<div class="req-detail" title="{{ r.detail }}"{% if r.st.needs %} hidden{% endif %}>{{ r.detail }}</div>{% endif %}
+      <div class="req-needs">{% for f, fs in r.st.formats.items() %}{{ needs_list(fs, f) }}{% endfor %}</div>
+      {% if r.history %}<details class="req-history"><summary>Earlier attempts ({{ r.history|length }})</summary>
+        <ul>{% for h in r.history %}<li><span class="subtle">{{ (h.updated_at or h.created_at)|localtime }}</span>
+          {% if multi_format %}{{ 'eBook' if h.format == 'ebook' else 'Audiobook' if h.format == 'audiobook' else h.format }} · {% endif %}{{ {'failed':'Failed','denied':'Not approved','available':'In library','handed':'Requested','pending_approval':'Needs approval'}.get(h.status, h.status) }}{% if h.detail %} — {{ h.detail }}{% endif %}</li>{% endfor %}</ul>
+      </details>{% endif %}
     </div>
-    <span class="badge badge-{{ r.status }}">{{ {'queued':'Requested','handed':'Requested','available':'Available','failed':'Failed','pending_approval':'Awaiting approval','denied':'Not approved'}.get(r.status, r.status) }}</span>
     <div class="req-actions">
-      {% if r.status == 'failed' %}<button class="btn small" onclick="Stackarr.retry({{ r.id }})">Retry</button>{% endif %}
-      <button class="btn small ghost" onclick="Stackarr.removeRequest({{ r.id }})">Remove</button>
+      {% if r.retry_id %}<button class="btn small" onclick="Stackarr.retry({{ r.retry_id }})">Retry</button>{% endif %}
+      <button class="btn small ghost" onclick='Stackarr.removeRequest({{ r.ids|join(",")|tojson }})' title="Remove this book's requests (all attempts)">Remove</button>
     </div>
   </div>
   {% endfor %}

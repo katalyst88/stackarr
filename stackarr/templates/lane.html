@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_fmt.html" import fmt_filter, fmt_badge with context %}
+{% from "_fmt.html" import fmt_filter, fmt_badge, card_foot with context %}
 {% block content %}
 <button class="btn small ghost back-btn" onclick="history.back()">‹ Back</button>
 <div class="page-head"><h2 class="page-title">{{ title }} <span class="subtle">{{ rows|length }} picks</span></h2>
@@ -8,10 +8,10 @@
 <div class="grid fmt-group">
   {% for s in rows %}
   <div class="media-card" data-id="{{ s.id }}" data-format="{{ s.format or 'audiobook' }}">
-    <a class="media-poster" href="{{ url_for('main.book_page', asin=s.asin) }}">
-      <img src="{{ (s.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
+    <a class="media-poster" href="{{ book_href(s.asin, s.title, s.author, s.format) }}">
+      <img src="{{ (s|bookcover) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
       {{ fmt_badge(s.format) }}
-      {% if s.available %}<span class="corner-badge available">Available</span>
+      {% if s.available %}<span class="corner-badge available">In library</span>
       {% elif lane == 'upcoming' %}<span class="corner-badge handed">Coming {{ s.extra }}</span>
       {% elif lane == 'series' %}<span class="corner-badge series">Series</span>{% endif %}
       <div class="media-overlay">
@@ -25,7 +25,7 @@
         </div>
       </div>
     </a>
-    <div class="media-foot"><div class="media-title" title="{{ s.title }}">{{ s.title }}</div><div class="media-author">{{ s.author }}</div></div>
+    {{ card_foot(s) }}
   </div>
   {% endfor %}
 </div>

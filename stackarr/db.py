@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS library (
                                                 -- source ("cw:161", "kv:127"), so an
                                                 -- owned book never needs an external
                                                 -- cover lookup. Empty = not offered.
+  cover_at INTEGER DEFAULT 0,                   -- ABS item updatedAt (epoch s): the
+                                                -- cover's version for the caches
   first_seen TEXT DEFAULT (datetime('now','localtime')),
   last_seen TEXT,
   gone_at TEXT
@@ -177,6 +179,7 @@ def init():
                      "ALTER TABLE library ADD COLUMN format TEXT DEFAULT 'audiobook'",
                      "ALTER TABLE library ADD COLUMN source TEXT DEFAULT 'abs'",
                      "ALTER TABLE library ADD COLUMN cover TEXT DEFAULT ''",
+                     "ALTER TABLE library ADD COLUMN cover_at INTEGER DEFAULT 0",
                      "ALTER TABLE suggestions ADD COLUMN format TEXT DEFAULT 'audiobook'",
                      "ALTER TABLE requests ADD COLUMN format TEXT DEFAULT 'audiobook'",
                      "ALTER TABLE ratings ADD COLUMN review TEXT DEFAULT ''",
@@ -319,13 +322,63 @@ def invalidate_cover_index():
     _COVER_INDEX_AT = 0.0
 
 
+def _author_keys(author: str) -> set[str]:
+    """Every way a library row names its authors: "Jeff Hays, Matt Dinniman"
+    → both, "Dinniman, Matt" → "dinniman", "matt" and "matt dinniman"."""
+    from . import titles
+    parts = [p.strip() for p in re.split(r",|&|\band\b", author or "") if p.strip()]
+    keys = {titles.norm(p) for p in parts}
+    if len(parts) == 2 and all(" " not in p for p in parts):
+        keys.add(titles.norm(f"{parts[1]} {parts[0]}"))
+    return {k for k in keys if k}
+
+
+def _index_work(work: dict, work_base: dict, title: str, author: str, series: str, ref: str) -> None:
+    """Index a library row by its work title (titles.display: no "(Unabridged)",
+    no "Series, Book 3 - …", no series-name subtitle) per author, and by the
+    part before a subtitle — dropped when two different works share it."""
+    from . import titles
+    full, base, tail = titles.parts(titles.display(title or "", series or ""))
+    if not full:
+        return
+    for a in _author_keys(author):
+        work.setdefault((full, a), ref)
+        if tail:
+            k = (base, a)
+            if k not in work_base:
+                work_base[k] = (full, ref)
+            elif work_base[k] and work_base[k][0] != full:
+                work_base[k] = None                       # ambiguous stem: refuse to guess
+
+
+def _work_cover(idx: dict, title: str, author: str) -> str:
+    """A library cover for the same work by the same first author, with the
+    subtitle tolerance of titles.matches; "" if none or ambiguous."""
+    from . import titles
+    full, base, tail = titles.parts(titles.display(title or ""))
+    a = titles.norm((author or "").split(",")[0])
+    if not full or not a:
+        return ""
+    hit = idx["work"].get((full, a))
+    if hit:
+        return hit
+    if tail:                                # "Dungeon Crawler Carl: A LitRPG…" vs "Dungeon Crawler Carl"
+        return idx["work"].get((base, a), "")
+    return idx["work_base"].get((full, a), "")    # "The Captain" vs "The Captain: The Last Horizon"
+
+
 def _cover_index() -> dict[str, dict[str, str]]:
     """{title+author key -> ref}, {title-only key -> ref} and {asin -> ref}.
 
     Built once and reused. Matching has to run through rating_key's
     normalisation, which can't be expressed in SQL, and doing that per <img>
     meant a full scan of every library row per cover — 59 scans of 3,300 rows to
-    draw one page. The index makes each lookup a dict hit."""
+    draw one page. The index makes each lookup a dict hit.
+
+    Audiobookshelf wins when a book is in more than one place: it's where the
+    household curates its covers. Its audiobook item first, then its ebook item,
+    then the other ebook servers. `ver` maps an ABS item to its update time, the
+    cover's version (covers.local_url puts it in the URL)."""
     global _COVER_INDEX, _COVER_INDEX_AT
     with _COVER_INDEX_LOCK:
         if _COVER_INDEX and (time.time() - _COVER_INDEX_AT) < _COVER_INDEX_TTL:
@@ -333,26 +386,35 @@ def _cover_index() -> dict[str, dict[str, str]]:
         by_key: dict[str, str] = {}
         by_title: dict[str, str] = {}
         by_asin: dict[str, str] = {}
+        ver: dict[str, int] = {}
+        work: dict[tuple, str] = {}
+        work_base: dict[tuple, tuple] = {}
         with conn() as c:
             rows = c.execute(
-                "SELECT title,author,asin,cover,item_id,source FROM library "
-                "WHERE gone_at IS NULL AND (cover<>'' OR source='abs')").fetchall()
-        for r in rows:
-            ref = r["cover"] or (r["item_id"] if r["source"] == "abs" else "")
+                "SELECT title,author,asin,cover,item_id,source,cover_at,series FROM library "
+                "WHERE gone_at IS NULL AND (cover<>'' OR source IN ('abs','abs_ebooks'))").fetchall()
+        rank = {"abs": 0, "abs_ebooks": 1}
+        for r in sorted(rows, key=lambda r: rank.get(r["source"], 2)):
+            is_abs = r["source"] in rank
+            ref = r["item_id"] if is_abs else r["cover"]
             if not ref:
                 continue
+            if is_abs:
+                ver[ref] = int(r["cover_at"] or 0)
+            _index_work(work, work_base, r["title"], r["author"], r["series"], ref)
             by_key.setdefault(rating_key("", r["title"], r["author"]), ref)
             # title-only too: Kavita stores a series with no author, so an
             # author-bearing render would otherwise never match its own book
             by_title.setdefault(rating_key("", r["title"], ""), ref)
             if r["asin"]:
                 by_asin.setdefault(r["asin"], ref)
-        _COVER_INDEX = {"key": by_key, "title": by_title, "asin": by_asin}
+        _COVER_INDEX = {"key": by_key, "title": by_title, "asin": by_asin, "ver": ver,
+                        "work": work, "work_base": {k: v[1] for k, v in work_base.items() if v}}
         _COVER_INDEX_AT = time.time()
         return _COVER_INDEX
 
 
-def library_cover(title: str, author: str = "", asin: str = "") -> str:
+def library_cover(title: str, author: str = "", asin: str = "", strict: bool = False) -> str:
     """The LOCAL cover ref for a book we own ("cw:161", "kv:127", or an ABS
     item_id), or "" when it isn't in the library.
 
@@ -360,14 +422,27 @@ def library_cover(title: str, author: str = "", asin: str = "") -> str:
     so it survives the punctuation differences between sources. Owned books are
     the overwhelming majority of what the UI renders, and every one has art on a
     service in this house — resolving here is what stops the UI asking a third
-    party for a picture we already hold."""
+    party for a picture we already hold.
+
+    `strict`: a caller that HAS catalogue art and an author only takes the
+    library's cover on an ASIN or title+author match, never a same-titled book
+    by someone else."""
     want = rating_key("", title, author)
     if not want or want == "t-":
         return ""
     idx = _cover_index()
     if asin and asin in idx["asin"]:
         return idx["asin"][asin]
-    return idx["key"].get(want) or idx["title"].get(rating_key("", title, "")) or ""
+    hit = idx["key"].get(want) or _work_cover(idx, title, author)
+    if hit or (strict and (author or "").strip()):
+        return hit or ""
+    return idx["title"].get(rating_key("", title, "")) or ""
+
+
+def cover_version(item_id: str) -> int:
+    """When Audiobookshelf last changed this item (epoch seconds), 0 if unknown.
+    A cover fixed in ABS bumps it, so a cached copy older than this is stale."""
+    return _cover_index()["ver"].get(item_id or "", 0)
 
 
 def secret_key() -> str:
@@ -703,3 +778,63 @@ def recent_ratings(limit: int = 14) -> list[dict]:
         if len(out) >= limit:
             break
     return out
+
+
+# --- requests: one row per (user, book, format) -----------------------------
+OPEN_REQUEST = ("queued", "handed", "approving", "pending_approval")
+
+
+def _same_request(c, user_id: int, asin: str, title: str, fmt: str) -> list[dict]:
+    """This user's rows for the same book in exactly this format, newest first.
+    Same book = same ASIN, or the same title (case/space-insensitive)."""
+    return [dict(r) for r in c.execute(
+        "SELECT id, status, format FROM requests WHERE user_id=? AND format=? "
+        "AND ((asin<>'' AND asin=?) OR lower(trim(title))=lower(trim(?))) ORDER BY id DESC",
+        (user_id, fmt or "audiobook", asin or "", title or ""))]
+
+
+def contains(s: str) -> str:
+    """A LIKE pattern for "contains s", with s's own % and _ taken literally.
+    Use with ESCAPE '\\' (an author named "100%_Pure" shouldn't match everyone)."""
+    s = (s or "").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{s}%"
+
+
+def open_request(c, user_id: int, asin: str, title: str, fmt: str) -> dict | None:
+    """The user's request for this book + format that is still being worked on
+    (with Chaptarr, or waiting for approval), if any — asking again must not
+    add a second row or a second Chaptarr search."""
+    for r in _same_request(c, user_id, asin, title, fmt):
+        if r["status"] in OPEN_REQUEST:
+            return r
+    return None
+
+
+def record_request(c, user_id: int, book: dict, fmt: str, status: str, detail: str = "",
+                   ref: str = "", source: str = "manual") -> int:
+    """Write a request attempt. A book has ONE row per user and format: a new
+    attempt updates the newest existing row (a failed, declined or since-
+    removed one) instead of adding another — re-requesting The Pilot used to
+    leave four rows, two failed, on the Requests page. Rows already in the
+    database are never merged or deleted here; the Requests page groups them.
+    Returns the row id."""
+    asin, title = book.get("asin", "") or "", book.get("title", "") or ""
+    same = _same_request(c, user_id, asin, title, fmt)
+    if same:
+        rid = same[0]["id"]
+        c.execute("UPDATE requests SET status=?, detail=?, chaptarr_ref=?, source=?, "
+                  "asin=CASE WHEN ?<>'' THEN ? ELSE asin END, "
+                  "cover=CASE WHEN ?<>'' THEN ? ELSE cover END, "
+                  "updated_at=datetime('now','localtime') WHERE id=?",
+                  (status, detail, ref, source, asin, asin, book.get("cover", "") or "",
+                   book.get("cover", "") or "", rid))
+    else:
+        rid = c.execute(
+            "INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (user_id, asin, title, book.get("author", "") or "", book.get("cover", "") or "",
+             status, detail, ref, source, fmt or "audiobook")).lastrowid
+    # a new attempt starts with a clean slate: the last release check (what the
+    # download needed) was about the previous attempt on this row id
+    c.execute("DELETE FROM meta WHERE k=?", (f"relcheck:{rid}",))
+    return rid

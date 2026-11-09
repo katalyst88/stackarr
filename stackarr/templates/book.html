@@ -1,41 +1,45 @@
 {% extends "base.html" %}
-{% from "_fmt.html" import fmt_icon, fmt_label with context %}
+{% from "_fmt.html" import fmt_icon, fmt_label, status_badge, status_pill, needs_list with context %}
 {% block content %}
-{% macro grab_actions(half=False) %}
-  {% if multi_format %}
-    {# both mode: compact 'Add' + format icon, half-width side by side #}
-    <div class="grab-pair">
-      <button class="btn grab-half" title="Add audiobook" onclick='Stackarr.grabFormat({{ b|tojson }}, "audiobook", this)'>{{ fmt_icon('audiobook') }} Add</button>
-      <button class="btn grab-half" title="Add eBook" onclick='Stackarr.grabFormat({{ b|tojson }}, "ebook", this)'>{{ fmt_icon('ebook') }} Add</button>
+{# The page is the WORK: title, author, series — then its formats, each with
+   its own status and action (_work_view in routes.py; status from status.py). #}
+{% macro format_rows() %}
+<section class="formats" aria-label="Formats">
+  {% for r in fmt_rows %}
+  <div class="format-row" data-fmt="{{ r.fmt }}">
+    <div class="format-ic" aria-hidden="true">{{ fmt_icon(r.fmt) }}</div>
+    <div class="format-main">
+      <div class="format-name">{{ r.label }}{% for x in r.facts %}<span class="subtle"> · {{ x }}</span>{% endfor %}
+        {% if r.narrators %}<span class="subtle"> · narrated by </span>{% for nm in r.narrators %}<a class="author-link" href="{{ url_for('main.narrator_page', name=nm) }}">{{ nm }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</div>
+      <div class="format-status">{% if r.st.label %}{{ status_pill(r.st) }}{% else %}<span class="muted">Not in your library</span>{% endif %}
+        {% if r.st.detail and r.st.state != 'available' and not r.st.needs %}<span class="subtle format-detail">{{ r.st.detail }}</span>{% endif %}</div>
+      {{ needs_list(r.st) }}
     </div>
-  {% else %}
-    {% if b.state == 'available' %}<button class="btn" disabled>In library</button>
-    {% elif b.state in ('handed','queued') %}<button class="btn" disabled>Requested</button>
-    {% elif b.state == 'failed' %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>{{ fmt_icon(b.format) }} Retry</button>
-    {% else %}<button class="btn" onclick='Stackarr.bookRequest({{ b|tojson }}, this)'>{{ fmt_icon(b.format) }} Add book</button>{% endif %}
-  {% endif %}
+    <div class="format-act">
+      {% if r.can_request %}<button class="btn small" title="{{ 'Retry' if r.retry else 'Request' }} the {{ r.label }}" onclick='Stackarr.grabFormat({{ b|tojson }}, "{{ r.fmt }}", this)'>{{ 'Retry' if r.retry else 'Request' }}</button>
+      {% elif r.open_url %}<a class="btn small ghost" href="{{ r.open_url }}" target="_blank" rel="noopener">Open in Audiobookshelf ↗</a>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
 {% endmacro %}
 <button class="btn small ghost back-btn" onclick="history.back()">‹ Back</button>
 <div class="book-detail">
   <div class="book-cover">
-    <img src="{{ b.cover or url_for('static', filename='cover-placeholder.svg') }}" alt="">
-    {% if b.state == 'available' %}<span class="corner-badge available">Available</span>
-    {% elif b.state in ('handed','queued') %}<span class="corner-badge handed">Requested</span>{% endif %}
+    <img src="{{ (b|bookcover) or url_for('static', filename='cover-placeholder.svg') }}" alt="">
+    {{ status_badge(st) }}
   </div>
   <div class="book-info">
-    <h1 class="book-title">{{ b.title }}</h1>
-    {% if b.subtitle %}<p class="book-subtitle">{{ b.subtitle }}</p>{% endif %}
-    <p class="book-author">
+    <h1 class="book-title">{{ work.title }}</h1>
+    {% if work.subtitle %}<p class="book-subtitle">{{ work.subtitle }}</p>{% endif %}
+    <p class="book-author">by
       {% for a in (b.author or '').split(',') if a.strip() %}<a class="author-link" href="{{ url_for('main.author_page', name=a.strip()) }}">{{ a.strip() }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
-      {% if b.narrator %}<span class="subtle"> · narrated by </span>{% for nm in b.narrator.split(',') if nm.strip() %}<a class="author-link" href="{{ url_for('main.narrator_page', name=nm.strip()) }}">{{ nm.strip() }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
     </p>
+    {% if work.series %}<p class="book-series">{% if work.series_href %}<a class="author-link" href="{{ work.series_href }}">{{ work.series }}</a>{% else %}{{ work.series }}{% endif %}{% if work.seq is not none %}<span class="subtle"> · Book {{ work.seq|int if work.seq == work.seq|int else work.seq }}</span>{% endif %}</p>{% endif %}
     <div class="book-meta">
-      {% if b.series %}<span class="chip">{{ b.series }}{% if b.sequence %} #{{ b.sequence }}{% endif %}</span>{% endif %}
-      {% if b.runtime_hours %}<span class="chip">⏱ {{ b.runtime_hours }}h</span>{% endif %}
-      {% if b.pages %}<span class="chip">📄 {{ '{:,}'.format(b.pages) }} pages</span>{% endif %}
+      {% if finished %}<span class="chip finished-chip" title="{{ 'On your Read shelf' if shelf == 'read' else 'Finished in Audiobookshelf' }}">✓ Finished</span>{% endif %}
       {% if b.rating %}<span class="chip">★ {{ b.rating }}{% if b.num_ratings %} ({{ '{:,}'.format(b.num_ratings) }}){% endif %}</span>{% endif %}
       {% if b.release_date %}<span class="chip">📅 {{ b.release_date }}</span>{% endif %}
-      {% if multi_format and b.format %}<span class="chip">{{ 'eBook' if b.format == 'ebook' else 'Audiobook' }}</span>{% endif %}
       {% if b.language %}<span class="chip">{{ b.language }}</span>{% endif %}
       {% if b.publisher %}<span class="chip subtle-chip">{{ b.publisher }}</span>{% endif %}
     </div>
@@ -49,11 +53,10 @@
     {% if tags and tags.warning %}<details class="cw"><summary>⚠️ Content warnings ({{ tags.warning|length }})</summary>
       <div class="cw-list">{% for w in tags.warning %}<span class="chip cw-chip">{{ w }}</span>{% endfor %}</div>
       <p class="muted" style="font-size:12px">Auto-detected from catalogue subjects — may be incomplete.</p></details>{% endif %}
-    {# primary grab actions — above the description so they're reachable at once #}
+    {# the formats — reachable at once, above the description #}
+    {{ format_rows() }}
     <div class="book-actions">
-      {% if multi_format and b.state == 'available' %}<span class="chip">In library</span>{% endif %}
-      {{ grab_actions() }}
-      <button class="btn ghost" onclick='Stackarr.bookIgnore({{ b|tojson }}, this)'>Not interested</button>
+      <button class="btn ghost small" onclick='Stackarr.bookIgnore({{ b|tojson }}, this)'>Not interested</button>
     </div>
 
     {% if b.summary %}<p class="book-summary">{{ b.summary }}</p>{% endif %}
@@ -65,19 +68,6 @@
       <button class="btn small ghost shelf-btn {{ 'on' if shelf == st }}" data-state="{{ st }}" onclick="Stackarr.setShelf('{{ st }}', this)">{{ lbl }}</button>
       {% endfor %}
     </div>
-    {% if owned_formats and (('audiobook' in owned_formats) != ('ebook' in owned_formats)) %}
-    <div class="dup-note">
-      {% set have = 'audiobook' if 'audiobook' in owned_formats else 'ebook' %}
-      {% set other = 'ebook' if have == 'audiobook' else 'audiobook' %}
-      <span>You own the {{ 'audiobook' if have == 'audiobook' else 'eBook' }} of this.</span>
-      <button class="btn small" onclick='Stackarr.grabFormat({{ b|tojson }}, "{{ other }}", this)'>{{ fmt_icon(other) }} Also get the {{ 'eBook' if other == 'ebook' else 'audiobook' }}</button>
-    </div>
-    {% endif %}
-    {% if b.state == 'failed' %}
-    <div class="error-banner">
-      <strong>Couldn't grab this one yet.</strong> {{ b.req_detail or "Chaptarr couldn't find or fetch a copy. You can retry below." }}
-    </div>
-    {% endif %}
     {# quiet taste-tuning row #}
     <div class="feedback-row">
       <button class="icon-pill" title="More like this" onclick='Stackarr.feedback({{ b|tojson }}, "more", this)'>👍</button>
@@ -87,9 +77,17 @@
   </div>
 </div>
 
-{# below-the-fold: repeat the primary grab actions so they're reachable after reading #}
+{# "Next in <series>": filled by Stackarr.loadSeriesStrip() from /api/series/next #}
+{% if b.series or b.series_asin %}
+<section class="section series-strip-wrap" id="series-next" data-series-strip hidden
+         data-asin="{{ b.asin if (b.asin or '').startswith('B') else '' }}" data-series-asin="{{ b.series_asin or '' }}"
+         data-series="{{ b.series or '' }}" data-author="{{ (b.author or '').split(',')[0] }}"
+         data-title="{{ b.title }}" data-seq="{{ b.sequence if b.sequence is not none else '' }}"></section>
+{% endif %}
+
+{# below-the-fold: a way back up (the grab actions live once, at the top — repeating
+   them here showed every Add button twice) #}
 <div class="book-actions-bottom">
-  {{ grab_actions() }}
   <button class="btn ghost" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑ Back to top</button>
 </div>
 
@@ -100,10 +98,10 @@
     <p class="muted">Your rating{% if community.count %} <span class="community-inline">· community ★ {{ community.avg }} ({{ community.count }}){% endif %}</span></p>
     <div class="rate-stars big" id="my-stars" data-asin="{{ rate_key }}" data-title="{{ b.title }}" data-author="{{ b.author }}">
       {% for n in [1,2,3,4,5] %}<span class="star {{ 'on' if my_stars and n <= my_stars }}"
-        onclick="Stackarr.rate({{ rate_key|tojson }},{{ n }},this)">★</span>{% endfor %}
+        onclick='Stackarr.rate({{ rate_key|tojson }},{{ n }},this)'>★</span>{% endfor %}
     </div>
     <p class="muted" style="font-size:12.5px;margin-top:6px">A quick rating sharpens your recommendations.</p>
   </div>
 </section>
 {% endblock %}
-{% block scripts %}<script>Stackarr.boot();</script>{% endblock %}
+{% block scripts %}<script>Stackarr.boot();Stackarr.loadSeriesStrip();</script>{% endblock %}

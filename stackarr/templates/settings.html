@@ -34,6 +34,36 @@
           </select></label>
         <p class="muted">Changing this reloads the page so format-specific menus update.</p>
       </div>
+      <div class="panel"><h3>Timezone</h3>
+        <p class="muted">The day a book counts as finished on (reading activity, the yearly goal,
+          "finished yesterday", the Continue card) and the times shown on Requests. Type to search —
+          e.g. <i>Melbourne</i>. Default: {{ timezone_default }}{% if timezone_default != 'UTC' %} (the TZ variable){% endif %}.</p>
+        <label class="row"><span>Zone</span>
+          <input id="tz-input" list="tz-list" value="{{ timezone }}" autocomplete="off" spellcheck="false"
+                 placeholder="Area/City" aria-label="Timezone"></label>
+        <datalist id="tz-list">{% for z in timezones %}<option value="{{ z }}">{% endfor %}</datalist>
+        <button class="btn" onclick="Stackarr.saveTimezone(this)">Save</button>
+      </div>
+      <div class="panel"><h3>Cover style</h3>
+        <label class="row"><span>Covers</span>
+          <select onchange="Stackarr.setSetting({cover_style: this.value})">
+            <option value="audible" {{ 'selected' if cover_style != 'clean' }}>Audible — as the catalogue has them</option>
+            <option value="clean" {{ 'selected' if cover_style == 'clean' }}>Clean — the print / eBook cover where there is one</option>
+          </select></label>
+        <p class="muted">Clean swaps Audible's banner art for the book's print cover from Google Books / Open Library,
+          and keeps the Audible cover when there isn't one. Covers are looked up in the background, so they change over
+          a page view or two. Your own library's covers are never replaced.</p>
+      </div>
+      <div class="panel"><h3>Stuck requests</h3>
+        <label class="row"><span>Check why a request isn't downloading</span>
+          <input type="checkbox" class="switch" {{ 'checked' if release_check }}
+                 onchange="Stackarr.setSetting({release_check: this.checked})"></label>
+        <p class="muted">A quarter of an hour after a request goes upstream, if nothing is downloading,
+          Stackarr checks once and says what the download needs, in plain words (<i>Needs VIP</i>,
+          <i>Needs ratio</i>, <i>No seeders</i>, <i>No ebook release</i>…). It looks again by itself — hourly
+          for an indexer outage, daily for the rest, and straight away when the indexer or download-client
+          settings change — one book a minute at most, and searches as soon as the need clears.</p>
+      </div>
       {% endif %}
     </div>
 
@@ -157,6 +187,7 @@
       <div class="panel"><h3>Audiobookshelf</h3>
         <label class="row"><span>URL</span><input data-setting="abs_url" value="{{ conn.abs_url }}"></label>
         <label class="row"><span>Admin API token</span><input type="password" data-setting="abs_admin_token" value="{{ conn.abs_admin_token }}"></label>
+        <label class="row"><span>Public URL <span class="subtle">(optional — the address your browser opens ABS at, for "Open in Audiobookshelf" links)</span></span><input data-setting="abs_public_url" value="{{ conn.abs_public_url }}" placeholder="https://abs.example.com"></label>
         <div class="conn-actions"><button class="btn small ghost" onclick="Stackarr.testConn('abs', this)">Test</button>
           <span class="conn-result" id="test-abs"></span></div>
       </div>

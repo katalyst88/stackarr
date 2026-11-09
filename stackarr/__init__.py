@@ -60,13 +60,21 @@ def create_app() -> Flask:
     @app.after_request
     def _security_headers(resp):
         resp.headers.pop("X-Frame-Options", None)   # CSP frame-ancestors supersedes it
-        resp.headers["Content-Security-Policy"] = f"frame-ancestors {config.FRAME_ANCESTORS}"
+        fa = f"frame-ancestors {config.FRAME_ANCESTORS}"
+        own = resp.headers.get("Content-Security-Policy")     # a route's own (a sandboxed SVG cover)
+        resp.headers["Content-Security-Policy"] = f"{own}; {fa}" if own else fa
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["Referrer-Policy"] = "same-origin"
         return resp
 
     from . import audible
     app.jinja_env.filters["hires"] = lambda u: audible._hi_res(u or "")
+    from . import tz
+    app.jinja_env.filters["localtime"] = tz.fmt
+    from . import covers
+    app.jinja_env.filters["bookcover"] = covers.bookcover   # Settings → Cover style
+    from . import titles
+    app.jinja_env.filters["work_title"] = titles.display    # "Reaper: Cradle, Book 10" → "Reaper"          # stored timestamps, in Settings → Timezone
 
     from flask import request, abort
     from urllib.parse import urlparse

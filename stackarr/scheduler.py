@@ -7,7 +7,7 @@ import queue
 import threading
 import time
 
-from . import absclient, backends, chaptarr, config, db, formats, notify, recommend, titles
+from . import absclient, backends, chaptarr, config, db, formats, notify, picks, recommend, titles, tz
 
 log = logging.getLogger("stackarr.scheduler")
 
@@ -66,8 +66,8 @@ def refresh_library():
                     continue
                 seen.add(m["item_id"])
                 c.execute(
-                    "INSERT INTO library (item_id,library_id,title,author,asin,series,series_seq,narrator,format,source,cover,last_seen) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now','localtime')) "
+                    "INSERT INTO library (item_id,library_id,title,author,asin,series,series_seq,narrator,format,source,cover,cover_at,last_seen) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now','localtime')) "
                     "ON CONFLICT(item_id) DO UPDATE SET title=excluded.title,"
                     "author=excluded.author,asin=excluded.asin,series=excluded.series,"
                     "series_seq=excluded.series_seq,narrator=excluded.narrator,"
@@ -76,10 +76,12 @@ def refresh_library():
                     # one, so a backend that briefly stops offering the link doesn't
                     # blank every cover it owns
                     "cover=CASE WHEN excluded.cover<>'' THEN excluded.cover ELSE library.cover END,"
+                    "cover_at=MAX(excluded.cover_at, COALESCE(library.cover_at, 0)),"
                     "last_seen=excluded.last_seen,gone_at=NULL",
                     (m["item_id"], m.get("library_id", ""), m["title"], m["author"], m.get("asin", ""),
                      m.get("series", ""), m.get("series_seq"), m.get("narrator", ""),
-                     m.get("format", "audiobook"), m.get("source", "abs"), m.get("cover", "") or ""))
+                     m.get("format", "audiobook"), m.get("source", "abs"), m.get("cover", "") or "",
+                     int(m.get("cover_at") or 0)))
 
         # deletions -> "delete habit" negative signal for every user. ONLY sweep
         # items belonging to a source that reported successfully this cycle — a
@@ -136,6 +138,9 @@ def refresh_library():
     # covers may have been added or changed this cycle
     db.invalidate_cover_index()
 
+    # pending picks this cycle made stale (now owned / requested / finished)
+    retire_stale_picks()
+
     # notify outside the DB transaction (each channel self-gates on its config)
     base = db.get_meta("public_url", "")
     for r in newly_available:
@@ -143,6 +148,15 @@ def refresh_library():
             notify.request_available(r, base_url=base)
         except Exception as e:
             log.warning("availability notify failed for %s: %s", r.get("title"), e)
+
+
+def retire_stale_picks():
+    """Retire every user's pending picks that are now owned, requested or
+    finished (see picks.py). Runs after each library refresh."""
+    with db.conn() as c:
+        users = [dict(r) for r in c.execute("SELECT id, abs_token FROM users")]
+    for u in users:
+        picks.retire_for(u)
 
 
 def _request_media(fmt: str) -> list[str]:
@@ -172,7 +186,7 @@ def _in_library(c, r: dict, media: str) -> bool:
     author = (r["author"] or "").split(",")[0].strip().lower()
     rows = [dict(x) for x in c.execute(
         "SELECT title, asin FROM library WHERE gone_at IS NULL AND format=? "
-        "AND (?='' OR lower(author) LIKE ?)", (media, author, f"%{author}%"))]
+        "AND (?='' OR lower(author) LIKE ? ESCAPE '\\')", (media, author, db.contains(author)))]
     return bool(titles.matches(rows, r["title"], r.get("asin") or ""))
 
 
@@ -200,6 +214,9 @@ def run_for_user(user_id: int, force: bool = False) -> int:
     added = 0
     try:
         db.set_meta(key, str(time.time()))     # inside try so finally always releases the lock
+        # a queue full of picks that are already owned/requested/read has no
+        # room, so retire those first — otherwise the recommender never runs
+        picks.retire_for(db.get_user(user_id))
         with db.conn() as c:
             pending = c.execute("SELECT COUNT(*) n FROM suggestions WHERE user_id=? AND status='pending'",
                                 (user_id,)).fetchone()["n"]
@@ -286,10 +303,7 @@ def auto_approve(user_id: int) -> int:
             continue                    # per-item catalogue miss → skip it, keep going
 
         with db.conn() as c:
-            c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
-                      "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                      (user_id, r.get("asin", ""), r["title"], r.get("author", ""),
-                       r.get("cover", ""), "handed", res.get("detail", ""), res.get("ref", ""), "auto", fmt))
+            db.record_request(c, user_id, r, fmt, "handed", res.get("detail", ""), res.get("ref", ""), "auto")
             c.execute("UPDATE suggestions SET status='approved',decided_at=datetime('now','localtime') WHERE id=?",
                       (r["id"],))
         added += 1
@@ -317,7 +331,7 @@ def new_release_radar():
     import datetime
     if db.get_meta("notify_newrelease_enabled", "0") != "1":
         return
-    today = datetime.date.today()
+    today = tz.today()
     cutoff = str(today - datetime.timedelta(days=30))
     base = db.get_meta("public_url", "")
     # check the catalogue of the primary active format
@@ -390,9 +404,14 @@ def queue_cover(asin: str, title: str, author: str, fmt: str) -> bool:
         return False
 
 
-def _resolve_one(asin: str, title: str, author: str, fmt: str, key: str):
+COVER_RETRY_MINUTES = (1, 5, 30)     # backoff when a lookup ERRORS (rate limit, timeout)
+_cover_retry: list = []              # [(ready_at, item, attempt)]
+
+
+def _resolve_one(asin: str, title: str, author: str, fmt: str, key: str, attempt: int = 0):
     from . import audible, ebookmeta
-    cover = ""
+    cover, failed = "", False
+    before = audible.errors()
     try:
         if asin.startswith("B0"):
             cover = (audible.by_asin(asin) or {}).get("cover", "")
@@ -404,9 +423,18 @@ def _resolve_one(asin: str, title: str, author: str, fmt: str, key: str):
                 cover = hits[0].get("cover", "")
     except Exception as e:
         log.debug("cover resolve failed for %s: %s", title, e)
+        failed = True
+    failed = failed or audible.errors() > before
     cache_key = "cart:" + key
     if cover:
         db.set_meta(cache_key, cover)
+        return
+    if failed and attempt < len(COVER_RETRY_MINUTES):
+        # an error isn't "no cover": try again later instead of caching a miss
+        # (the book stays de-duplicated in _cover_seen meanwhile)
+        with _cover_lock:
+            _cover_retry.append((time.time() + COVER_RETRY_MINUTES[attempt] * 60,
+                                 (asin, title, author, fmt, key), attempt + 1))
         return
     # A miss is remembered, but only for a while. Never caching it made every
     # render retry every miss, which is what exhausted the Google Books daily
@@ -418,11 +446,73 @@ def _resolve_one(asin: str, title: str, author: str, fmt: str, key: str):
     db.set_meta(cache_key, "none")
 
 
+# Other small lookups that must never run on a page request ride the same
+# paced worker: ("bookid", title, author, fmt) resolves a card's book page so
+# the next render links straight to it (routes.resolve_book_id).
+_job_q: "queue.Queue[tuple]" = queue.Queue(maxsize=2000)
+_job_seen: dict = {}                 # key -> when it was queued
+JOB_REQUEUE_SECONDS = 3600           # a lookup isn't queued twice within this
+_JOB_SEEN_MAX = 20000
+
+
+def queue_job(kind: str, *args) -> bool:
+    """Queue a background lookup at most once an hour (its answer is cached
+    in meta, so a re-queue only happens once that answer has expired). True
+    if newly queued."""
+    key = (kind,) + tuple(str(a).lower() for a in args[:3])
+    now = time.time()
+    with _cover_lock:
+        if now - _job_seen.get(key, -JOB_REQUEUE_SECONDS) < JOB_REQUEUE_SECONDS:
+            return False
+        if len(_job_seen) >= _JOB_SEEN_MAX:            # keep it bounded
+            for k in [k for k, t in _job_seen.items() if now - t >= JOB_REQUEUE_SECONDS]:
+                del _job_seen[k]
+            if len(_job_seen) >= _JOB_SEEN_MAX:
+                _job_seen.clear()
+        _job_seen[key] = now
+    try:
+        _job_q.put_nowait((kind,) + args)
+        return True
+    except queue.Full:
+        with _cover_lock:
+            _job_seen.pop(key, None)
+        return False
+
+
+def _run_job(kind: str, *args):
+    if kind == "bookid":
+        from . import routes
+        routes.resolve_book_id(*args)
+    elif kind == "pcover":
+        from . import covers
+        covers.resolve(*args)
+    elif kind == "tags":
+        from . import tagging
+        key, title, author, cats = args
+        tagging.fetch_for(key, title, author, cats)
+
+
 def _cover_worker():
     while True:
         try:
-            item = _cover_q.get()
-            _resolve_one(*item)
+            due = None
+            with _cover_lock:
+                now = time.time()
+                for i, (ready, item, attempt) in enumerate(_cover_retry):
+                    if ready <= now:
+                        due = _cover_retry.pop(i)
+                        break
+            if due:
+                _resolve_one(*due[1], attempt=due[2])
+            try:
+                item = _cover_q.get(timeout=0.05 if (not _job_q.empty() or _cover_retry) else 5)
+                _resolve_one(*item)
+            except queue.Empty:
+                pass
+            try:
+                _run_job(*_job_q.get_nowait())
+            except queue.Empty:
+                pass
         except Exception as e:
             log.debug("cover worker error: %s", e)
         finally:
@@ -492,4 +582,6 @@ def _daily_user_sync():
 def start():
     threading.Thread(target=_loop, name="stackarr-worker", daemon=True).start()
     threading.Thread(target=_cover_worker, name="stackarr-covers", daemon=True).start()
+    from . import releasecheck
+    threading.Thread(target=releasecheck.worker, name="stackarr-releases", daemon=True).start()
     log.info("background worker started (every %d min)", config.LIBRARY_REFRESH_MINUTES)

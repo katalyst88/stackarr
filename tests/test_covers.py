@@ -151,7 +151,8 @@ def test_coverart_answers_immediately_for_an_unknown_book(client):
     r = client.get("/coverart?title=Totally+Unknown+Thing&author=X&asin=&fmt=ebook")
     elapsed = time.time() - t
     assert r.status_code == 302
-    assert "cover-placeholder" in r.headers["Location"]
+    # the "Fetching cover…" placeholder — the real art follows (test_cover_wip.py)
+    assert "cover-wip" in r.headers["Location"]
     assert elapsed < 0.5, f"coverart took {elapsed:.2f}s; it must never block a page"
 
 
