@@ -66,8 +66,8 @@ def refresh_library():
                     continue
                 seen.add(m["item_id"])
                 c.execute(
-                    "INSERT INTO library (item_id,library_id,title,author,asin,series,series_seq,narrator,format,source,cover,last_seen) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now','localtime')) "
+                    "INSERT INTO library (item_id,library_id,title,author,asin,series,series_seq,narrator,format,source,cover,cover_at,last_seen) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,datetime('now','localtime')) "
                     "ON CONFLICT(item_id) DO UPDATE SET title=excluded.title,"
                     "author=excluded.author,asin=excluded.asin,series=excluded.series,"
                     "series_seq=excluded.series_seq,narrator=excluded.narrator,"
@@ -76,10 +76,12 @@ def refresh_library():
                     # one, so a backend that briefly stops offering the link doesn't
                     # blank every cover it owns
                     "cover=CASE WHEN excluded.cover<>'' THEN excluded.cover ELSE library.cover END,"
+                    "cover_at=MAX(excluded.cover_at, COALESCE(library.cover_at, 0)),"
                     "last_seen=excluded.last_seen,gone_at=NULL",
                     (m["item_id"], m.get("library_id", ""), m["title"], m["author"], m.get("asin", ""),
                      m.get("series", ""), m.get("series_seq"), m.get("narrator", ""),
-                     m.get("format", "audiobook"), m.get("source", "abs"), m.get("cover", "") or ""))
+                     m.get("format", "audiobook"), m.get("source", "abs"), m.get("cover", "") or "",
+                     int(m.get("cover_at") or 0)))
 
         # deletions -> "delete habit" negative signal for every user. ONLY sweep
         # items belonging to a source that reported successfully this cycle — a

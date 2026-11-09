@@ -82,6 +82,16 @@ All notable changes to Stackarr.
 - Release check: a cleared request whose search couldn't be sent is tried
   again later (not shown as "Searching again"), and a Chaptarr outage between
   "held" and "cleared" no longer loses the search.
+- One book, one cover: Home's "Continue <series>" strip showed the
+  catalogue's Audible art (banner and all) while the shelves showed the
+  library's cover. Every section, book page and series page now asks one
+  resolver: the library's own cover when you own the book (Audiobookshelf
+  first, where covers are curated; then the other ebook servers), the
+  catalogue's only when you don't. A same-titled book by another author never
+  lends its cover.
+- A cover fixed in Audiobookshelf shows after the next library refresh, not
+  days later: the cover URL carries the item's update time (so browsers fetch
+  it again) and the disk cache treats a copy older than that as stale.
 
 ### Consistency pass (field report 2026-10-12)
 

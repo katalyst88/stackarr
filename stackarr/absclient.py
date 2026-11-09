@@ -193,7 +193,9 @@ def item_meta(it: dict) -> dict:
     series, seq = _parse_series(md)
     return {"item_id": it.get("id", ""), "title": md.get("title") or "",
             "author": md.get("authorName") or "", "asin": md.get("asin") or "",
-            "series": series, "series_seq": seq, "narrator": md.get("narratorName") or ""}
+            "series": series, "series_seq": seq, "narrator": md.get("narratorName") or "",
+            # ABS bumps updatedAt (ms) when the item's cover changes: the cover's version
+            "cover_at": int((it.get("updatedAt") or 0) // 1000)}
 
 
 def item_detail(item_id: str) -> dict:

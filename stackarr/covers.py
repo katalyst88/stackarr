@@ -94,9 +94,42 @@ def resolve(title, author) -> str:
     return url
 
 
+def local_url(ref: str) -> str:
+    """The same-origin URL for a library cover ref: "cw:161" / "kv:127" →
+    /libcover, an Audiobookshelf item id → /cover/<id>?v=<its update time>, so
+    a cover fixed in ABS is a new URL and no browser keeps the old one."""
+    from flask import url_for
+    if ":" in ref:
+        return url_for("main.libcover", ref=ref)
+    v = db.cover_version(ref)
+    return url_for("main.cover", item_id=ref, v=v) if v else url_for("main.cover", item_id=ref)
+
+
+def for_book(url, title="", author="", asin="") -> str:
+    """THE cover for a book, wherever it's drawn: the library's own cover when
+    the household owns it (Audiobookshelf first, where covers are curated),
+    else the catalogue art in the chosen style. Every section goes through
+    here, so one book never shows two different covers on one page."""
+    asin = asin if (asin or "").startswith("B0") else ""
+    try:
+        ref = db.library_cover(title or "", author or "", asin, strict=bool(url)) if title or asin else ""
+    except Exception as e:
+        log.debug("library cover lookup failed for %s: %s", title, e)
+        ref = ""
+    if ref:
+        return local_url(ref)
+    url = url or ""
+    if url.startswith("/cover/"):
+        # a stored link to an ABS cover (shelf rows keep one): give it its version
+        item = url.split("?")[0][len("/cover/"):]
+        if item and "/" not in item:
+            return local_url(item)
+    return display(url, title, author)
+
+
 def bookcover(b) -> str:
-    """Jinja filter: `{{ s|bookcover }}` — the row's cover in the chosen style."""
+    """Jinja filter: `{{ s|bookcover }}` — the row's cover (covers.for_book)."""
     if not b:
         return ""
     get = b.get if hasattr(b, "get") else (lambda k, d=None: getattr(b, k, d))
-    return display(get("cover") or "", get("title") or "", get("author") or "")
+    return for_book(get("cover") or "", get("title") or "", get("author") or "", get("asin") or "")

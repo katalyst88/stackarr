@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS library (
                                                 -- source ("cw:161", "kv:127"), so an
                                                 -- owned book never needs an external
                                                 -- cover lookup. Empty = not offered.
+  cover_at INTEGER DEFAULT 0,                   -- ABS item updatedAt (epoch s): the
+                                                -- cover's version for the caches
   first_seen TEXT DEFAULT (datetime('now','localtime')),
   last_seen TEXT,
   gone_at TEXT
@@ -177,6 +179,7 @@ def init():
                      "ALTER TABLE library ADD COLUMN format TEXT DEFAULT 'audiobook'",
                      "ALTER TABLE library ADD COLUMN source TEXT DEFAULT 'abs'",
                      "ALTER TABLE library ADD COLUMN cover TEXT DEFAULT ''",
+                     "ALTER TABLE library ADD COLUMN cover_at INTEGER DEFAULT 0",
                      "ALTER TABLE suggestions ADD COLUMN format TEXT DEFAULT 'audiobook'",
                      "ALTER TABLE requests ADD COLUMN format TEXT DEFAULT 'audiobook'",
                      "ALTER TABLE ratings ADD COLUMN review TEXT DEFAULT ''",
@@ -325,7 +328,12 @@ def _cover_index() -> dict[str, dict[str, str]]:
     Built once and reused. Matching has to run through rating_key's
     normalisation, which can't be expressed in SQL, and doing that per <img>
     meant a full scan of every library row per cover — 59 scans of 3,300 rows to
-    draw one page. The index makes each lookup a dict hit."""
+    draw one page. The index makes each lookup a dict hit.
+
+    Audiobookshelf wins when a book is in more than one place: it's where the
+    household curates its covers. Its audiobook item first, then its ebook item,
+    then the other ebook servers. `ver` maps an ABS item to its update time, the
+    cover's version (covers.local_url puts it in the URL)."""
     global _COVER_INDEX, _COVER_INDEX_AT
     with _COVER_INDEX_LOCK:
         if _COVER_INDEX and (time.time() - _COVER_INDEX_AT) < _COVER_INDEX_TTL:
@@ -333,26 +341,31 @@ def _cover_index() -> dict[str, dict[str, str]]:
         by_key: dict[str, str] = {}
         by_title: dict[str, str] = {}
         by_asin: dict[str, str] = {}
+        ver: dict[str, int] = {}
         with conn() as c:
             rows = c.execute(
-                "SELECT title,author,asin,cover,item_id,source FROM library "
-                "WHERE gone_at IS NULL AND (cover<>'' OR source='abs')").fetchall()
-        for r in rows:
-            ref = r["cover"] or (r["item_id"] if r["source"] == "abs" else "")
+                "SELECT title,author,asin,cover,item_id,source,cover_at FROM library "
+                "WHERE gone_at IS NULL AND (cover<>'' OR source IN ('abs','abs_ebooks'))").fetchall()
+        rank = {"abs": 0, "abs_ebooks": 1}
+        for r in sorted(rows, key=lambda r: rank.get(r["source"], 2)):
+            is_abs = r["source"] in rank
+            ref = r["item_id"] if is_abs else r["cover"]
             if not ref:
                 continue
+            if is_abs:
+                ver[ref] = int(r["cover_at"] or 0)
             by_key.setdefault(rating_key("", r["title"], r["author"]), ref)
             # title-only too: Kavita stores a series with no author, so an
             # author-bearing render would otherwise never match its own book
             by_title.setdefault(rating_key("", r["title"], ""), ref)
             if r["asin"]:
                 by_asin.setdefault(r["asin"], ref)
-        _COVER_INDEX = {"key": by_key, "title": by_title, "asin": by_asin}
+        _COVER_INDEX = {"key": by_key, "title": by_title, "asin": by_asin, "ver": ver}
         _COVER_INDEX_AT = time.time()
         return _COVER_INDEX
 
 
-def library_cover(title: str, author: str = "", asin: str = "") -> str:
+def library_cover(title: str, author: str = "", asin: str = "", strict: bool = False) -> str:
     """The LOCAL cover ref for a book we own ("cw:161", "kv:127", or an ABS
     item_id), or "" when it isn't in the library.
 
@@ -360,14 +373,26 @@ def library_cover(title: str, author: str = "", asin: str = "") -> str:
     so it survives the punctuation differences between sources. Owned books are
     the overwhelming majority of what the UI renders, and every one has art on a
     service in this house — resolving here is what stops the UI asking a third
-    party for a picture we already hold."""
+    party for a picture we already hold.
+
+    `strict`: a caller that HAS catalogue art and an author only takes the
+    library's cover on an ASIN or title+author match, never a same-titled book
+    by someone else."""
     want = rating_key("", title, author)
     if not want or want == "t-":
         return ""
     idx = _cover_index()
     if asin and asin in idx["asin"]:
         return idx["asin"][asin]
+    if strict and (author or "").strip():
+        return idx["key"].get(want) or ""
     return idx["key"].get(want) or idx["title"].get(rating_key("", title, "")) or ""
+
+
+def cover_version(item_id: str) -> int:
+    """When Audiobookshelf last changed this item (epoch seconds), 0 if unknown.
+    A cover fixed in ABS bumps it, so a cached copy older than this is stale."""
+    return _cover_index()["ver"].get(item_id or "", 0)
 
 
 def secret_key() -> str:

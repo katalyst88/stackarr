@@ -6,7 +6,7 @@ import re
 from flask import (Blueprint, jsonify, make_response, redirect, render_template, request,
                    session, url_for)
 
-from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
+from . import (absclient, audible, audnexus, auth, chaptarr, config, covers, db,
                discover, ebookmeta, formats, notify, picks, recommend, seriesmap, status, tagging,
                titles, tz)
 
@@ -1079,7 +1079,8 @@ def api_series_missing():
         # owned if we hold that position OR a library title matches (series_seq is
         # often null in ABS, so a seq-only check would over-report missing books).
         owned_flag = seq in owned_seqs or recommend._norm(b["title"]) in owned_titles
-        entries.append({"seq": seq, "title": b["title"], "asin": b["asin"], "cover": b.get("cover", ""),
+        entries.append({"seq": seq, "title": b["title"], "asin": b["asin"],
+                        "cover": covers.for_book(b.get("cover", ""), b["title"], b.get("author", ""), b["asin"]),
                         "author": b.get("author", ""), "owned": owned_flag})
     missing = [e for e in entries if not e["owned"]]
     return jsonify({"ok": True, "series": name, "total": len(entries),
@@ -1115,9 +1116,8 @@ def _series_view(u, t: dict) -> dict | None:
     if not books:
         return None
     from . import covers
-    for b in books:
-        if b.get("cover"):
-            b["cover"] = covers.display(b["cover"], b.get("title", ""), b.get("author", ""))
+    for b in books:                      # the library's cover when owned (covers.for_book)
+        b["cover"] = covers.for_book(b.get("cover", ""), b.get("title", ""), b.get("author", ""), b.get("asin", ""))
     start, nxt = seriesmap.strip(books, after=t["seq"])
     after = next((b for b in books if b["seq"] == start), None)
     return {"ok": True, "series": data.get("name") or t["series"], "series_asin": data.get("series_asin", ""),
@@ -2018,7 +2018,8 @@ def _local_cover(asin, title, author, fmt="") -> str:
     real = asin if _real_book_id(asin) and not asin.startswith(("gb:", "ol:")) else ""
     ref = db.library_cover(title, author, real)
     if ref:
-        return url_for("main.libcover", ref=ref) if ":" in ref else url_for("main.cover", item_id=ref)
+        from . import covers
+        return covers.local_url(ref)
     return url_for("main.coverart", asin=real, title=title or "", author=author or "", fmt=fmt or "")
 
 
@@ -2075,8 +2076,7 @@ def _annotate_status(books: list[dict]) -> list[dict]:
     from . import covers
     for b, st in zip(books, status.for_books(books, viewer=u["id"] if u else None)):
         b["status"], b["state"] = st, st["state"]
-        if b.get("cover"):
-            b["cover"] = covers.display(b["cover"], b.get("title", ""), b.get("author", ""))
+        b["cover"] = covers.for_book(b.get("cover", ""), b.get("title", ""), b.get("author", ""), b.get("asin", ""))
     return books
 
 
@@ -3113,7 +3113,9 @@ def _cover_dir() -> str:
 
 def _cover_cache_get(item_id):
     """(bytes, content type) of a cached ABS cover younger than
-    COVER_CACHE_DAYS, else None. Only safe ids reach the filesystem."""
+    COVER_CACHE_DAYS and than ABS's last change to the item (a cover fixed in
+    ABS is fetched again at once), else None. Only safe ids reach the
+    filesystem."""
     import os
     import time
     if not _COVER_ID.fullmatch(item_id or ""):
@@ -3122,7 +3124,8 @@ def _cover_cache_get(item_id):
         d = _cover_dir()
         for ctype, ext in _COVER_TYPES.items():
             p = os.path.join(d, f"{item_id}.{ext}")
-            if os.path.exists(p) and time.time() - os.path.getmtime(p) < COVER_CACHE_DAYS * 86400:
+            if (os.path.exists(p) and time.time() - os.path.getmtime(p) < COVER_CACHE_DAYS * 86400
+                    and os.path.getmtime(p) >= db.cover_version(item_id)):
                 with open(p, "rb") as f:
                     return f.read(), ctype
     except OSError:
@@ -3254,8 +3257,8 @@ def coverart():
     try:
         ref = "" if request.args.get("nolib") else db.library_cover(title, author, asin)
         if ref:
-            return redirect(url_for("main.libcover", ref=ref) if ":" in ref
-                            else url_for("main.cover", item_id=ref))
+            from . import covers
+            return redirect(covers.local_url(ref))
     except Exception as e:
         log.debug("library cover lookup failed for %s: %s", title, e)
     # 2) Resolved earlier by the background worker?
