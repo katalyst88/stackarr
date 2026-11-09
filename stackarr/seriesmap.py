@@ -175,10 +175,10 @@ def annotate(data: dict, finished: list[dict], default_author: str = "", viewer=
         for a in authors:
             lib += [dict(r) for r in c.execute(
                 "SELECT title, author, asin, format FROM library WHERE gone_at IS NULL "
-                "AND lower(author) LIKE ?", (f"%{a}%",))]
+                "AND lower(author) LIKE ? ESCAPE '\\'", (db.contains(a),))]
             req += [dict(r) for r in c.execute(
                 f"SELECT title, author, asin, format FROM requests WHERE status IN ({marks}) "
-                f"AND lower(author) LIKE ?", picks.ACTIVE_REQUEST + (f"%{a}%",))]
+                f"AND lower(author) LIKE ? ESCAPE '\\'", picks.ACTIVE_REQUEST + (db.contains(a),))]
         if asins:
             q = ",".join("?" * len(asins))
             lib += [dict(r) for r in c.execute(

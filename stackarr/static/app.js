@@ -38,7 +38,7 @@ const Stackarr = (() => {
   // Card status comes from the server (status.py, one source for every
   // page): b.status = {state, label, cls, detail}. A card can request a book
   // only when nothing is held or on its way.
-  const REQUESTABLE = ["none", "failed", "denied"];
+  const REQUESTABLE = ["none", "failed", "denied", "not_found"];
 
   const mediaCard = (b) => {
     const st = b.status || {};
@@ -833,8 +833,10 @@ const Stackarr = (() => {
     // a Requests entry is one book: remove every attempt it folds (ids "12,9,4")
     async removeRequest(ids) {
       const list = String(ids).split(",").filter(Boolean);
-      for (const id of list) await api(`/api/request/${id}`, { method: "DELETE" });
-      document.querySelector(`.req-row[data-id="${list[0]}"]`)?.remove();
+      let gone = 0;
+      for (const id of list) { const r = await api(`/api/request/${id}`, { method: "DELETE" }); if (r && r.ok) gone++; }
+      if (gone === list.length) document.querySelector(`.req-row[data-id="${list[0]}"]`)?.remove();
+      else toast(gone ? "Removed some attempts — reload to see the rest." : "Couldn't remove that request.");
     },
     async approveRequest(id, btn) {
       if (btn) btn.disabled = true;

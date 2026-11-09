@@ -718,6 +718,13 @@ def _same_request(c, user_id: int, asin: str, title: str, fmt: str) -> list[dict
         (user_id, fmt or "audiobook", asin or "", title or ""))]
 
 
+def contains(s: str) -> str:
+    """A LIKE pattern for "contains s", with s's own % and _ taken literally.
+    Use with ESCAPE '\\' (an author named "100%_Pure" shouldn't match everyone)."""
+    s = (s or "").replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{s}%"
+
+
 def open_request(c, user_id: int, asin: str, title: str, fmt: str) -> dict | None:
     """The user's request for this book + format that is still being worked on
     (with Chaptarr, or waiting for approval), if any — asking again must not

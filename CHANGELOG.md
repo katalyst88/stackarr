@@ -59,6 +59,29 @@ All notable changes to Stackarr.
   download client reads "Already in the download client".
 - waitress thread starvation: 16 threads, ABS covers cached on disk, Open
   Library tags off the request path, typeahead cached.
+- A request stuck as "Requested" (held back, or a week without reaching the
+  queue) said "Already requested" when asked for again. It can now be
+  requested again, and Requests shows Retry for it ("Retry all" too); a
+  re-request restarts the week.
+- Someone else's newer request (waiting for approval, say) no longer hides
+  where your own request stands; an active request by anyone still beats your
+  own failed or unapproved one.
+- An admin's Remove on another person's request (Everyone's requests) removed
+  nothing but hid the row. Admins can remove any request; when the server
+  removes nothing, the row stays and says so.
+- A cover that is an SVG is served sandboxed, and one that isn't an image at
+  all (HTML from a misconfigured backend) shows the placeholder.
+- An author with `%` or `_` in the name no longer matches other authors'
+  requests (LIKE wildcards taken literally); a card's id lookup reads the
+  author's rows once per page, not five scans per card.
+- Background lookups (a card's book id, a print cover) are asked again after
+  an hour once their cached answer expires, instead of never until a restart;
+  an empty or failed print-cover search is a 6-hour miss, not a week.
+- A cold Chaptarr queue cache is fetched once, not by every page thread at
+  the same moment.
+- Release check: a cleared request whose search couldn't be sent is tried
+  again later (not shown as "Searching again"), and a Chaptarr outage between
+  "held" and "cleared" no longer loses the search.
 
 ### Consistency pass (field report 2026-10-12)
 

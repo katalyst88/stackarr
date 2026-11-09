@@ -19,7 +19,7 @@ book said "Requested" on one page and "Downloading" on the next.
   needs        Needs VIP, …    the background release check found no usable
                                release, and why — "what this download needs"
                                (needs.py), e.g. VIP, ratio, no ebook release
-  not_found    Needs attention the request is STALE_DAYS old and never reached
+  not_found    Needs attention sent STALE_DAYS ago and never reached
                                the queue, and no release check has looked
   pending      Needs approval  waiting for an admin
   failed       Failed          the handoff failed (retryable)
@@ -73,18 +73,32 @@ OPEN = ("queued", "handed", "approving")            # stored statuses Chaptarr i
 FMT_NAME = {"audiobook": "Audiobook", "ebook": "eBook"}
 
 _q_lock = threading.Lock()
+_q_fetch = threading.Lock()
 _q_cache = {"at": 0.0, "v": None}
+
+
+def _q_fresh():
+    with _q_lock:
+        if time.time() - _q_cache["at"] < QUEUE_TTL:
+            return _q_cache["v"] or []
+    return None
 
 
 def live_queue() -> list[dict]:
     """chaptarr.queue(), cached for QUEUE_TTL seconds (a failure too, so a
-    Chaptarr outage costs one timeout per TTL, not one per page)."""
-    with _q_lock:
-        if time.time() - _q_cache["at"] < QUEUE_TTL:
-            return _q_cache["v"] or []
-    v = chaptarr.queue() if chaptarr.configured() else []
-    with _q_lock:
-        _q_cache.update(at=time.time(), v=v)
+    Chaptarr outage costs one timeout per TTL, not one per page). On a cold
+    cache one caller fetches and the others wait for its answer, rather than
+    a page's worth of threads all asking Chaptarr at once."""
+    v = _q_fresh()
+    if v is not None:
+        return v
+    with _q_fetch:
+        v = _q_fresh()
+        if v is not None:
+            return v
+        v = chaptarr.queue() if chaptarr.configured() else []
+        with _q_lock:
+            _q_cache.update(at=time.time(), v=v)
     return v or []
 
 
@@ -128,13 +142,52 @@ def _queue_needs(hit: dict) -> list[dict]:
     return got
 
 
-def _format_state(fmt, owned, rows, queue_fn, title, author, asin) -> dict:
+def _pick(rows: list[dict], viewer=None) -> dict:
+    """The row that says where a format stands. For one person, their latest
+    attempt is the truth. Across the household, someone else's newer row must
+    not hide yours (their request waiting for approval over your download), and
+    an active request by anyone beats your own failed / unapproved one: the
+    book is on its way for you too."""
+    newest = lambda rs: max(rs, key=lambda x: x.get("id") or 0)
+    if viewer is None:
+        return newest(rows)
+    live = OPEN + ("available",)
+    own = [r for r in rows if r.get("user_id") == viewer]
+    active = [r for r in rows if r.get("user_id") != viewer and r.get("status") in live]
+    if own:
+        r = newest(own)
+        if r.get("status") in live or not active:
+            return r
+    return newest(active) if active else newest(rows)
+
+
+def _age_days(r: dict) -> float:
+    """Days since the request was last sent (a re-request restarts the clock)."""
+    return _days_since(r.get("updated_at") or r.get("created_at") or "")
+
+
+def stuck(r: dict) -> bool:
+    """An open request that may be sent again: Chaptarr isn't downloading it,
+    and the release check found it held back, or it has sat STALE_DAYS since
+    it was last sent. (Otherwise "already requested" stops a second search.)"""
+    if r.get("status") not in ("handed", "queued"):
+        return False
+    media = "ebook" if r.get("format") == "ebook" else "audiobook"
+    from . import releasecheck
+    rc = releasecheck.result(r["id"]) if r.get("id") else None
+    held = bool(rc and rc.get("kind") in releasecheck.HELD)
+    if not held and _age_days(r) < STALE_DAYS:
+        return False
+    return not _queue_hit(live_queue(), r.get("title") or "", r.get("author") or "", r.get("asin") or "", media)
+
+
+def _format_state(fmt, owned, rows, queue_fn, title, author, asin, viewer=None) -> dict:
     if fmt in owned:
         return _entry("available")
     mine = [r for r in rows if fmt in _media_of(r.get("format"))]
     if not mine:
         return _entry("none")
-    r = max(mine, key=lambda x: x.get("id") or 0)          # the latest attempt is the truth
+    r = _pick(mine, viewer)
     st = r.get("status") or ""
     if st == "available":
         return _entry("available")
@@ -167,8 +220,7 @@ def _format_state(fmt, owned, rows, queue_fn, title, author, asin) -> dict:
             return _entry("needs", got[0].get("text") or got[0]["label"], label=needs.badge(got), needs=got)
         if rc and rc.get("kind") == "retry":
             return _entry("requested", rc.get("detail") or "Searching again")
-        days = _days_since(r.get("created_at") or "")
-        if days >= STALE_DAYS:
+        if _age_days(r) >= STALE_DAYS:
             return _entry("not_found", CHECK_UPSTREAM)
         return _entry("requested", "Sent upstream — searching")
     return _entry("none")
@@ -199,9 +251,9 @@ def _rows_for(c, author: str, viewer) -> list[dict]:
     if not a:
         return []
     rows = [dict(r) for r in c.execute(
-        "SELECT id, user_id, asin, title, author, status, format, detail, created_at FROM requests "
-        "WHERE lower(author) LIKE ? AND title NOT LIKE 'Full series: %' AND title NOT LIKE 'All books by %'",
-        (f"%{a}%",))]
+        "SELECT id, user_id, asin, title, author, status, format, detail, created_at, updated_at FROM requests "
+        "WHERE lower(author) LIKE ? ESCAPE '\\' AND title NOT LIKE 'Full series: %' AND title NOT LIKE 'All books by %'",
+        (db.contains(a),))]
     return [r for r in rows if r["status"] in OPEN + ("available", "pending_approval")
             or viewer is None or r["user_id"] == viewer]
 
@@ -236,7 +288,7 @@ def for_books(books: list[dict], viewer=None) -> list[dict]:
             rows = titles.matches(by_author[a], title, asin) if title else \
                 [r for r in by_author[a] if asin and r["asin"] == asin]
             owned = _owned_formats(c, asin, title, author)
-            per = {f: _format_state(f, owned, rows, queue_fn, title, author, asin) for f in shown}
+            per = {f: _format_state(f, owned, rows, queue_fn, title, author, asin, viewer) for f in shown}
             out.append(_combine(per, b.get("release_date") or ""))
     return out
 

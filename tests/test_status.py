@@ -50,8 +50,8 @@ def test_queue_reads_progress_holds_and_stalls(queue):
 def _req(uid, title, author, st, fmt, asin="", days_ago=0):
     when = (datetime.datetime.now() - datetime.timedelta(days=days_ago)).strftime("%Y-%m-%d %H:%M:%S")
     with db.conn() as c:
-        c.execute("INSERT INTO requests (user_id,asin,title,author,status,format,detail,created_at) "
-                  "VALUES (?,?,?,?,?,?,?,?)", (uid, asin, title, author, st, fmt, f"{st} detail", when))
+        c.execute("INSERT INTO requests (user_id,asin,title,author,status,format,detail,created_at,updated_at) "
+                  "VALUES (?,?,?,?,?,?,?,?,?)", (uid, asin, title, author, st, fmt, f"{st} detail", when, when))
 
 
 @pytest.fixture

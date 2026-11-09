@@ -163,6 +163,17 @@ def check(r: dict) -> dict | None:
     If it was held and now has usable releases, ask Chaptarr to search."""
     media = r.get("media") or ("ebook" if r.get("format") == "ebook" else "audiobook")
     prev = result(r["id"]) or {}
+    # was it held last time we got an answer? An error in between (Chaptarr
+    # down, the search not sent) keeps that, so the search still happens later
+    was_held = prev.get("kind") in HELD or bool(prev.get("was_held"))
+    was_needs = prev.get("needs") if prev.get("kind") in HELD else prev.get("was_needs")
+
+    def error():
+        out = {"kind": "error", "needs": []}
+        if was_held:
+            out.update(was_held=True, was_needs=was_needs or [])
+        return out
+
     author_id = _author_id(r)
     if not author_id:
         return None
@@ -176,7 +187,7 @@ def check(r: dict) -> dict | None:
         books = resp.json() or []
     except Exception as e:
         log.info("release check for %r: Chaptarr's book list failed: %s", r["title"], e)
-        out = {"kind": "error", "needs": [], "at": int(time.time())}
+        out = dict(error(), at=int(time.time()))
         _store(r["id"], out)
         return out
     row, have = chaptarr.pick_row(books, r["title"], r.get("asin") or "", media)
@@ -196,15 +207,19 @@ def check(r: dict) -> dict | None:
         except Exception as e:
             log.info("release check for %r failed: %s", r["title"], e)
             # remember the attempt so a failing Chaptarr isn't asked every minute
-            out = {"kind": "error", "needs": []}
-        if out["kind"] == "ok" and prev.get("kind") in HELD:
+            out = error()
+        if out["kind"] == "ok" and was_held:
             # what it needed has cleared (VIP on, ratio back, a release appeared):
             # one search, and the request moves on by itself
-            chaptarr._dispatch([row["id"]], {"name": "BookSearch", "bookIds": [row["id"]]})
-            was = needs.badge(prev.get("needs") or [])
-            out = {"kind": "retry", "needs": [], "detail": f"Searching again — {was.lower()} has cleared"
-                   if was else "Searching again"}
-            log.info("release check: %s (%s) — %s", r["title"], media, out["detail"])
+            if chaptarr._dispatch([row["id"]], {"name": "BookSearch", "bookIds": [row["id"]]}):
+                was = needs.badge(was_needs or [])
+                out = {"kind": "retry", "needs": [], "detail": f"Searching again — {was.lower()} has cleared"
+                       if was else "Searching again"}
+                log.info("release check: %s (%s) — %s", r["title"], media, out["detail"])
+            else:
+                # not sent: try again on the error clock rather than claim a search
+                log.info("release check: %s (%s) — cleared, but the search couldn't be sent", r["title"], media)
+                out = error()
     out["at"] = int(time.time())
     _store(r["id"], out)
     if out["kind"] in HELD:

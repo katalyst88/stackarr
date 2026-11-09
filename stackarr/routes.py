@@ -320,6 +320,11 @@ def group_requests(rows: list[dict]) -> list[dict]:
         cur = list(current.values())
         st = status.for_request_group(cur)
         failed = [r for r in cur if r["status"] in ("failed", "denied")]
+        # an open request the status line calls stuck (held back, or never
+        # reached the queue) can be sent again too
+        failed += [r for r in cur if r["status"] in ("handed", "queued") and any(
+            (st.get("formats") or {}).get(f, {}).get("state") in ("not_found", "needs")
+            for f in status._media_of(r.get("format")))]
         out.append({"id": latest["id"], "ids": [r["id"] for r in rs], "title": latest["title"],
                     "author": latest.get("author") or "", "asin": next((r["asin"] for r in rs if r.get("asin")), ""),
                     "cover": next((r["cover"] for r in rs if r.get("cover")), ""),
@@ -874,7 +879,7 @@ def _work_view(b: dict, st: dict, held: list[dict], asin: str) -> tuple:
         rows.append({"fmt": f, "label": "eBook" if f == "ebook" else "Audiobook", "st": fs,
                      "facts": facts, "narrators": people,
                      "open_url": f"{abs_pub}/item/{item['item_id']}" if (abs_pub and item) else "",
-                     "can_request": fs["state"] in ("none", "denied", "failed"),
+                     "can_request": fs["state"] in ("none", "denied", "failed", "not_found"),
                      "retry": fs["state"] == "failed"})
     return work, rows
 
@@ -1245,9 +1250,9 @@ def api_series_request_remaining():
             group = [b for b in todo if f in b["need"] and b["author"] == author]
             res = chaptarr.add_books(author, [{"title": b["title"], "asin": b.get("asin", "")} for b in group], fmt=f)
             for b, r in zip(group, res.get("books") or []):
-                status = "available" if r.get("available") else ("handed" if r.get("ok") else "failed")
-                sent += status == "handed"
-                rows.append((u["id"], b.get("asin", ""), b["title"], b["author"], b.get("cover", ""), status,
+                got = "available" if r.get("available") else ("handed" if r.get("ok") else "failed")
+                sent += got == "handed"
+                rows.append((u["id"], b.get("asin", ""), b["title"], b["author"], b.get("cover", ""), got,
                              r.get("detail", ""), res.get("ref", ""), "series_book", f))
     with db.conn() as c:
         for r in rows:          # one row per book + format: a failed earlier try is updated, not duplicated
@@ -1743,7 +1748,7 @@ def _library_works(c, title, author, fmt=None) -> list[dict]:
     fclause = " AND format=?" if fmt else ""
     rows = [dict(r) for r in c.execute(
         "SELECT item_id, title, author, format FROM library WHERE gone_at IS NULL "
-        "AND lower(author) LIKE ?" + fclause, (f"%{a}%",) + ((fmt,) if fmt else ()))]
+        "AND lower(author) LIKE ? ESCAPE '\\'" + fclause, (db.contains(a),) + ((fmt,) if fmt else ()))]
     return titles.matches(rows, title)
 
 
@@ -1850,6 +1855,20 @@ def display_title(title, work: dict | None) -> str:
     return t
 
 
+def _known_rows(a: str) -> list[dict]:
+    """Rows with a catalogue id for author `a`, from Stackarr's own tables."""
+    like = (db.contains(a),)
+    with db.conn() as c:
+        rows = []
+        for q in ("SELECT title, asin, format FROM requests WHERE asin<>'' AND lower(author) LIKE ? ESCAPE '\\'",
+                  "SELECT title, asin, format FROM suggestions WHERE asin<>'' AND lower(author) LIKE ? ESCAPE '\\'",
+                  "SELECT title, asin, format FROM ratings WHERE asin<>'' AND lower(author) LIKE ? ESCAPE '\\'",
+                  "SELECT title, rkey AS asin, format FROM shelf WHERE lower(author) LIKE ? ESCAPE '\\'",
+                  "SELECT title, asin, format FROM library WHERE asin<>'' AND lower(author) LIKE ? ESCAPE '\\'"):
+            rows += [dict(r) for r in c.execute(q, like) if _real_book_id(r["asin"])]
+    return rows
+
+
 def _known_book_id(title, author, fmt="", series="", seq=None) -> str:
     """The catalogue id Stackarr already holds for (title, author), from its own
     tables — no network. Library rows rarely carry an ASIN, but the same work
@@ -1864,15 +1883,13 @@ def _known_book_id(title, author, fmt="", series="", seq=None) -> str:
     cached = db.get_meta("bookid:" + db.rating_key("", titles.clean(title), a), "")
     if _real_book_id(cached):
         return cached
-    like = (f"%{a}%",)
-    with db.conn() as c:
-        rows = []
-        for q in ("SELECT title, asin, format FROM requests WHERE asin<>'' AND lower(author) LIKE ?",
-                  "SELECT title, asin, format FROM suggestions WHERE asin<>'' AND lower(author) LIKE ?",
-                  "SELECT title, asin, format FROM ratings WHERE asin<>'' AND lower(author) LIKE ?",
-                  "SELECT title, rkey AS asin, format FROM shelf WHERE lower(author) LIKE ?",
-                  "SELECT title, asin, format FROM library WHERE asin<>'' AND lower(author) LIKE ?"):
-            rows += [dict(r) for r in c.execute(q, like) if _real_book_id(r["asin"])]
+    # a page of cards asks this for many books by the same author: read that
+    # author's rows once per request, not five table scans per card
+    from flask import g, has_request_context
+    memo = g.setdefault("_known_rows", {}) if has_request_context() else {}
+    rows = memo.get(a)
+    if rows is None:
+        rows = memo[a] = _known_rows(a)
     hits = titles.matches(rows, _LEADING_NUM.sub("", title))
     if not hits:
         w = series_work(title, author, series, seq)
@@ -2270,8 +2287,12 @@ def _grab_one(user_id, book, fmt, source):
             db.record_request(c, user_id, book, fmt, "available", "Already in your library", source=source)
             return {"ok": True, "detail": "Already in your library — marked available."}
         # asked again while Chaptarr is still on it: no second row, no second search
-        if db.open_request(c, user_id, book.get("asin", ""), book.get("title", ""), fmt):
-            return {"ok": True, "duplicate": True, "detail": "Already requested — it's on its way."}
+        # (unless it's stuck — held back, or sat for days never reaching the queue)
+        op = db.open_request(c, user_id, book.get("asin", ""), book.get("title", ""), fmt)
+        if op:
+            op = dict(c.execute("SELECT * FROM requests WHERE id=?", (op["id"],)).fetchone())
+    if op and not status.stuck(op):
+        return {"ok": True, "duplicate": True, "detail": "Already requested — it's on its way."}
     res = chaptarr.add_and_search(book["title"], book.get("author", ""), book.get("asin", ""), fmt=fmt)
     # Chaptarr already holds a file for the work (on any of its rows): done
     st = "available" if res.get("available") else ("handed" if res["ok"] else "failed")
@@ -2599,17 +2620,17 @@ def api_request_approve(rid):
     # a transient Chaptarr outage (retry) must keep the row re-approvable, not
     # burn the admin's approval into a 'failed' state that can't be re-approved.
     retryable = not ok_any and any(r.get("retry") for r in rmap.values())
-    status = "handed" if ok_any else ("pending_approval" if retryable else "failed")
+    new_status = "handed" if ok_any else ("pending_approval" if retryable else "failed")
     with db.conn() as c:
         c.execute("UPDATE requests SET status=?,detail=?,chaptarr_ref=?,updated_at=datetime('now','localtime') WHERE id=?",
-                  (status, res.get("detail", ""), res.get("ref", ""), rid))
+                  (new_status, res.get("detail", ""), res.get("ref", ""), rid))
     requester = db.get_user(row["user_id"])
     if requester and requester.get("email") and db.get_pref(row["user_id"], "notify_approved", "1") == "1":
         try:
             notify.request_approved(book, requester["email"], _base_url())
         except Exception as e:
             log.debug("approved notify failed: %s", e)
-    return jsonify({"ok": res["ok"], "status": status, "detail": res.get("detail", "")})
+    return jsonify({"ok": res["ok"], "status": new_status, "detail": res.get("detail", "")})
 
 
 @bp.route("/api/requests/<int:rid>/deny", methods=["POST"])
@@ -2663,13 +2684,15 @@ def api_requests_check():
 @bp.route("/api/requests/retry-all", methods=["POST"])
 @auth.login_required
 def api_retry_all():
-    """Re-send every failed request to Chaptarr in one go (the Wanted list)."""
+    """Re-send every failed or stuck request to Chaptarr in one go (the Wanted list)."""
     u = auth.current_user()
     with db.conn() as c:
         rows = [dict(r) for r in c.execute(
-            "SELECT * FROM requests WHERE user_id=? AND status='failed' ORDER BY id", (u["id"],))]
+            "SELECT * FROM requests WHERE user_id=? AND status IN ('failed','handed','queued') ORDER BY id",
+            (u["id"],))]
+    rows = [r for r in rows if r["status"] == "failed" or status.stuck(r)]
     ok = 0
-    for row in rows:          # the retry updates each failed row in place (db.record_request)
+    for row in rows:          # the retry updates each row in place (db.record_request)
         res = _hand_to_chaptarr(u["id"], row, row.get("source", "manual"))
         if res.get("ok"):
             ok += 1
@@ -2686,11 +2709,11 @@ def api_retry(rid):
         if not row:
             return jsonify({"error": "not found"}), 404
         row = dict(row)
-        # only failed/denied requests are retryable — don't clobber an available
-        # or pending-approval row.
-        if row["status"] not in ("failed", "denied"):
-            return jsonify({"error": "Only failed requests can be retried."}), 400
-        was_denied = row["status"] == "denied"
+    # only failed/denied requests, or stuck open ones, are retryable — don't
+    # clobber an available or pending-approval row.
+    if row["status"] not in ("failed", "denied") and not status.stuck(row):
+        return jsonify({"error": "Only failed or stuck requests can be retried."}), 400
+    was_denied = row["status"] == "denied"
     # a denial is an explicit admin decision — re-requesting it goes BACK through
     # approval (unless the requester is admin), never straight to a grab.
     if was_denied and u["role"] != "admin":
@@ -2701,9 +2724,17 @@ def api_retry(rid):
 @bp.route("/api/request/<int:rid>", methods=["DELETE"])
 @auth.login_required
 def api_request_delete(rid):
+    """Remove a request row: your own, or (admins, from Everyone's) anyone's."""
     u = auth.current_user()
     with db.conn() as c:
-        c.execute("DELETE FROM requests WHERE id=? AND user_id=?", (rid, u["id"]))
+        if u["role"] == "admin":
+            n = c.execute("DELETE FROM requests WHERE id=?", (rid,)).rowcount
+        else:
+            n = c.execute("DELETE FROM requests WHERE id=? AND user_id=?", (rid, u["id"])).rowcount
+        if n:
+            c.execute("DELETE FROM meta WHERE k=?", (f"relcheck:{rid}",))
+    if not n:
+        return jsonify({"ok": False, "error": "not found"}), 404
     return jsonify({"ok": True})
 
 
@@ -3053,6 +3084,26 @@ _COVER_TYPES = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "
                 "image/svg+xml": "svg"}
 
 
+_RASTER = ("image/jpeg", "image/png", "image/webp", "image/gif")
+# An SVG is a document that can run script if opened on its own, so a cover
+# that is one (uploaded to ABS, Kavita…) is served sandboxed: it still draws
+# in an <img>, but opened in a tab it can't touch this origin.
+_SVG_HEADERS = {"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox"}
+
+
+def _image_response(data: bytes, ctype: str):
+    """A proxied cover, or None when it isn't an image we'll serve same-origin
+    (HTML, a script, an unknown type): the caller shows the placeholder."""
+    from flask import Response
+    base = (ctype or "image/jpeg").split(";")[0].strip().lower()
+    headers = dict(_COVER_CACHE, **{"X-Content-Type-Options": "nosniff"})
+    if base == "image/svg+xml":
+        headers.update(_SVG_HEADERS)
+    elif base not in _RASTER:
+        return None
+    return Response(data, mimetype=base, headers=headers)
+
+
 def _cover_dir() -> str:
     import os
     d = os.path.join(config.DATA_DIR, "covers")
@@ -3105,7 +3156,6 @@ def libcover(ref):
     This exists so an owned book's art is a local fetch. It used to be resolved
     by searching Google Books for the title, which made every poster tile depend
     on a third party's rate limit, and put that call on the request path."""
-    from flask import Response
     import requests as rq
     kind, _, ident = (ref or "").partition(":")
     try:
@@ -3113,16 +3163,18 @@ def libcover(ref):
             from .backends import calibreweb as cw
             r = rq.get(f"{cw._url()}/opds/cover/{ident}", auth=cw._auth(), timeout=10)
             if r.ok and r.content:
-                return Response(r.content, mimetype=r.headers.get("Content-Type", "image/jpeg"),
-                                headers=_COVER_CACHE)
+                out = _image_response(r.content, r.headers.get("Content-Type", "image/jpeg"))
+                if out:
+                    return out
         elif kind == "kv" and ident.isdigit():
             from . import backends
             be = backends.by_id("kavita")
             if be:
                 r = be._get(f"/api/image/series-cover?seriesId={ident}")
                 if r.ok and r.content:
-                    return Response(r.content, mimetype=r.headers.get("Content-Type", "image/jpeg"),
-                                    headers=_COVER_CACHE)
+                    out = _image_response(r.content, r.headers.get("Content-Type", "image/jpeg"))
+                    if out:
+                        return out
     except Exception as e:
         log.debug("libcover %s failed: %s", ref, e)
     # A cover we can't fetch is a missing picture, never a slow page: fall through
@@ -3140,18 +3192,21 @@ def cover(item_id):
     A Home render asks for ~30 of these at once, and each used to hold a
     waitress thread for an ABS round trip — the "Task queue depth" warnings
     in the field log were these bursts."""
-    from flask import Response
     import requests as rq
     hit = _cover_cache_get(item_id)
     if hit:
-        return Response(hit[0], mimetype=hit[1], headers=_COVER_CACHE)
+        out = _image_response(*hit)
+        if out:
+            return out
     try:
         r = rq.get(f"{absclient.abs_url()}/api/items/{item_id}/cover",
                    headers={"Authorization": f"Bearer {absclient.admin_token()}"}, timeout=8)
         if r.ok and r.content:
             ctype = r.headers.get("Content-Type", "image/jpeg")
-            _cover_cache_put(item_id, r.content, ctype)
-            return Response(r.content, mimetype=ctype, headers=_COVER_CACHE)
+            out = _image_response(r.content, ctype)
+            if out:
+                _cover_cache_put(item_id, r.content, ctype)
+                return out
     except Exception:
         pass
     # ABS has no art for this item. This used to ask ABS for the item and then

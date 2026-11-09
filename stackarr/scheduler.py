@@ -184,7 +184,7 @@ def _in_library(c, r: dict, media: str) -> bool:
     author = (r["author"] or "").split(",")[0].strip().lower()
     rows = [dict(x) for x in c.execute(
         "SELECT title, asin FROM library WHERE gone_at IS NULL AND format=? "
-        "AND (?='' OR lower(author) LIKE ?)", (media, author, f"%{author}%"))]
+        "AND (?='' OR lower(author) LIKE ? ESCAPE '\\')", (media, author, db.contains(author)))]
     return bool(titles.matches(rows, r["title"], r.get("asin") or ""))
 
 
@@ -448,22 +448,32 @@ def _resolve_one(asin: str, title: str, author: str, fmt: str, key: str, attempt
 # paced worker: ("bookid", title, author, fmt) resolves a card's book page so
 # the next render links straight to it (routes.resolve_book_id).
 _job_q: "queue.Queue[tuple]" = queue.Queue(maxsize=2000)
-_job_seen: set = set()
+_job_seen: dict = {}                 # key -> when it was queued
+JOB_REQUEUE_SECONDS = 3600           # a lookup isn't queued twice within this
+_JOB_SEEN_MAX = 20000
 
 
 def queue_job(kind: str, *args) -> bool:
-    """Queue a background lookup once per process. True if newly queued."""
+    """Queue a background lookup at most once an hour (its answer is cached
+    in meta, so a re-queue only happens once that answer has expired). True
+    if newly queued."""
     key = (kind,) + tuple(str(a).lower() for a in args[:3])
+    now = time.time()
     with _cover_lock:
-        if key in _job_seen:
+        if now - _job_seen.get(key, -JOB_REQUEUE_SECONDS) < JOB_REQUEUE_SECONDS:
             return False
-        _job_seen.add(key)
+        if len(_job_seen) >= _JOB_SEEN_MAX:            # keep it bounded
+            for k in [k for k, t in _job_seen.items() if now - t >= JOB_REQUEUE_SECONDS]:
+                del _job_seen[k]
+            if len(_job_seen) >= _JOB_SEEN_MAX:
+                _job_seen.clear()
+        _job_seen[key] = now
     try:
         _job_q.put_nowait((kind,) + args)
         return True
     except queue.Full:
         with _cover_lock:
-            _job_seen.discard(key)
+            _job_seen.pop(key, None)
         return False
 
 

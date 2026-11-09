@@ -8,8 +8,9 @@ Library) — and falls back to the Audible one when there is none.
 
 Never on a page request: an unknown book shows the Audible cover this time
 and is queued for the background worker (scheduler.queue_job("pcover", …)),
-which remembers the answer in meta ("pcover:<key>"; a miss for a week). No
-new hosts."""
+which remembers the answer in meta ("pcover:<key>"; a miss for a week, an
+empty or failed search — the catalogue down or rate-limited — only for a few
+hours). No new hosts."""
 import json
 import logging
 import re
@@ -21,6 +22,7 @@ log = logging.getLogger("stackarr.covers")
 
 STYLES = ("audible", "clean")
 MISS_DAYS = 7
+SOFT_MISS_HOURS = 6     # the search came back empty or failed: ask again soon
 # already a print cover (the ebook catalogues' own art) — nothing to swap
 _PRINT = re.compile(r"^https?://(?:books\.google\.[a-z.]+|[a-z0-9.-]*googleusercontent\.com|covers\.openlibrary\.org)/")
 
@@ -45,7 +47,8 @@ def clean_cover(title, author) -> str | None:
         return None
     if v.get("url"):
         return v["url"]
-    return "" if time.time() - float(v.get("at") or 0) < MISS_DAYS * 86400 else None
+    keep = SOFT_MISS_HOURS * 3600 if v.get("soft") else MISS_DAYS * 86400
+    return "" if time.time() - float(v.get("at") or 0) < keep else None
 
 
 def display(url, title="", author="") -> str:
@@ -70,17 +73,24 @@ def display(url, title="", author="") -> str:
 def resolve(title, author) -> str:
     """Background: find a print cover for (title, author) and remember it."""
     from . import ebookmeta
-    url = ""
+    url, soft = "", False
     try:
         a = (author or "").split(",")[0].strip().lower()
-        hits = [h for h in ebookmeta.search(f"{titles.clean(title)} {author}", num=5)
-                if h.get("cover") and a and a in (h.get("author") or "").lower()]
+        found = ebookmeta.search(f"{titles.clean(title)} {author}", num=5)
+        # the catalogues swallow their own errors: nothing at all back is as
+        # likely a rate limit as a book they don't know
+        soft = not found
+        hits = [h for h in found if h.get("cover") and a and a in (h.get("author") or "").lower()]
         m = titles.matches(hits, title)
         url = (m[0]["cover"] if m else "") or ""
         url = url.replace("http://", "https://", 1)
     except Exception as e:
+        soft = True
         log.debug("print cover lookup failed for %s: %s", title, e)
-    db.set_meta(_key(title, author), json.dumps({"url": url, "at": int(time.time())}))
+    v = {"url": url, "at": int(time.time())}
+    if soft and not url:
+        v["soft"] = 1
+    db.set_meta(_key(title, author), json.dumps(v))
     return url
 
 

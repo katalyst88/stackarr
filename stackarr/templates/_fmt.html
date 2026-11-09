@@ -42,7 +42,7 @@
 <ul>{% for n in st.needs %}<li><b>{{ n.label }}</b>{% if n.text and n.text != n.label %} — {{ n.text }}{% endif %}</li>{% endfor %}</ul></div>{% endif %}
 {%- endmacro %}
 {# Can this book be requested from a card? Not when it's held or on its way. #}
-{% macro requestable(st) -%}{{ '1' if (not st or st.state in ('none', 'failed', 'denied')) else '' }}{%- endmacro %}
+{% macro requestable(st) -%}{{ '1' if (not st or st.state in ('none', 'failed', 'denied', 'not_found')) else '' }}{%- endmacro %}
 
 {# A card's foot, work-first: the work's title, author, and series + position. #}
 {% macro card_foot(b, series=None, seq=None) -%}

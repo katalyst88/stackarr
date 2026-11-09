@@ -194,3 +194,46 @@ def test_can_be_turned_off(chap, admin_client):
     _req(admin_client.uid, 40)
     r = admin_client.post("/api/settings", json={"release_check": False}, headers=SAME_ORIGIN)
     assert r.get_json()["ok"] and releasecheck.run_once() == 0 and chap.releases == []
+
+
+def _held_then_cleared(chap, rid):
+    releasecheck.run_once()
+    assert releasecheck.result(rid)["kind"] == "needs"
+    chap.answer = GOOD
+    db.set_meta(f"relcheck:{rid}", json.dumps(dict(releasecheck.result(rid), at=0)))
+
+
+def test_a_search_that_could_not_be_sent_is_not_called_a_retry(chap, admin_client, monkeypatch):
+    rid = _req(admin_client.uid, 40)
+    _held_then_cleared(chap, rid)
+    monkeypatch.setattr(chaptarr, "_dispatch", lambda *a, **k: False)
+    releasecheck.run_once()
+    got = releasecheck.result(rid)
+    assert got["kind"] == "error" and got["was_held"] and got["was_needs"][0]["key"] == "vip"
+    # an hour later, with Chaptarr taking commands again, it searches then
+    db.set_meta(f"relcheck:{rid}", json.dumps(dict(got, at=0)))
+    sent = []
+    monkeypatch.setattr(chaptarr, "_dispatch", lambda ids, cmd: sent.append(ids) or True)
+    releasecheck.run_once()
+    assert sent == [[8802]] and releasecheck.result(rid)["kind"] == "retry"
+    assert "vip" in releasecheck.result(rid)["detail"].lower()
+
+
+def test_a_chaptarr_blip_between_held_and_cleared_still_searches(chap, admin_client, monkeypatch):
+    rid = _req(admin_client.uid, 40)
+    releasecheck.run_once()
+    good_get = chaptarr.requests.get
+
+    def down(url, **kw):
+        raise chaptarr.requests.ConnectionError("refused")
+    monkeypatch.setattr(chaptarr.requests, "get", down)
+    db.set_meta(f"relcheck:{rid}", json.dumps(dict(releasecheck.result(rid), at=0)))
+    releasecheck.check({"id": rid, "title": "This Inevitable Ruin", "author": "Matt Dinniman",
+                        "format": "audiobook", "chaptarr_ref": "59"})
+    assert releasecheck.result(rid)["kind"] == "error" and releasecheck.result(rid)["was_held"]
+    monkeypatch.setattr(chaptarr.requests, "get", good_get)
+    chap.answer = GOOD
+    db.set_meta(f"relcheck:{rid}", json.dumps(dict(releasecheck.result(rid), at=0)))
+    releasecheck.run_once()
+    assert [c[3]["bookIds"] for c in chap.calls_to("POST", "/api/v1/command")] == [[8802]]
+    assert releasecheck.result(rid)["kind"] == "retry"
