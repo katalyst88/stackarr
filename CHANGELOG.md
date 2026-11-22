@@ -2,6 +2,19 @@
 
 All notable changes to Stackarr.
 
+## [1.6.10] - 2026-11-22
+
+### Fixed
+- **eBook requests failed when audiobooks and eBooks use separate root
+  folders.** Chaptarr (tested on 0.9.1000) maps the legacy single-format fields
+  of an author write (`rootFolderPath`, `qualityProfileId`, `metadataProfileId`)
+  onto one media type, the write scope set by `?mediaType=`. Stackarr didn't
+  send it, so an eBook add carrying audiobook profile ids was scoped to
+  audiobooks: the eBook root became the audiobook root and Chaptarr answered
+  400 *"Default audiobook root folder '/books' is not compatible with audiobook
+  imports"*, shown as "Chaptarr couldn't add this one right now". Author adds
+  and per-media updates now pass `mediaType` (older builds ignore it).
+
 ## [1.6.9] - 2026-10-05
 
 Fixes from running Stackarr against Chaptarr's media-split schema (an

@@ -302,6 +302,18 @@ def _series_books(books: list[dict], series: str) -> list[dict]:
                    for part in (b.get("seriesTitle") or "").split(";"))]
 
 
+def _write_scope(media: str) -> dict:
+    """Query params telling Chaptarr which media type an author write targets.
+
+    Chaptarr maps the legacy single-format fields (rootFolderPath, qualityProfileId,
+    metadataProfileId) onto ONE media type: the write scope. Without it, an ebook
+    add that also carries audiobook profile ids is scoped to audiobooks, so the
+    legacy rootFolderPath (the eBook folder) becomes the audiobook root and is
+    rejected: "Default audiobook root folder '/books' is not compatible with
+    audiobook imports". Older builds ignore the parameter."""
+    return {"mediaType": "ebook" if media == "ebook" else "audiobook"}
+
+
 def _ensure_media_monitored(author_obj: dict, media: str, rf: str,
                             qp: int | None = None, mp: int | None = None) -> None:
     """Chaptarr's current schema gates book monitoring behind per-media author
@@ -337,7 +349,7 @@ def _ensure_media_monitored(author_obj: dict, media: str, rf: str,
     if changed and author_obj.get("id"):
         try:
             requests.put(f"{url()}/api/v1/author/{author_obj['id']}", headers=_h(),
-                         json=author_obj, timeout=30)
+                         params=_write_scope(media), json=author_obj, timeout=30)
         except Exception as e:
             log.debug("chaptarr _ensure_media_monitored PUT failed: %s", e)
 
@@ -495,10 +507,12 @@ def add_and_search(title: str, author: str, asin: str = "", fmt: str = "audioboo
             # retry once without it, letting Chaptarr fall back to its default root.
             media_root_key = f"{media}RootFolderPath"
             a[media_root_key] = rf
-            r = requests.post(f"{url()}/api/v1/author", headers=_h(), json=a, timeout=90)
+            r = requests.post(f"{url()}/api/v1/author", headers=_h(), params=_write_scope(media),
+                              json=a, timeout=90)
             if not r.ok and "defaults configured" in (r.text or ""):
                 a.pop(media_root_key, None)
-                r = requests.post(f"{url()}/api/v1/author", headers=_h(), json=a, timeout=90)
+                r = requests.post(f"{url()}/api/v1/author", headers=_h(), params=_write_scope(media),
+                                  json=a, timeout=90)
             if not r.ok:
                 body = r.text or ""
                 if r.status_code in (502, 503) or "V5 API" in body or "author info" in body:
