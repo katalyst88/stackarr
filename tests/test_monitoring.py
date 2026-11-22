@@ -41,6 +41,31 @@ def test_new_author_is_added_without_monitoring_its_bibliography(fake_chaptarr):
     assert not fake_chaptarr.calls_to("PUT", "/api/v1/author/100")
 
 
+def test_author_writes_are_scoped_to_the_requested_media(fake_chaptarr):
+    """Chaptarr maps the legacy single-format fields (rootFolderPath, profile ids)
+    onto the write scope given by ?mediaType=. Unscoped, an ebook add was treated
+    as an audiobook one: the eBook folder became the audiobook root and Chaptarr
+    rejected it ("Default audiobook root folder '/books' is not compatible with
+    audiobook imports")."""
+    fake_chaptarr.lookup = [dict(BALDWIN)]
+    fake_chaptarr.books_on_add = BOOKS
+
+    res = chaptarr.add_and_search("Giovanni's Room", "James Baldwin", fmt="ebook")
+
+    assert res["ok"], res
+    [(_, _, params, sent)] = fake_chaptarr.calls_to("POST", "/api/v1/author")
+    assert params == {"mediaType": "ebook"}
+    assert sent["rootFolderPath"] == sent["ebookRootFolderPath"] == "/books"
+    assert "audiobookRootFolderPath" not in sent
+    assert _monitor_calls(fake_chaptarr) == [{"bookIds": [12], "monitored": True}]
+
+    fake_chaptarr.calls.clear()
+    fake_chaptarr.lookup = [dict(BALDWIN)]
+    chaptarr.add_and_search("Go Tell It on the Mountain", "James Baldwin", fmt="audiobook")
+    for _, _, params, _ in fake_chaptarr.calls_to("POST", "/api/v1/author"):
+        assert params == {"mediaType": "audiobook"}
+
+
 def test_ebook_request_for_audiobook_author_enables_ebooks_selected_only(fake_chaptarr):
     # the user set this author to monitor ALL existing audiobooks themselves
     existing = dict(BALDWIN, id=8, monitored=True,
@@ -57,7 +82,8 @@ def test_ebook_request_for_audiobook_author_enables_ebooks_selected_only(fake_ch
 
     assert res["ok"], res
     assert not fake_chaptarr.calls_to("POST", "/api/v1/author")
-    [(_, _, _, put)] = fake_chaptarr.calls_to("PUT", "/api/v1/author/8")
+    [(_, _, put_params, put)] = fake_chaptarr.calls_to("PUT", "/api/v1/author/8")
+    assert put_params == {"mediaType": "ebook"}
     assert put["ebookMonitorExisting"] == chaptarr.MONITOR_EXISTING_SELECTED
     assert put["ebookMonitorNewItems"] == "none"
     assert put["ebookMonitored"] is True
