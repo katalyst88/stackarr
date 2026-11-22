@@ -3,11 +3,12 @@
 import logging
 import re
 
-from flask import (Blueprint, jsonify, redirect, render_template, request,
+from flask import (Blueprint, jsonify, make_response, redirect, render_template, request,
                    session, url_for)
 
 from . import (absclient, audible, audnexus, auth, chaptarr, config, db,
-               discover, ebookmeta, formats, notify, recommend, tagging, titles)
+               discover, ebookmeta, formats, notify, picks, recommend, seriesmap, status, tagging,
+               titles, tz)
 
 log = logging.getLogger("stackarr.routes")
 
@@ -29,6 +30,24 @@ def reading_history(be, u) -> list[dict]:
     if key not in cache:
         cache[key] = be.reading_history(u)
     return cache[key]
+
+
+def abs_history(u) -> list[dict]:
+    """The user's Audiobookshelf listening history, fetched at most ONCE per
+    request — Home reads it for the shelves, the goal ring and stale-pick
+    retirement. Same per-request memo as reading_history(). Includes books
+    that are only just begun (`reading`), not just the recommender's 25%+."""
+    from flask import g
+    cache = getattr(g, "_abs_history", None)
+    if cache is None:
+        cache = g._abs_history = {}
+    uid = str((u or {}).get("id", ""))
+    if uid not in cache:
+        tok = (u or {}).get("abs_token")
+        cache[uid] = absclient.listening_history(tok, started=True) if tok else []
+    return cache[uid]
+
+
 bp = Blueprint("main", __name__)
 
 # Recommendation lanes — single source of truth for their display titles and the
@@ -126,7 +145,7 @@ def _onboarding_books(u, limit=12):
     """Finished-in-ABS books the user hasn't rated yet — the seed set for the
     quick-rate onboarding card. Most have no ASIN, so we key on rating_key."""
     try:
-        hist = absclient.listening_history(u["abs_token"])
+        hist = abs_history(u)
     except Exception:
         return []
     with db.conn() as c:
@@ -167,6 +186,11 @@ def home_page():
     import datetime
     u = auth.current_user()
     shelves, counts = _shelves_data(u)
+    # don't offer a "fresh pick" that's since been added, requested or finished
+    try:
+        picks.retire(u["id"], picks.finished_works(u, abs_history(u)))
+    except Exception as e:
+        log.debug("home: retiring stale picks failed: %s", e)
     # a few fresh picks + new-from-upcoming + goal + up-next count
     with db.conn() as c:
         fresh = [dict(r) for r in c.execute(
@@ -177,7 +201,7 @@ def home_page():
             "WHERE user_id=? AND lane='upcoming' AND status='pending' ORDER BY extra LIMIT 6", (u["id"],))]  # ASC: soonest first (match Upcoming page)
         want_n = c.execute("SELECT COUNT(*) n FROM shelf WHERE user_id=? AND state='want'", (u["id"],)).fetchone()["n"]
         avail_n = c.execute("SELECT COUNT(*) n FROM requests WHERE user_id=? AND status='available'", (u["id"],)).fetchone()["n"]
-    year = datetime.date.today().year
+    year = tz.today().year
     read_year = sum(1 for d in _finish_dates_all(u) if d.startswith(str(year)))
     try:
         goal = int(db.get_meta(f"goal_{u['id']}", "0") or 0)
@@ -221,23 +245,30 @@ def suggestions_page():
     except Exception:
         recently_added = []
     with db.conn() as c:
-        recent_requests = [dict(r) for r in c.execute(
-            "SELECT title, author, cover, status, asin FROM requests WHERE user_id=? "
-            "ORDER BY id DESC LIMIT 14", (u["id"],))]
+        recent_rows = [dict(r) for r in c.execute(
+            "SELECT * FROM requests WHERE user_id=? ORDER BY id DESC LIMIT 80", (u["id"],))]
         rated_count = c.execute("SELECT COUNT(*) FROM ratings WHERE user_id=?", (u["id"],)).fetchone()[0]
         onboard_off = bool(c.execute(
             "SELECT 1 FROM signals WHERE user_id=? AND kind='onboard_dismissed'", (u["id"],)).fetchone())
     # quick-rate onboarding: only when taste is thin and not dismissed
     onboard_books = [] if (rated_count >= ONBOARD_THRESHOLD or onboard_off) else _onboarding_books(u)
+    recent_requests = group_requests(recent_rows)[:14]      # one card per book, current status
     with db.conn() as c:
         vibes_done = bool(c.execute("SELECT 1 FROM signals WHERE user_id=? AND kind='vibes_done'", (u["id"],)).fetchone())
     show_vibes = not vibes_done and rated_count < ONBOARD_THRESHOLD
     return render_template("suggestions.html", lanes=lanes, lane_titles=lane_titles,
                            genres=discover.DEFAULT_GENRES, rec_authors=rec_authors,
-                           abs_base=absclient.abs_url(),
+                           abs_public=_abs_public_url(),
                            recently_added=recently_added, recent_requests=recent_requests,
                            onboard_books=onboard_books, onboard_target=ONBOARD_THRESHOLD,
                            show_vibes=show_vibes, all_moods=tagging.ALL_MOODS)
+
+
+def _abs_public_url() -> str:
+    """The browser-facing Audiobookshelf address, or "" when none is set. Only
+    an http(s) URL — it lands in an href."""
+    u = (db.setting("abs_public_url", config.ABS_PUBLIC_URL) or "").strip().rstrip("/")
+    return u if re.match(r"^https?://[^\s\"'<>]+$", u) else ""
 
 
 @bp.route("/lane/<lane>")
@@ -260,69 +291,145 @@ def discover_page():
     return render_template("discover.html")
 
 
+def _work_key(r) -> tuple:
+    """Which book a request row is about: its user + the title without edition
+    or series decoration + first author. Bulk "Full series:" / "All books by"
+    rows are their own book."""
+    return (r.get("user_id"), titles.parts(r.get("title") or "")[0], _first(r.get("author")).lower())
+
+
+def group_requests(rows: list[dict]) -> list[dict]:
+    """Request rows as ONE entry per book per user, newest first: the latest
+    row per format is current, older rows are its history (a failed try that
+    a later request superseded, say). Each entry: {id, ids, title, author,
+    cover, asin, username, formats, current, history, st, retry_id}, with
+    `st` from status.for_request_group — the same answer the book page gives.
+    Groups the rows already in the database too, so nothing is deleted."""
+    groups = {}
+    for r in sorted(rows, key=lambda x: x["id"], reverse=True):
+        groups.setdefault(_work_key(r), []).append(r)
+    out = []
+    for rs in groups.values():
+        latest, current, history = rs[0], {}, []
+        for r in rs:                                  # newest first
+            f = r.get("format") or "audiobook"
+            if f not in current:
+                current[f] = r
+            else:
+                history.append(r)
+        cur = list(current.values())
+        st = status.for_request_group(cur)
+        failed = [r for r in cur if r["status"] in ("failed", "denied")]
+        out.append({"id": latest["id"], "ids": [r["id"] for r in rs], "title": latest["title"],
+                    "author": latest.get("author") or "", "asin": next((r["asin"] for r in rs if r.get("asin")), ""),
+                    "cover": next((r["cover"] for r in rs if r.get("cover")), ""),
+                    "username": latest.get("username") or "", "formats": sorted(current),
+                    "current": cur, "history": history, "st": st,
+                    # the status line's own words; nothing once it's in the library (the
+                    # row's stored "Sent to Chaptarr…" is stale by then)
+                    "detail": "" if st["state"] in ("available", "none") else (st.get("detail") or ""),
+                    "retry_id": failed[0]["id"] if failed else None,
+                    "approval": any(r["status"] == "pending_approval" for r in cur)})
+    return out
+
+
 @bp.route("/requests")
 @auth.login_required
 def requests_page():
+    """Your requests — one entry per book, its formats and where each stands
+    (status.py), earlier attempts folded under it. ?wanted=1 lists only books
+    whose current attempt failed; admins add ?all=1 for everyone's."""
     u = auth.current_user()
     admin = u["role"] == "admin"
     wanted = bool(request.args.get("wanted"))            # Sonarr-style: couldn't-grab list
-    where = "WHERE status='failed'" if wanted else "WHERE 1=1"
     with db.conn() as c:
         if admin and request.args.get("all"):
-            rows = [dict(r) for r in c.execute(f"SELECT r.*, u.username FROM requests r "
-                    f"JOIN users u ON u.id=r.user_id {where.replace('status','r.status')} ORDER BY r.id DESC LIMIT 200")]
+            rows = [dict(r) for r in c.execute("SELECT r.*, u.username FROM requests r "
+                    "JOIN users u ON u.id=r.user_id ORDER BY r.id DESC LIMIT 600")]
         else:
-            rows = [dict(r) for r in c.execute(f"SELECT * FROM requests {where} AND user_id=? ORDER BY id DESC LIMIT 200", (u["id"],))]
+            rows = [dict(r) for r in c.execute(
+                "SELECT * FROM requests WHERE user_id=? ORDER BY id DESC LIMIT 600", (u["id"],))]
         # admins get the approval queue (everyone's pending requests)
         approvals = []
         if admin:
             approvals = [dict(r) for r in c.execute(
                 "SELECT r.*, u.username FROM requests r JOIN users u ON u.id=r.user_id "
                 "WHERE r.status='pending_approval' ORDER BY r.id")]
+    entries = group_requests(rows)
+    if wanted:
+        entries = [e for e in entries if e["retry_id"]]
     # a normal user shouldn't see their pending_approval rows twice; they already
-    # appear in their own list with a 'pending_approval' status badge.
-    return render_template("requests.html", requests=rows, admin=admin, wanted=wanted,
+    # appear in their own list with a 'Needs approval' status.
+    return render_template("requests.html", requests=entries, admin=admin, wanted=wanted,
                            approvals=approvals)
 
 
-def _finish_dates_all(u) -> list[str]:
-    """Every book the user has FINISHED, as ISO dates — combining Audiobookshelf
-    listening history, connected ebook sources, and the manual 'read' shelf. Each
-    book counts ONCE: a title finished in Audiobookshelf AND marked read on the
-    shelf is deduped by rating-key so the goal/heatmap aren't inflated."""
-    import datetime
-    # library item_id -> rating-key, so a source finish can be matched to a shelf finish
-    with db.conn() as c:
-        lib = {r["item_id"]: db.rating_key(r["asin"] or "", r["title"], r["author"])
-               for r in c.execute("SELECT item_id,title,author,asin FROM library")}
-    finishes: dict[str, str] = {}      # book key -> earliest finish date
+_LEADING_NUM = re.compile(r"^\d{1,3}\s+(?=[A-Za-z])")       # "09 Bloodline" (a numbered rip)
 
-    def _add(key, date):
-        if not key:
+
+def _finished_books(u) -> list[dict]:
+    """Every book the user has FINISHED, each ONCE: {title, author, date
+    (earliest, ISO), formats}. Combines Audiobookshelf listening history,
+    connected ebook sources and the manual Read shelf.
+
+    Once per WORK, not per library item: a library often holds the same book
+    twice ("Unsouled (Cradle Book 1)" and "Unsouled: Cradle, Volume 1", or a
+    numbered rip "09 Bloodline"), and a book finished in ABS and also marked
+    Read must not count twice — Insights showed 30 finished for 13 books.
+    Same author + titles.matches(), so two different "Star Wars: …" books
+    never merge. Home's goal ring and Insights both read this."""
+    import datetime
+    with db.conn() as c:
+        lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,asin,format FROM library")}
+    books: list[dict] = []
+    by_author: dict = {}
+
+    def _add(title, author, date, fmt):
+        t = _LEADING_NUM.sub("", (title or "").strip())
+        if not t or not date:
             return
-        if key not in finishes or date < finishes[key]:
-            finishes[key] = date
+        a = _first(author).lower()
+        same = by_author.setdefault(a, [])
+        hit = titles.matches(same, t) if a else [b for b in same if b["title"].lower() == t.lower()]
+        if hit:
+            b = hit[0]
+            b["date"] = min(b["date"], date)
+            if fmt not in b["formats"]:
+                b["formats"].append(fmt)
+            return
+        b = {"title": t, "author": author or "", "date": date, "formats": [fmt]}
+        same.append(b)
+        books.append(b)
+
+    def _day(ms):
+        return tz.day_of_ms(ms)              # the household's calendar day, not the container's
 
     try:
-        for h in absclient.listening_history(u["abs_token"]):
-            if h.get("finished") and h.get("last_update"):
-                d = datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat()
-                _add(lib.get(h["item_id"]) or "abs:" + str(h["item_id"]), d)
-    except Exception:
-        pass
+        for h in abs_history(u):
+            m = lib.get(h["item_id"]) or {}
+            if h.get("finished") and h.get("last_update") and m.get("title"):
+                _add(m["title"], m.get("author", ""), _day(h["last_update"]), m.get("format") or "audiobook")
+    except Exception as e:
+        log.debug("finished books: ABS history failed: %s", e)
     if formats.show("ebook"):
         from . import backends
         for be in backends.sources("ebook"):
             try:
                 for h in reading_history(be, u):
-                    if h.get("finished") and h.get("last_update"):
-                        d = datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat()
-                        _add(lib.get(h["item_id"]) or "eb:" + str(h["item_id"]), d)
+                    m = lib.get(h["item_id"]) or {}
+                    if h.get("finished") and h.get("last_update") and m.get("title"):
+                        _add(m["title"], m.get("author", ""), _day(h["last_update"]), "ebook")
             except Exception:
                 pass
-    for rkey, d in db.finished_keyed(u["id"]):     # manual read-shelf finishes
-        _add(rkey, d)
-    return list(finishes.values())
+    for r in db.shelf_list(u["id"], "read"):           # manual Read-shelf finishes
+        if r.get("finished_at"):
+            _add(r.get("title"), r.get("author"), tz.db_day(r["finished_at"]), r.get("format") or "audiobook")
+    return books
+
+
+def _finish_dates_all(u) -> list[str]:
+    """The finish date of every book the user has finished, once per book."""
+    return [b["date"] for b in _finished_books(u)]
 
 
 def _heatmap(dates: list[str]) -> dict:
@@ -331,7 +438,7 @@ def _heatmap(dates: list[str]) -> dict:
     import datetime
     from collections import Counter
     counts = Counter(d for d in dates if d)
-    today = datetime.date.today()
+    today = tz.today()
     start = today - datetime.timedelta(days=today.weekday() + 1 + 52 * 7)   # Sunday ~53wk ago
     weeks, cur = [], start
     mx = 0
@@ -350,11 +457,15 @@ def _heatmap(dates: list[str]) -> dict:
 @bp.route("/insights")
 @auth.login_required
 def insights_page():
+    """Your reading, wrapped — from the same sources as Home, read live on
+    every view: finishes once per book (_finished_books, so the year count
+    matches Home's goal ring), in-progress from Audiobookshelf + ebook
+    sources (a book started today counts), ratings and moods from Stackarr."""
     import datetime
     u = auth.current_user()
-    hist = absclient.listening_history(u["abs_token"])
+    hist = abs_history(u)
     stats = absclient.listening_stats(u["abs_token"])
-    # ebook reading history from connected ebook sources (joined to library)
+    books = _finished_books(u)
     from . import backends
     ebook_hist = []
     if formats.show("ebook"):
@@ -366,30 +477,34 @@ def insights_page():
     with db.conn() as c:
         lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,format FROM library")}
         ratings = [dict(r) for r in c.execute("SELECT stars,asin,title,author,format FROM ratings WHERE user_id=?", (u["id"],))]
-        req_avail = c.execute("SELECT COUNT(*) n FROM requests WHERE user_id=? AND status='available'", (u["id"],)).fetchone()["n"]
-    authors, finished, in_prog = {}, 0, 0
+        # books Stackarr got you: distinct works, not one per format row, and
+        # not the rows back-filled from a library import
+        added = [dict(r) for r in c.execute(
+            "SELECT title, author FROM requests WHERE user_id=? AND status='available' "
+            "AND COALESCE(source,'') <> 'backfill'", (u["id"],))]
+    req_avail = len({(titles.parts(r["title"])[0], _first(r["author"]).lower()) for r in added})
+    finished = len(books)
     by_format = {"audiobook": 0, "ebook": 0}
-    finish_dates = []
+    for b in books:
+        for f in b["formats"]:
+            by_format[f if f in by_format else "audiobook"] += 1
+    reading = {}
     for h in hist:
-        if h["finished"]:
-            finished += 1; by_format["audiobook"] += 1
-            if h.get("last_update"):
-                finish_dates.append(datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat())
-        elif h["progress"] > 0.02:
-            in_prog += 1
-        m = lib.get(h["item_id"])
-        if m and m["author"]:
-            a = m["author"].split(",")[0].split(" - ")[0].strip()
-            if a:
-                authors[a] = authors.get(a, 0) + 1
+        m = lib.get(h["item_id"]) or {}
+        if h.get("reading") and m.get("title"):
+            reading.setdefault((titles.parts(m["title"])[0], _first(m.get("author")).lower()), m)
     for h in ebook_hist:
-        if h.get("finished"):
-            finished += 1; by_format["ebook"] += 1
-            if h.get("last_update"):
-                finish_dates.append(datetime.date.fromtimestamp(h["last_update"] / 1000).isoformat())
-        elif (h.get("progress") or 0) > 0.02:
-            in_prog += 1
-    finish_dates += db.finished_dates(u["id"])      # read-shelf finishes
+        m = lib.get(h["item_id"]) or {}
+        if not h.get("finished") and 0.02 < (h.get("progress") or 0) < 1 and m.get("title"):
+            reading.setdefault((titles.parts(m["title"])[0], _first(m.get("author")).lower()), m)
+    in_prog = len(reading)
+    authors = {}
+    for b in books:
+        a = _first(b["author"]).split(" - ")[0].strip()
+        if a:
+            authors[a] = authors.get(a, 0) + 1
+    explored = {a for a in authors} | {_first(m.get("author")) for m in reading.values() if m.get("author")}
+    finish_dates = [b["date"] for b in books]
     # mood profile from cached tags of rated books (bounded, no fetch)
     from collections import Counter
     moodc = Counter()
@@ -399,7 +514,7 @@ def insights_page():
             moodc[m] += 1
     top_moods = moodc.most_common(6)
     heat = _heatmap(finish_dates)
-    year = datetime.date.today().year
+    year = tz.today().year
     read_year = sum(1 for d in finish_dates if d.startswith(str(year)))
     try:
         goal = int(db.get_meta(f"goal_{u['id']}", "0") or 0)
@@ -420,6 +535,7 @@ def insights_page():
         facts.append(("📚", f"{req_avail}", "books added via Stackarr"))
     top_authors = sorted(authors.items(), key=lambda x: x[1], reverse=True)[:10]
     return render_template("insights.html", total=len(hist), finished=finished, in_progress=in_prog,
+                           explored=len(explored),
                            hours=hours, req_avail=req_avail, facts=facts, top_authors=top_authors,
                            by_format=by_format, heat=heat, top_moods=top_moods,
                            goal=goal, read_year=read_year, year=year)
@@ -431,7 +547,7 @@ def history_page():
     """Books you've read — finished in Audiobookshelf, rated, or marked read —
     each with a 1-5 star rating control that feeds the recommender."""
     u = auth.current_user()
-    hist = absclient.listening_history(u["abs_token"])
+    hist = abs_history(u)
     with db.conn() as c:
         lib = {r["item_id"]: dict(r) for r in
                c.execute("SELECT item_id,title,author,asin FROM library")}
@@ -544,10 +660,10 @@ def series_page():
     # reading progress separately from what's downloaded.
     finished_ids, inprogress_ids = set(), set()
     try:
-        for h in absclient.listening_history(u["abs_token"]):
+        for h in abs_history(u):
             if h.get("finished"):
                 finished_ids.add(h["item_id"])
-            elif (h.get("progress") or 0) > 0.02:
+            elif h.get("reading"):
                 inprogress_ids.add(h["item_id"])
     except Exception:
         pass
@@ -572,8 +688,6 @@ def series_page():
         sugg = [dict(r) for r in c.execute(
             "SELECT id,title,author,series,asin,cover,reason FROM suggestions "
             "WHERE user_id=? AND lane='series' AND status='pending' ORDER BY score DESC", (u["id"],))]
-        reqs = [dict(r) for r in c.execute(
-            "SELECT title,status FROM requests WHERE user_id=?", (u["id"],))]
 
     def norm(s):
         return (s or "").strip().lower()
@@ -581,14 +695,6 @@ def series_page():
     next_by_series = {}
     for s in sugg:
         next_by_series.setdefault(norm(s["series"]), s)
-
-    def req_status(title):
-        nt = norm(title)
-        for rq in reqs:
-            rt = norm(rq["title"])
-            if rt and nt and (rt[:30] in nt or nt[:30] in rt):
-                return rq["status"]
-        return None
 
     def _series_key(name):
         # merge "The Expanse" / "Expanse" and casing variants into one group
@@ -649,7 +755,8 @@ def series_page():
                       "missing_audio": (both and len(all_seqs - audio_seqs) > 0),
                       "missing_ebook": (both and len(all_seqs - ebook_seqs) > 0),
                       "author": (books[0].get("author") if books else ""),
-                      "next": nxt, "next_status": req_status(nxt["title"]) if nxt else None})
+                      "next": nxt,
+                      "next_st": book_status(nxt.get("asin") or "", nxt["title"], nxt.get("author") or "") if nxt else None})
     cards = [x for x in cards if x["owned"] >= 2 or x["next"]]
     cards.sort(key=lambda x: (-x["owned"], x["name"].lower()))
     have_next = sum(1 for c in cards if c["next"])
@@ -686,6 +793,30 @@ def taste_page():
                            readseed=readseed, removed=removed)
 
 
+_BOOK_META: dict = {}            # asin -> (fetched_at, audible row, audnexus row)
+_BOOK_META_TTL = 600
+
+
+def _catalogue_book(asin) -> tuple[dict, dict]:
+    """(Audible product, Audnexus record) for an ASIN. The two lookups run side
+    by side instead of one after the other (each is a few hundred ms), and a
+    found book is kept for ten minutes, so going back to a book page — or
+    opening it again from another card — doesn't pay for both again."""
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    hit = _BOOK_META.get(asin)
+    if hit and time.time() - hit[0] < _BOOK_META_TTL:
+        return dict(hit[1]), dict(hit[2])
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        fa, fx = ex.submit(audible.by_asin, asin), ex.submit(audnexus.book, asin)
+        b, ax = fa.result() or {}, fx.result() or {}
+    if b.get("title"):
+        if len(_BOOK_META) > 500:
+            _BOOK_META.clear()
+        _BOOK_META[asin] = (time.time(), dict(b), dict(ax))
+    return b, ax
+
+
 @bp.route("/book/<path:asin>")
 @auth.login_required
 def book_page(asin):
@@ -697,14 +828,14 @@ def book_page(asin):
         b["format"] = "ebook"
         b["asin"] = asin            # keep the gb:/ol: id as the page identity for actions
     else:
-        b = audible.by_asin(asin) or {}
+        b, ax = _catalogue_book(asin)
         b.setdefault("asin", asin)
         b.setdefault("format", "audiobook")
-        ax = audnexus.book(asin) or {}
         if ax.get("genres"):
             b["genres"] = ax["genres"]
         if ax.get("series") and not b.get("series"):
             b["series"], b["sequence"] = ax["series"], ax.get("sequence")
+            b["series_asin"] = ax.get("series_asin") or ""
     # Catalogue lookups can transiently fail (rate-limit / timeout). Fall back to
     # what Stackarr already knows about this book so the page never shows a bare
     # "Unknown" — we usually have its title/author/cover cached from a suggestion.
@@ -712,16 +843,15 @@ def book_page(asin):
         cached = _cached_book(asin)
         b.update({k: v for k, v in cached.items() if v and not b.get(k)})
     b.setdefault("title", "Unknown")
-    b["state"] = _state_for(asin, b.get("title", ""), b.get("author", ""))
+    st = book_status(asin, b.get("title", ""), b.get("author", ""), b.get("release_date") or "")
+    b["state"] = st["state"]
     u = auth.current_user()
     key = db.rating_key(asin if not asin.startswith(("gb:", "ol:")) else "",
                         b.get("title", ""), b.get("author", "")) if asin.startswith(("gb:", "ol:")) else asin
     with db.conn() as c:
-        req = c.execute("SELECT status, detail FROM requests WHERE asin=? AND asin<>'' ORDER BY id DESC LIMIT 1",
-                        (asin,)).fetchone()
         my = c.execute("SELECT stars, review FROM ratings WHERE user_id=? AND asin=?",
                        (u["id"], key)).fetchone()
-    b["req_detail"] = (req["detail"] if req else "") or ""
+    b["req_detail"] = st["detail"] if st["state"] == "failed" else ""
     try:
         tags = tagging.fetch_for(key, b.get("title", ""), b.get("author", ""), b.get("categories"))
     except Exception:
@@ -731,10 +861,21 @@ def book_page(asin):
     if formats.multi() and b.get("title"):
         with db.conn() as c:
             owned_formats = sorted({r["format"] for r in _library_works(c, b["title"], b.get("author", ""))})
-    return render_template("book.html", b=b, rate_key=key, owned_formats=owned_formats,
+    shelf = db.shelf_state(u["id"], key)
+    # "Finished" comes from Audiobookshelf too, not only Stackarr's own Read
+    # shelf — the Home "Read" shelf already shows ABS finishes, and the book page
+    # used to disagree with it
+    finished = shelf == "read"
+    if not finished:
+        try:
+            finished = picks.is_finished(picks.finished_works(u, abs_history(u)), b.get("title", ""),
+                                         b.get("author", ""), asin if asin.startswith("B0") else "")
+        except Exception as e:
+            log.debug("book page: finished check failed: %s", e)
+    return render_template("book.html", b=b, st=st, rate_key=key, owned_formats=owned_formats,
                            community=db.community_rating(key), reviews=db.reviews_for(key),
                            my_stars=(my["stars"] if my else 0), my_review=(my["review"] if my else ""),
-                           tags=tags, shelf=db.shelf_state(u["id"], key))
+                           tags=tags, shelf=shelf, finished=finished)
 
 
 @bp.route("/browse")
@@ -767,12 +908,8 @@ def browse_page():
         books, title, kind = discover.genre_new([genre], num_per=40), genre, "genre"
     else:
         return redirect(url_for("main.discover_page"))
-    seen, uniq = set(), []
-    for b in books:
-        if b.get("asin") and b["asin"] not in seen:
-            seen.add(b["asin"])
-            b["state"] = _state_for(b["asin"], b["title"], b["author"])
-            uniq.append(b)
+    uniq = [b for b in _clean_catalogue(books) if b.get("asin")]
+    _annotate_status(uniq)
     return render_template("browse.html", books=uniq, title=title, kind=kind, author=author)
 
 
@@ -834,7 +971,7 @@ def api_series_missing():
     if series_author:
         pool += audible.search(f"{name} {series_author}", num=50)
     full = {}
-    for b in pool:
+    for b in _in_language(pool):
         if recommend._norm(b.get("series")) != nn or b.get("sequence") is None:
             continue
         if not _author_ok(b.get("author", "")):
@@ -853,6 +990,185 @@ def api_series_missing():
     missing = [e for e in entries if not e["owned"]]
     return jsonify({"ok": True, "series": name, "total": len(entries),
                     "owned": len(entries) - len(missing), "missing": missing, "entries": entries})
+
+
+def _series_target(src) -> dict:
+    """What a series request names: a book (asin, or title + author) and/or a
+    series (series_asin, or series name + author). `seq` is the viewed book's
+    position, the fallback start of the "Next in" strip."""
+    t = {k: (src.get(k) or "").strip() for k in ("asin", "series_asin", "series", "author", "title")}
+    t["author"] = t["author"].split(",")[0].strip()
+    for k in ("asin", "series_asin"):            # ASIN-shaped or nothing — they go into a URL path
+        if not re.fullmatch(r"[A-Za-z0-9]{10}", t[k]):
+            t[k] = ""
+    try:
+        t["seq"] = float(src.get("seq")) if src.get("seq") not in (None, "") else None
+    except (TypeError, ValueError):
+        t["seq"] = None
+    return t
+
+
+def _series_view(u, t: dict) -> dict | None:
+    """The series map for a target, annotated for this user, plus the strip:
+    {ok, series, series_asin, source, author, after, after_title, books, next,
+    formats, multi}. None when the series can't be placed."""
+    data = seriesmap.resolve(asin=t["asin"], title=t["title"], author=t["author"],
+                             series=t["series"], series_asin=t["series_asin"])
+    if not data:
+        return None
+    finished = picks.finished_works(u, abs_history(u))
+    books = seriesmap.annotate(data, finished, default_author=t["author"], viewer=u["id"])
+    if not books:
+        return None
+    start, nxt = seriesmap.strip(books, after=t["seq"])
+    after = next((b for b in books if b["seq"] == start), None)
+    return {"ok": True, "series": data.get("name") or t["series"], "series_asin": data.get("series_asin", ""),
+            "source": data.get("source", ""), "author": t["author"] or _first(books[0]["author"]),
+            "after": start, "after_title": after["title"] if after else "", "books": books, "next": nxt,
+            "formats": formats.available(), "multi": formats.multi(), "cap": seriesmap.MAX_REQUEST,
+            "needs_approval": _needs_approval(u)}
+
+
+def _first(author: str) -> str:
+    return (author or "").split(",")[0].strip()
+
+
+@bp.route("/api/series/next")
+@auth.login_required
+def api_series_next():
+    """The "Next in <series>" strip for a book page (or any series target):
+    the next books after the highest one you've finished, each with its state
+    (finished / in library / requested / upcoming / missing). Cached series
+    maps, so a book page view is normally no catalogue call at all."""
+    u = auth.current_user()
+    t = _series_target(request.args)
+    if not (t["asin"] or t["series_asin"] or (t["series"] and t["author"]) or (t["title"] and t["author"])):
+        return jsonify({"ok": False, "detail": "Name a book or a series."}), 400
+    return jsonify(_series_view(u, t) or {"ok": False, "detail": "Couldn't place this series."})
+
+
+CONTINUE_DAYS = 14         # how recent a finish the Home "Continue" card follows
+
+
+@bp.route("/api/series/continue")
+@auth.login_required
+def api_series_continue():
+    """Home's "Continue <series>" card: the series of the book you finished
+    most recently in Audiobookshelf (within CONTINUE_DAYS) that still has books
+    after it. Tries at most three recent finishes, so a run of standalones
+    can't turn one Home view into a dozen catalogue lookups."""
+    u = auth.current_user()
+    tried, seen = 0, set()
+    for r in picks.finished_works(u, abs_history(u)):
+        # the window is calendar days in the household's timezone
+        if tz.days_ago(r.get("last_update") or 0) > CONTINUE_DAYS or not r.get("last_update") or tried >= 3:
+            break
+        name = (r.get("series") or "").strip() or (_infer_series(r["title"])[0] or "")
+        if name and name.lower() in seen:
+            continue
+        tried += 1
+        v = _series_view(u, {"asin": r.get("asin") or "", "series_asin": "", "series": name,
+                             "author": _first(r.get("author")), "title": r["title"], "seq": None})
+        if not v:
+            continue
+        seen.add((v["series"] or name).lower())
+        if v["next"]:
+            v["finished_title"] = r["title"]
+            v["finished_days"] = tz.days_ago(r["last_update"])      # 0 = today, 1 = yesterday
+            return jsonify(v)
+    return jsonify({"ok": False})
+
+
+def _remaining_formats(f) -> list[str]:
+    """Formats a "Request remaining" asks for: the dialog's pick when it's on
+    offer ('both' only when both are), else every format this install offers."""
+    f = (f or "").strip().lower()
+    if f in formats.available():
+        return [f]
+    return formats.available()
+
+
+@bp.route("/api/series/request-remaining", methods=["POST"])
+@auth.login_required
+def api_series_request_remaining():
+    """Request the books of a series you don't have yet — exactly the ones the
+    confirm dialog listed (`keys`), never anything else by the author.
+
+    The server recomputes the plan (seriesmap.plan) and sends only books that
+    are BOTH in it and confirmed: finished, owned, already-requested and
+    not-yet-released books are skipped, at most MAX_REQUEST per click. Each book
+    gets its own request row per format, so each flips to available on its own.
+    Chaptarr monitors just those books (one search per format) — unlike the
+    deprecated /api/series/add, which monitored every row in the series and
+    fell back to the author's whole backlist. Non-admins go through the usual
+    approval gate: one pending row per book, one notification."""
+    u = auth.current_user()
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"ok": False, "detail": "Bad request."}), 400
+    keys = body.get("keys")
+    if not isinstance(keys, list) or not keys or not all(isinstance(k, str) for k in keys):
+        return jsonify({"ok": False, "detail": "Confirm which books to request."}), 400
+    t = _series_target(body)
+    if not (t["asin"] or t["series_asin"] or (t["series"] and t["author"]) or (t["title"] and t["author"])):
+        return jsonify({"ok": False, "detail": "Name a book or a series."}), 400
+    wait = _cooldown("series_remaining", 10)
+    if wait:
+        return jsonify({"ok": False, "detail": f"Just requested — try again in {wait}s."}), 429
+    v = _series_view(u, t)
+    if not v:
+        return jsonify({"ok": False, "detail": "Couldn't place this series in the catalogue."})
+    fmts = _remaining_formats(body.get("format"))
+    want = set(keys)
+    # confirmed AND in the plan, then capped: the dialog may tick a book past the
+    # first ten (after unticking others), so cap after intersecting, not before
+    todo = [b for b in seriesmap.plan(v["books"], fmts, cap=len(v["books"]))["todo"]
+            if b["key"] in want][:seriesmap.MAX_REQUEST]
+    name = v["series"]
+    if not todo:
+        return jsonify({"ok": False, "detail": f"Nothing left to request in “{name}” — those books are in the "
+                                               "library, requested or not out yet."})
+    for b in todo:
+        b["author"] = _first(b.get("author")) or v["author"]
+
+    if _needs_approval(u):
+        with db.conn() as c:
+            for b in todo:
+                fmt = "both" if len(b["need"]) > 1 else b["need"][0]
+                db.record_request(c, u["id"], b, fmt, "pending_approval", "Waiting for an admin to approve",
+                                  source="series_book")
+        try:     # one heads-up for the batch, not one per book
+            notify.request_pending({"title": f"{len(todo)} books from {name}", "author": v["author"],
+                                    "format": fmts[0]}, u.get("username", "A user"), db.admin_emails(), _base_url())
+        except Exception as e:
+            log.debug("pending-approval notify failed: %s", e)
+        return jsonify({"ok": True, "pending": True, "count": len(todo),
+                        "detail": f"Sent {len(todo)} book{'s' if len(todo) != 1 else ''} from “{name}” "
+                                  "for an admin to approve."})
+
+    rows, sent = [], 0
+    for f in fmts:
+        for author in dict.fromkeys(b["author"] for b in todo if f in b["need"]):
+            group = [b for b in todo if f in b["need"] and b["author"] == author]
+            res = chaptarr.add_books(author, [{"title": b["title"], "asin": b.get("asin", "")} for b in group], fmt=f)
+            for b, r in zip(group, res.get("books") or []):
+                status = "available" if r.get("available") else ("handed" if r.get("ok") else "failed")
+                sent += status == "handed"
+                rows.append((u["id"], b.get("asin", ""), b["title"], b["author"], b.get("cover", ""), status,
+                             r.get("detail", ""), res.get("ref", ""), "series_book", f))
+    with db.conn() as c:
+        for r in rows:          # one row per book + format: a failed earlier try is updated, not duplicated
+            db.record_request(c, r[0], {"asin": r[1], "title": r[2], "author": r[3], "cover": r[4]},
+                              r[9], r[5], r[6], r[7], r[8])
+    failed = [r for r in rows if r[5] == "failed"]
+    if sent:
+        detail = f"Requested {len(todo)} book{'s' if len(todo) != 1 else ''} from “{name}” — Chaptarr is searching now."
+        if failed:
+            detail += f" {len(failed)} couldn't be sent — see Requests."
+    else:
+        detail = failed[0][6] if failed else "Chaptarr already has these."
+    return jsonify({"ok": bool(sent) or not failed, "count": len(todo), "detail": detail,
+                    "results": [{"title": r[2], "format": r[9], "status": r[5], "detail": r[6]} for r in rows]})
 
 
 @bp.route("/api/series/repair", methods=["POST"])
@@ -891,7 +1207,19 @@ def api_series_repair():
 @auth.login_required
 def api_series_add():
     """Get the rest of a series: hand its author to Chaptarr, which monitors and
-    searches all their books (covering the remaining entries in the series)."""
+    searches all their books (covering the remaining entries in the series).
+
+    DEPRECATED — the UI uses /api/series/request-remaining. This monitors every
+    row Chaptarr lists for the series (owned books included), falls back to the
+    author's WHOLE backlist when Chaptarr doesn't list the series, and records
+    one "Full series: X" request that never flips to available. Kept, unchanged,
+    for API callers; responses carry a `Deprecation: true` header."""
+    resp = make_response(_series_add())
+    resp.headers["Deprecation"] = "true"
+    return resp
+
+
+def _series_add():
     u = auth.current_user()
     body = request.get_json(force=True)
     name = (body.get("series") or "").strip()
@@ -939,11 +1267,21 @@ def _shelves_data(u):
         if r.get("title"):
             read_keys.add(db.rating_key("", r["title"], r.get("author", "")))
 
+    def _listed(shelf, title, author):
+        """Is this work already on the shelf? Same author + titles.matches, so a
+        library that holds a book twice ("The Lamplighter" and "The Lamplighter
+        (The Ember Archive Book 2)", or "09 Bloodline") shows one card."""
+        a = _first(author).lower()
+        same = [{"title": _LEADING_NUM.sub("", x.get("title") or "")} for x in shelf
+                if a and a in (x.get("author") or "").lower()]
+        return bool(same and titles.matches(same, _LEADING_NUM.sub("", title)))
+
     def _add_reading(title, author, cover, fmt, rkey=""):
         t = (title or "").strip()
-        if not t or t.lower() in seen_titles:
+        if not t or t.lower() in seen_titles or _listed(shelves["reading"], t, author):
             return
-        if (rkey and rkey in read_keys) or db.rating_key("", t, author) in read_keys:
+        if (rkey and rkey in read_keys) or db.rating_key("", t, author) in read_keys \
+                or _listed(shelves["read"], t, author):
             return
         seen_titles.add(t.lower())
         shelves["reading"].append({"rkey": rkey or db.rating_key("", t, author), "title": t,
@@ -957,7 +1295,7 @@ def _shelves_data(u):
 
     def _add_read(title, author, cover, fmt, rkey=""):
         t = (title or "").strip()
-        if not t or t.lower() in read_titles:
+        if not t or t.lower() in read_titles or _listed(shelves["read"], t, author):
             return
         read_titles.add(t.lower())
         shelves["read"].append({"rkey": rkey or db.rating_key("", t, author), "title": t,
@@ -965,8 +1303,14 @@ def _shelves_data(u):
     try:
         with db.conn() as c:
             lib = {r["item_id"]: dict(r) for r in c.execute("SELECT item_id,title,author,asin,format FROM library")}
-        for h in absclient.listening_history(u["abs_token"]):
+        fetched = 0
+        for h in abs_history(u):
             m = lib.get(h["item_id"]) or {}
+            if not m.get("title") and h.get("reading") and fetched < 4:
+                # started before the next library refresh has seen the item
+                # (it was added today): ask ABS for it, a few per render at most
+                fetched += 1
+                m = absclient.item_detail(h["item_id"]) or {}
             if not m.get("title"):
                 continue
             # pass the real ASIN as the key so the card links to the book page
@@ -974,7 +1318,7 @@ def _shelves_data(u):
             if h.get("finished"):
                 _add_read(m["title"], m.get("author", ""), url_for("main.cover", item_id=h["item_id"]),
                           "audiobook", rkey=rk)
-            elif (h.get("progress") or 0) > 0.02:
+            elif h.get("reading", (h.get("progress") or 0) > 0.02):
                 _add_reading(m["title"], m.get("author", ""), url_for("main.cover", item_id=h["item_id"]),
                              "audiobook", rkey=rk)
         if formats.show("ebook"):
@@ -1113,8 +1457,7 @@ def upcoming_page():
             "SELECT * FROM suggestions WHERE user_id=? AND lane='upcoming' AND status='pending' ORDER BY extra", (u["id"],))]
         for r in rows:
             r["available"] = _owned(c, r["asin"], r["title"], r["author"])
-    import datetime
-    today = str(datetime.date.today())
+    today = str(tz.today())
     return render_template("upcoming.html", rows=rows, today=today)
 
 
@@ -1129,13 +1472,8 @@ def author_page(name):
         books = ebookmeta.by_author(name, num=40)
         for b in books:
             b["asin"] = b.get("id", "")
-    seen, uniq = set(), []
-    for b in books:
-        k = (b.get("title") or "").lower()
-        if b.get("asin") and k not in seen:
-            seen.add(k)
-            b["state"] = _state_for(b["asin"], b["title"], b["author"])
-            uniq.append(b)
+    uniq = [b for b in _clean_catalogue(books) if b.get("asin")]
+    _annotate_status(uniq)
     uniq.sort(key=lambda b: b.get("release_date") or "", reverse=True)
     u = auth.current_user()
     following = bool(db.get_meta(f"follow_{u['id']}_{name.lower()}"))
@@ -1166,12 +1504,9 @@ def api_follow():
 def narrator_page(name):
     """A narrator hub: audiobooks they narrate + what you own."""
     name = name.strip()
-    seen, uniq = set(), []
-    for b in audible.search(name, num=40):
-        if name.lower() in (b.get("narrator") or "").lower() and b.get("asin") and b["asin"] not in seen:
-            seen.add(b["asin"])
-            b["state"] = _state_for(b["asin"], b["title"], b["author"])
-            uniq.append(b)
+    uniq = [b for b in _clean_catalogue(audible.search(name, num=40))
+            if name.lower() in (b.get("narrator") or "").lower() and b.get("asin")]
+    _annotate_status(uniq)
     return render_template("narrator.html", narrator=name, books=uniq)
 
 
@@ -1203,6 +1538,7 @@ def settings_page():
     # the ABS admin token / SMTP password to a non-admin who curls /settings.
     conn = {"abs_url": g("abs_url", config.ABS_URL),
             "abs_admin_token": g("abs_admin_token", config.ABS_ADMIN_TOKEN),
+            "abs_public_url": g("abs_public_url", config.ABS_PUBLIC_URL),
             "chaptarr_url": g("chaptarr_url", config.CHAPTARR_URL),
             "chaptarr_api_key": g("chaptarr_api_key", config.CHAPTARR_API_KEY),
             "chaptarr_root_folder": g("chaptarr_root_folder", config.CHAPTARR_ROOT_FOLDER),
@@ -1245,6 +1581,7 @@ def settings_page():
                                     "hardcover_token": g("hardcover_token", config.HARDCOVER_TOKEN) if is_admin else ""},
                            hide_rated_history=db.get_pref(auth.current_user()["id"], "hide_rated_history", "0") == "1",
                            format_mode=formats.mode(),
+                           timezone=tz.name(), timezones=tz.zones(), timezone_default=tz.default_name(),
                            cross_format_taste=db.get_pref(auth.current_user()["id"], "cross_format_taste", "0") == "1",
                            adventurousness=db.get_meta(f"adventurousness_{auth.current_user()['id']}", str(config.ADVENTUROUSNESS)),
                            log_level=config.LOG_LEVEL,
@@ -1332,6 +1669,139 @@ def _req_format(body) -> str:
     return formats.primary()
 
 
+_BOOK_ID = re.compile(r"(?:[A-Z0-9]{10}|(?:gb|ol):\S+)")
+
+
+def _real_book_id(v) -> str:
+    """`v` if it names a catalogue page (an ASIN, or a gb:/ol: ebook id), else
+    "" — "t-…" rating-key slugs and blanks don't."""
+    v = (v or "").strip()
+    return v if _BOOK_ID.fullmatch(v) else ""
+
+
+def _known_book_id(title, author, fmt="") -> str:
+    """The catalogue id Stackarr already holds for (title, author), from its own
+    tables — no network. Library rows rarely carry an ASIN, but the same work
+    usually has one on a request, a suggestion, a rating or a shelf row, or in
+    the cache the /book/find resolver fills. Same-author, subtitle-tolerant
+    title match (titles.matches), so "Unsouled (Cradle Book 1)" finds the
+    "Unsouled" request's ASIN."""
+    a = _first(author).lower()
+    if not a or not (title or "").strip():
+        return ""
+    cached = db.get_meta("bookid:" + db.rating_key("", titles.clean(title), a), "")
+    if _real_book_id(cached):
+        return cached
+    like = (f"%{a}%",)
+    with db.conn() as c:
+        rows = []
+        for q in ("SELECT title, asin, format FROM requests WHERE asin<>'' AND lower(author) LIKE ?",
+                  "SELECT title, asin, format FROM suggestions WHERE asin<>'' AND lower(author) LIKE ?",
+                  "SELECT title, asin, format FROM ratings WHERE asin<>'' AND lower(author) LIKE ?",
+                  "SELECT title, rkey AS asin, format FROM shelf WHERE lower(author) LIKE ?",
+                  "SELECT title, asin, format FROM library WHERE asin<>'' AND lower(author) LIKE ?"):
+            rows += [dict(r) for r in c.execute(q, like) if _real_book_id(r["asin"])]
+    hits = titles.matches(rows, title)
+    if not hits:
+        return ""
+    # the page in the card's own format when there is one (an eBook card opens
+    # the eBook page), else any id the work has
+    same = [h for h in hits if (h.get("format") or "audiobook") == (fmt or "audiobook")]
+    return (same or hits)[0]["asin"]
+
+
+@bp.app_template_global("book_href")
+def book_href(asin="", title="", author="", fmt="") -> str:
+    """The Stackarr book page for a card — EVERY card, whatever it was built
+    from. A real id links straight to /book/<id>; otherwise an id Stackarr
+    already knows for the work (_known_book_id); otherwise /book/find, which
+    resolves the title on click. Never "#": that sent 21 of the 23 Home "Read"
+    cards back to Home, because library books rarely carry an ASIN."""
+    bid = _real_book_id(asin) or _known_book_id(title, author, fmt)
+    if bid:
+        return url_for("main.book_page", asin=bid)
+    if not (title or "").strip():
+        return url_for("main.discover_page")
+    return url_for("main.book_find", title=title, author=_first(author), fmt=fmt or "")
+
+
+@bp.route("/book/find")
+@auth.login_required
+def book_find():
+    """Open the book page for a title + author — the link target of a card with
+    no catalogue id. Tries what Stackarr knows, then ONE catalogue search
+    (same author, same work), remembered in meta so the next click is local.
+    When the catalogue can't place it, the Discover search for the title — a
+    page about this book, never Home."""
+    title = (request.args.get("title") or "").strip()
+    author = _first(request.args.get("author"))
+    fmt = (request.args.get("fmt") or "").strip()
+    if not title:
+        return redirect(url_for("main.discover_page"))
+    bid = _known_book_id(title, author, fmt)
+    key = "bookid:" + db.rating_key("", titles.clean(title), author.lower())
+    import time
+    miss = db.get_meta(key, "")
+    recent_miss = miss.startswith("none:") and time.time() - float(miss[5:] or 0) < 86400
+    if not bid and author and not recent_miss:
+        try:
+            want = titles.clean(title)
+            if fmt == "ebook" and not formats.show("audiobook"):
+                cands = [dict(x, asin=x.get("id", "")) for x in ebookmeta.search(f"{want} {author}", num=5)]
+            else:
+                cands = audible.search(f"{want} {author}", num=8)
+            cands = [x for x in _in_language(cands)
+                     if _real_book_id(x.get("asin")) and author.lower() in (x.get("author") or "").lower()]
+            hit = titles.matches(cands, title)
+            bid = hit[0]["asin"] if hit else ""
+        except Exception as e:
+            log.debug("book find %r failed: %s", title, e)
+        db.set_meta(key, bid or f"none:{int(time.time())}")
+    if bid:
+        return redirect(url_for("main.book_page", asin=bid))
+    return redirect(url_for("main.discover_page", q=f"{titles.clean(title)} {author}".strip()))
+
+
+_ISO_LANG = {"en": "english", "de": "german", "es": "spanish", "fr": "french", "it": "italian",
+             "nl": "dutch", "pt": "portuguese", "ja": "japanese"}
+
+
+def _lang(b: dict) -> str:
+    v = (b.get("language") or "").strip().lower()
+    return _ISO_LANG.get(v.split("-")[0], v)
+
+
+def _in_language(books: list[dict]) -> list[dict]:
+    """Catalogue rows in the install's language (Settings → General →
+    language, default English; "any" keeps everything). A row that names no
+    language is kept. Audible's author catalogue for Matt Dinniman is 13
+    English titles among 23 Spanish/French/German/Italian/Portuguese ones."""
+    want = (db.get_meta("language", config.TARGET_LANGUAGE) or "english").lower()
+    if want == "any":
+        return list(books)
+    return [b for b in books if not _lang(b) or _lang(b) == want]
+
+
+def _clean_catalogue(books: list[dict]) -> list[dict]:
+    """A catalogue list as the user should see it: their language only, and
+    one card per work. A work's editions in the same language (a re-release,
+    an "(Unabridged)" duplicate) collapse into the one with the most ratings;
+    with "any" language each language keeps its own card. Order is kept."""
+    out, at = [], {}
+    for b in _in_language(books):
+        k = (titles.parts(b.get("title") or "")[0], _first(b.get("author")).lower(), _lang(b))
+        if not k[0]:
+            continue
+        if k in at:
+            i = at[k]
+            if (b.get("num_ratings") or 0) > (out[i].get("num_ratings") or 0):
+                out[i] = b
+            continue
+        at[k] = len(out)
+        out.append(b)
+    return out
+
+
 def _cached_book(asin) -> dict:
     """Best-effort title/author/cover for a book Stackarr has seen, from the
     suggestions / requests / library tables — the fallback when a live catalogue
@@ -1359,11 +1829,32 @@ def _cached_book(asin) -> dict:
 
 
 def _state_for(asin, title, author):
-    with db.conn() as c:
-        owned = _owned(c, asin, title, author)
-        req = c.execute("SELECT status FROM requests WHERE asin=? AND asin<>'' ORDER BY id DESC LIMIT 1",
-                        (asin,)).fetchone()
-    return "available" if owned else (req["status"] if req else "none")
+    """The status key for one book (status.py) — kept for callers that only
+    want the word."""
+    return book_status(asin, title, author)["state"]
+
+
+def _viewer():
+    try:
+        return auth.current_user()
+    except RuntimeError:                     # outside a request (scheduler, tests)
+        return None
+
+
+def book_status(asin, title, author, release_date="") -> dict:
+    """status.for_book() for the signed-in user."""
+    u = _viewer()
+    return status.for_book(asin, title, author, viewer=u["id"] if u else None, release_date=release_date)
+
+
+def _annotate_status(books: list[dict]) -> list[dict]:
+    """Give every catalogue row its status (status.py, one batch): `status`
+    (the dict the templates' status_badge renders) and `state` (its key, which
+    the front-end's cards read)."""
+    u = _viewer()
+    for b, st in zip(books, status.for_books(books, viewer=u["id"] if u else None)):
+        b["status"], b["state"] = st, st["state"]
+    return books
 
 
 @bp.route("/api/discover")
@@ -1373,10 +1864,7 @@ def api_discover():
         pg = int(request.args.get("page", "0") or 0)
     except (ValueError, TypeError):
         pg = 0
-    books = discover.page(pg)
-    for b in books:
-        b["state"] = _state_for(b["asin"], b["title"], b["author"])
-    return jsonify(books)
+    return jsonify(_annotate_status(discover.page(pg)))
 
 
 def _search_catalog(q, num):
@@ -1387,12 +1875,12 @@ def _search_catalog(q, num):
     if formats.active() == ["ebook"]:
         from . import ebookmeta
         out = []
-        for x in ebookmeta.search(q, num=num):
+        for x in _clean_catalogue(ebookmeta.search(q, num=num)):
             x = dict(x, asin=x.get("id", ""))
             if x["asin"]:
                 out.append(x)
         return out
-    return [x for x in audible.search(q, num=num) if x.get("asin")]
+    return [x for x in _clean_catalogue(audible.search(q, num=num)) if x.get("asin")]
 
 
 @bp.route("/api/suggest")
@@ -1462,10 +1950,7 @@ def api_search():
     q = request.args.get("q", "").strip()
     if not q:
         return jsonify([])
-    books = _search_catalog(q, 12)
-    for b in books:
-        b["state"] = _state_for(b["asin"], b["title"], b["author"])
-    return jsonify(books)
+    return jsonify(_annotate_status(_search_catalog(q, 12)))
 
 
 def _needs_approval(user) -> bool:
@@ -1508,12 +1993,13 @@ def _queue_for_approval(user, item, source):
     """Record a request that needs an admin's approval and ping the admins.
     `item` has title/author and optionally asin/cover/format. Used by both
     single-book grabs and the bulk series/author 'add all' paths."""
+    fmt = item.get("format", "audiobook")
     with db.conn() as c:
-        c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,source,format) "
-                  "VALUES (?,?,?,?,?,?,?,?,?)",
-                  (user["id"], item.get("asin", ""), item["title"], item.get("author", ""),
-                   item.get("cover", ""), "pending_approval", "Waiting for an admin to approve",
-                   source, item.get("format", "audiobook")))
+        if db.open_request(c, user["id"], item.get("asin", ""), item["title"], fmt):
+            return {"ok": True, "pending": True, "duplicate": True,
+                    "detail": "Already requested — it's waiting for an admin or with Chaptarr."}
+        db.record_request(c, user["id"], item, fmt, "pending_approval", "Waiting for an admin to approve",
+                          source=source)
     try:
         notify.request_pending(item, user.get("username", "A user"), db.admin_emails(), _base_url())
     except Exception as e:
@@ -1563,18 +2049,15 @@ def _grab_one(user_id, book, fmt, source):
     # as available rather than redundantly asking Chaptarr to grab it.
     with db.conn() as c:
         if _owned(c, book.get("asin", ""), book.get("title", ""), book.get("author", ""), fmt=fmt):
-            c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,source,format) "
-                      "VALUES (?,?,?,?,?,?,?,?,?)",
-                      (user_id, book.get("asin", ""), book["title"], book.get("author", ""),
-                       book.get("cover", ""), "available", "Already in your library", source, fmt))
+            db.record_request(c, user_id, book, fmt, "available", "Already in your library", source=source)
             return {"ok": True, "detail": "Already in your library — marked available."}
+        # asked again while Chaptarr is still on it: no second row, no second search
+        if db.open_request(c, user_id, book.get("asin", ""), book.get("title", ""), fmt):
+            return {"ok": True, "duplicate": True, "detail": "Already requested — Chaptarr is on it."}
     res = chaptarr.add_and_search(book["title"], book.get("author", ""), book.get("asin", ""), fmt=fmt)
-    status = "handed" if res["ok"] else "failed"
+    st = "handed" if res["ok"] else "failed"
     with db.conn() as c:
-        c.execute("INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
-                  "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                  (user_id, book.get("asin", ""), book["title"], book.get("author", ""),
-                   book.get("cover", ""), status, res.get("detail", ""), res.get("ref", ""), source, fmt))
+        db.record_request(c, user_id, book, fmt, st, res.get("detail", ""), res.get("ref", ""), source)
     return res
 
 
@@ -1818,18 +2301,21 @@ def api_onboard_dismiss():
 @bp.route("/api/requests/status")
 @auth.login_required
 def api_requests_status():
-    """Live per-request status, merging the stored status with Chaptarr's queue
-    (downloading / importing) so the Requests page shows real progress."""
+    """Live status of your requests that are still on their way, by Requests
+    page entry id (the newest row of each book): {id: {label, cls, detail,
+    formats: {fmt: {label, cls, detail}}}} — status.py, with Chaptarr's queue
+    (cached 30 s). The page polls this to keep progress fresh."""
     u = auth.current_user()
     with db.conn() as c:
         rows = [dict(r) for r in c.execute(
-            "SELECT id,title,status FROM requests WHERE user_id=? AND status IN ('queued','handed')", (u["id"],))]
-    live = chaptarr.queue_status() if rows else {}
+            "SELECT * FROM requests WHERE user_id=? ORDER BY id DESC LIMIT 600", (u["id"],))]
     out = {}
-    for r in rows:
-        t = (r["title"] or "").lower().strip()
-        hit = next((v for k, v in live.items() if t and (t in k or k in t)), None)
-        out[r["id"]] = hit or r["status"]
+    for e in group_requests(rows):
+        if any(r["status"] in db.OPEN_REQUEST for r in e["current"]):
+            st = e["st"]
+            out[e["id"]] = {"state": st["state"], "label": st["label"], "cls": st["cls"], "detail": st["detail"],
+                            "formats": {f: {k: v.get(k) for k in ("state", "label", "cls", "detail")}
+                                        for f, v in st["formats"].items()}}
     return jsonify(out)
 
 
@@ -1964,9 +2450,7 @@ def api_retry_all():
         rows = [dict(r) for r in c.execute(
             "SELECT * FROM requests WHERE user_id=? AND status='failed' ORDER BY id", (u["id"],))]
     ok = 0
-    for row in rows:
-        with db.conn() as c:
-            c.execute("DELETE FROM requests WHERE id=?", (row["id"],))
+    for row in rows:          # the retry updates each failed row in place (db.record_request)
         res = _hand_to_chaptarr(u["id"], row, row.get("source", "manual"))
         if res.get("ok"):
             ok += 1
@@ -1988,7 +2472,6 @@ def api_retry(rid):
         if row["status"] not in ("failed", "denied"):
             return jsonify({"error": "Only failed requests can be retried."}), 400
         was_denied = row["status"] == "denied"
-        c.execute("DELETE FROM requests WHERE id=?", (rid,))
     # a denial is an explicit admin decision — re-requesting it goes BACK through
     # approval (unless the requester is admin), never straight to a grab.
     if was_denied and u["role"] != "admin":
@@ -2133,11 +2616,11 @@ def api_surprise():
 SETTING_KEYS = {
     "email_theme", "language", "email_frequency", "suggest_interval_hours",
     "smtp_host", "smtp_port", "smtp_user", "smtp_pass", "smtp_from", "smtp_to",
-    "abs_url", "abs_admin_token",
+    "abs_url", "abs_admin_token", "abs_public_url",
     "chaptarr_url", "chaptarr_api_key", "chaptarr_root_folder",
     "chaptarr_quality_profile_id", "chaptarr_metadata_profile_id",
     "goodreads_rss", "hardcover_token", "discord_webhook", "custom_webhook",
-    "auto_add_level", "formats",
+    "auto_add_level", "formats", "timezone",
     "kavita_url", "kavita_api_key",
     "calibreweb_url", "calibreweb_user", "calibreweb_pass",
     "komga_url", "komga_user", "komga_pass",
@@ -2159,6 +2642,8 @@ def api_settings():
     """Install-wide configuration — admin only (server URLs, API keys, SMTP,
     format mode, …). Per-user preferences go through /api/prefs."""
     body = request.get_json(force=True)
+    if "timezone" in body and not tz.valid(str(body["timezone"]).strip()):
+        return jsonify({"ok": False, "error": "Unknown timezone — pick one from the list."}), 400
     for k, v in body.items():
         if k in BOOL_KEYS:
             db.set_meta(k, "1" if v else "0")
@@ -2389,20 +2874,23 @@ def cover(item_id):
     import requests as rq
     try:
         r = rq.get(f"{absclient.abs_url()}/api/items/{item_id}/cover",
-                   headers={"Authorization": f"Bearer {absclient.admin_token()}"}, timeout=20)
+                   headers={"Authorization": f"Bearer {absclient.admin_token()}"}, timeout=8)
         if r.ok and r.content:
             return Response(r.content, mimetype=r.headers.get("Content-Type", "image/jpeg"),
                             headers={"Cache-Control": "max-age=86400"})
     except Exception:
         pass
-    # ABS has no art for this item -> fall back to the Audible cover by title/author
-    try:
-        m = absclient.item_detail(item_id)
-        hits = audible.search(f"{m.get('title','')} {m.get('author','')}", num=1)
-        if hits and hits[0].get("cover"):
-            return redirect(hits[0]["cover"])
-    except Exception:
-        pass
+    # ABS has no art for this item. This used to ask ABS for the item and then
+    # search Audible for it, inline, per <img> — two network calls on a worker
+    # thread for every coverless card (the /coverart rule: an image endpoint
+    # never calls a third party). Hand it to /coverart instead, which answers
+    # from the cover cache or queues the lookup for the background worker.
+    with db.conn() as c:
+        m = c.execute("SELECT title, author, asin FROM library WHERE item_id=?", (item_id,)).fetchone()
+    if m and m["title"]:
+        # nolib: this IS the library copy, so /coverart mustn't send us back here
+        return redirect(url_for("main.coverart", title=m["title"], author=m["author"] or "",
+                                asin=m["asin"] or "", fmt="audiobook", nolib=1))
     return redirect(url_for("static", filename="cover-placeholder.svg"))
 
 
@@ -2435,7 +2923,7 @@ def coverart():
         return redirect(placeholder)
     # 1) Do we own it? Then the art is on one of our own services.
     try:
-        ref = db.library_cover(title, author, asin)
+        ref = "" if request.args.get("nolib") else db.library_cover(title, author, asin)
         if ref:
             return redirect(url_for("main.libcover", ref=ref) if ":" in ref
                             else url_for("main.cover", item_id=ref))

@@ -56,9 +56,9 @@ def normalize(p: dict) -> dict:
         if images.get(size):
             img = _hi_res(images[size])
             break
-    series, seq = "", None
+    series, seq, series_asin = "", None, ""
     for s in p.get("series") or []:
-        series = s.get("title") or ""
+        series, series_asin = s.get("title") or "", s.get("asin") or ""
         try:
             seq = float(s.get("sequence"))
         except (TypeError, ValueError):
@@ -75,7 +75,7 @@ def normalize(p: dict) -> dict:
     return {
         "asin": p.get("asin", ""), "title": p.get("title", ""),
         "subtitle": p.get("subtitle") or "", "author": authors, "narrator": narrators,
-        "cover": img, "series": series, "sequence": seq,
+        "cover": img, "series": series, "sequence": seq, "series_asin": series_asin,
         "release_date": (p.get("release_date") or "")[:10],
         "runtime_hours": round(minutes / 60, 1) if minutes else None,
         "rating": rating, "num_ratings": num_ratings,
@@ -112,6 +112,48 @@ def by_asin(asin: str) -> dict | None:
         return None
 
 
+def by_asins(asins: list[str]) -> list[dict]:
+    """Several products in ONE call — the catalogue takes a comma-separated
+    `asins` list (up to 50). ASINs this marketplace doesn't sell are simply
+    absent from the answer."""
+    asins = [a for a in dict.fromkeys(asins) if a][:50]
+    if not asins:
+        return []
+    return [normalize(p) for p in _products({"asins": ",".join(asins), "response_groups": GROUPS})
+            if p.get("title")]
+
+
+def series_children(series_asin: str) -> list[tuple[str, float]]:
+    """The books of a series, in order, as (asin, position). On Audible a series
+    is itself a product (content_delivery_type "BookSeries") whose
+    `relationships` name every book's ASIN and sequence — so the whole order is
+    one call, where a keyword search only finds whatever happens to rank.
+    Omnibus entries ("1-3") have no single position and are skipped."""
+    try:
+        r = requests.get(f"{config.AUDIBLE_API}/catalog/products/{series_asin}",
+                         params={"response_groups": "relationships"}, timeout=20)
+        r.raise_for_status()
+        rels = (r.json().get("product") or {}).get("relationships") or []
+    except Exception as e:
+        log.warning("audible series lookup failed for %s: %s", series_asin, e)
+        return []
+    out = []
+    for x in rels:
+        if x.get("relationship_to_product") != "child" or x.get("relationship_type") != "series":
+            continue
+        try:
+            seq = float(x.get("sequence"))
+        except (TypeError, ValueError):
+            continue
+        try:
+            sort = float(x.get("sort"))
+        except (TypeError, ValueError):
+            sort = seq
+        if x.get("asin"):
+            out.append((sort, seq, x["asin"]))
+    return [(asin, seq) for _, seq, asin in sorted(out)]
+
+
 def similar(asin: str, num: int = 10) -> list[dict]:
     """Audible's own 'listeners also enjoyed'. Falls back to author-search
     (minus the seed) when /sims is unavailable, which it intermittently is."""
@@ -130,7 +172,15 @@ def similar(asin: str, num: int = 10) -> list[dict]:
     return []
 
 
-def find_asin(title: str, author: str) -> str:
-    hits = _products({"title": title, "author": author, "num_results": 1,
+def find_asin(title: str, author: str, language: str = "") -> str:
+    """The ASIN of (title, author). With `language` ("english"; "any" or ""
+    for no preference) the first hit IN that language wins: Audible ranks a
+    "Dungeon Crawler Carl (German Edition)" alongside the original, and the
+    first result decided which edition's series map Up Next showed."""
+    hits = _products({"title": title, "author": author, "num_results": 10 if language else 1,
                       "response_groups": "product_attrs"})
+    want = (language or "").lower()
+    if want and want != "any":
+        same = [h for h in hits if (h.get("language") or "").lower() in ("", want)]
+        hits = same or hits
     return hits[0].get("asin", "") if hits else ""

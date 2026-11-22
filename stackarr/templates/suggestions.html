@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_fmt.html" import fmt_filter, fmt_badge with context %}
+{% from "_fmt.html" import fmt_filter, fmt_badge, status_badge with context %}
 {% macro lane_row(lane, items, title, see_all=None) %}
 <section class="section fmt-group">
   <div class="section-head">
@@ -54,7 +54,7 @@
       <div class="onboard-title" title="{{ b.title }}">{{ b.title }}</div>
       <div class="rate-stars" data-asin="{{ b.rkey }}" data-title="{{ b.title }}" data-author="{{ b.author }}">
         {% for n in [1,2,3,4,5] %}
-        <span class="star" onclick="Stackarr.rate({{ b.rkey|tojson }},{{ n }},this)">★</span>
+        <span class="star" onclick='Stackarr.rate({{ b.rkey|tojson }},{{ n }},this)'>★</span>
         {% endfor %}
       </div>
     </div>
@@ -80,10 +80,11 @@
   {% if recent_requests %}
   {% call lane_row('req', recent_requests, 'Recent requests', url_for('main.requests_page')) %}
     {% for r in recent_requests %}
-    <a class="media-card" data-format="{{ r.format or 'audiobook' }}" href="{% if r.asin %}{{ url_for('main.book_page', asin=r.asin) }}{% else %}{{ url_for('main.requests_page') }}{% endif %}">
-      <div class="media-poster"><img src="{{ (r.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
-        {{ fmt_badge(r.format) }}
-        <span class="corner-badge {{ r.status }}">{{ {'queued':'Requested','handed':'Requested','available':'Available','failed':'Failed'}.get(r.status, r.status) }}</span></div>
+    {# one card per book (a failed try superseded by a later request doesn't show), status from status.py #}
+    <a class="media-card" data-format="{{ r.formats[0] if r.formats|length == 1 else 'both' }}" data-formats="{{ r.formats|join(',') }}" href="{{ book_href(r.asin, r.title, r.author, r.formats[0]) }}">
+      <div class="media-poster"><img src="{{ (r.cover|hires) or url_for('main.coverart', title=r.title, author=r.author, asin=r.asin) }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
+        {{ fmt_badge(r.formats[0] if r.formats|length == 1 else 'both') }}
+        {{ status_badge(r.st) }}</div>
       <div class="media-foot"><div class="media-title" title="{{ r.title }}">{{ r.title }}</div><div class="media-author">{{ r.author }}</div></div>
     </a>
     {% endfor %}
@@ -93,12 +94,16 @@
   {% if recently_added %}
   {% call lane_row('added', recently_added, 'Recently added to your library') %}
     {% for r in recently_added %}
-    <a class="media-card" data-format="{{ r.format or 'audiobook' }}" href="{% if r.asin %}{{ url_for('main.book_page', asin=r.asin) }}{% else %}{{ abs_base }}/item/{{ r.item_id }}{% endif %}">
-      <div class="media-poster"><img src="{{ url_for('main.cover', item_id=r.item_id) }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
+    {# the Stackarr book page, like every other card; "Open in Audiobookshelf"
+       only with a browser-reachable ABS address (Settings → ABS → Public URL) —
+       the server's own ABS URL is often a Docker name the browser can't reach #}
+    <div class="media-card" data-format="{{ r.format or 'audiobook' }}">
+      <a class="media-poster" href="{{ book_href(r.asin, r.title, r.author, r.format) }}"><img src="{{ url_for('main.cover', item_id=r.item_id) }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
         {{ fmt_badge(r.format) }}
-        <span class="corner-badge available">In library</span></div>
-      <div class="media-foot"><div class="media-title" title="{{ r.title }}">{{ r.title }}</div><div class="media-author">{{ r.author }}</div></div>
-    </a>
+        <span class="corner-badge available">In library</span></a>
+      <div class="media-foot"><div class="media-title" title="{{ r.title }}">{{ r.title }}</div><div class="media-author">{{ r.author }}</div>
+        {% if abs_public %}<a class="media-ext" href="{{ abs_public }}/item/{{ r.item_id }}" target="_blank" rel="noopener">Open in Audiobookshelf ↗</a>{% endif %}</div>
+    </div>
     {% endfor %}
   {% endcall %}
   {% endif %}
@@ -107,10 +112,10 @@
   {% call lane_row(lane, items, lane_titles.get(lane, lane), url_for('main.lane_grid', lane=lane)) %}
     {% for s in items %}
     <div class="media-card" data-id="{{ s.id }}" data-format="{{ s.format or 'audiobook' }}">
-      <a class="media-poster" href="{{ url_for('main.book_page', asin=s.asin) }}">
+      <a class="media-poster" href="{{ book_href(s.asin, s.title, s.author, s.format) }}">
         <img src="{{ (s.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt="" onerror="this.onerror=null;this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'">
         {{ fmt_badge(s.format) }}
-        {% if s.available %}<span class="corner-badge available">Available</span>
+        {% if s.available %}<span class="corner-badge available">In library</span>
         {% elif lane == 'upcoming' %}<span class="corner-badge handed">Coming {{ s.extra }}</span>
         {% elif lane == 'series' %}<span class="corner-badge series">Series</span>{% endif %}
         <div class="media-overlay">

@@ -703,3 +703,52 @@ def recent_ratings(limit: int = 14) -> list[dict]:
         if len(out) >= limit:
             break
     return out
+
+
+# --- requests: one row per (user, book, format) -----------------------------
+OPEN_REQUEST = ("queued", "handed", "approving", "pending_approval")
+
+
+def _same_request(c, user_id: int, asin: str, title: str, fmt: str) -> list[dict]:
+    """This user's rows for the same book in exactly this format, newest first.
+    Same book = same ASIN, or the same title (case/space-insensitive)."""
+    return [dict(r) for r in c.execute(
+        "SELECT id, status, format FROM requests WHERE user_id=? AND format=? "
+        "AND ((asin<>'' AND asin=?) OR lower(trim(title))=lower(trim(?))) ORDER BY id DESC",
+        (user_id, fmt or "audiobook", asin or "", title or ""))]
+
+
+def open_request(c, user_id: int, asin: str, title: str, fmt: str) -> dict | None:
+    """The user's request for this book + format that is still being worked on
+    (with Chaptarr, or waiting for approval), if any — asking again must not
+    add a second row or a second Chaptarr search."""
+    for r in _same_request(c, user_id, asin, title, fmt):
+        if r["status"] in OPEN_REQUEST:
+            return r
+    return None
+
+
+def record_request(c, user_id: int, book: dict, fmt: str, status: str, detail: str = "",
+                   ref: str = "", source: str = "manual") -> int:
+    """Write a request attempt. A book has ONE row per user and format: a new
+    attempt updates the newest existing row (a failed, declined or since-
+    removed one) instead of adding another — re-requesting The Pilot used to
+    leave four rows, two failed, on the Requests page. Rows already in the
+    database are never merged or deleted here; the Requests page groups them.
+    Returns the row id."""
+    asin, title = book.get("asin", "") or "", book.get("title", "") or ""
+    same = _same_request(c, user_id, asin, title, fmt)
+    if same:
+        rid = same[0]["id"]
+        c.execute("UPDATE requests SET status=?, detail=?, chaptarr_ref=?, source=?, "
+                  "asin=CASE WHEN ?<>'' THEN ? ELSE asin END, "
+                  "cover=CASE WHEN ?<>'' THEN ? ELSE cover END, "
+                  "updated_at=datetime('now','localtime') WHERE id=?",
+                  (status, detail, ref, source, asin, asin, book.get("cover", "") or "",
+                   book.get("cover", "") or "", rid))
+        return rid
+    return c.execute(
+        "INSERT INTO requests (user_id,asin,title,author,cover,status,detail,chaptarr_ref,source,format) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (user_id, asin, title, book.get("author", "") or "", book.get("cover", "") or "",
+         status, detail, ref, source, fmt or "audiobook")).lastrowid

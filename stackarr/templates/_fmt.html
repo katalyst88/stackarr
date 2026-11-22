@@ -26,6 +26,17 @@
 </span>{% endif %}
 {%- endmacro %}
 
+{# Book status (status.py is the one source): a corner badge on a cover, or a
+   pill in a list. `st` is a status dict {state, label, cls, detail, summary}. #}
+{% macro status_badge(st) -%}
+{% if st and st.label %}<span class="corner-badge {{ st.cls }}" title="{{ st.summary or st.detail }}">{{ st.label }}</span>{% endif %}
+{%- endmacro %}
+{% macro status_pill(st, fmt=None) -%}
+{% if st and st.label %}<span class="badge badge-{{ st.cls }}" title="{{ st.detail }}">{% if fmt %}{{ fmt_icon(fmt) }} {% endif %}{{ st.label }}</span>{% endif %}
+{%- endmacro %}
+{# Can this book be requested from a card? Not when it's held or on its way. #}
+{% macro requestable(st) -%}{{ '1' if (not st or st.state in ('none', 'failed', 'denied')) else '' }}{%- endmacro %}
+
 {# A small format badge for a media card cover (icon only). #}
 {% macro fmt_badge(fmt) -%}
 {% if multi_format %}<span class="fmt-badge {{ fmt or 'audiobook' }}" title="{{ fmt_label(fmt) }}">{{ fmt_icon(fmt) }}</span>{% endif %}

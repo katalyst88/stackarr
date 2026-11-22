@@ -2,6 +2,102 @@
 
 All notable changes to Stackarr.
 
+## [Unreleased]
+
+### Consistency pass (field report 2026-10-12)
+
+One answer per book on every page, and the things that "didn't run fluidly".
+
+#### Added
+- **Settings → General → Timezone** (admin): a searchable IANA zone list,
+  defaulting to the `TZ` variable, else UTC. The reading heatmap, yearly goal,
+  "finished N days ago", the Home Continue window, Insights, Upcoming and
+  request times all use it (stdlib `zoneinfo`, never the process clock), so a
+  07:30 Melbourne finish no longer lands on yesterday in a UTC container.
+
+#### Fixed
+- **Rating stars did nothing** on History, the book page and the Suggestions
+  quick-rate card (also Find missing, Clear, Remove, Add all by author): their
+  `onclick="…{{ x|tojson }}…"` attribute ended at tojson's first `"`. Single-
+  quoted now, with a template guard test. Ratings — and Insights' average and
+  moods — update again.
+- **Cards that linked nowhere.** Home's Read shelf linked 2 of 23 books (only
+  ones with an ASIN; the rest reloaded Home). Every card now opens a book
+  page: its id, an id Stackarr already holds for the work, or `/book/find`,
+  which resolves the title on click (one catalogue search, remembered).
+- **Recently added** linked to the server's internal ABS address
+  (`http://audiobookshelf:80`). It opens the Stackarr book page; "Open in
+  Audiobookshelf" appears only when the new optional Settings → Audiobookshelf
+  → Public URL (or `ABS_PUBLIC_URL`) is set.
+- **Duplicate requests.** One entry per book on Requests and Recent requests,
+  its formats each with a status, earlier attempts folded underneath. A new
+  attempt updates the book's row for that format instead of adding one; asking
+  again while it's open makes no second Chaptarr search. Existing rows are
+  grouped on display — no migration, nothing deleted.
+- **"Requested" here, "Downloading" there.** `status.py` decides for every page:
+  In library / Downloading (% and ETA) / Importing / Stalled / Waiting ("Held
+  by Chaptarr: …") / Requested / Not found yet (a week with no usable release)
+  / Needs approval / Failed / Not approved / Upcoming. Chaptarr's queue is read
+  once per 30 s, only when something on screen is on order.
+- **A book started today wasn't "Currently reading"**: unfinished books under
+  25% progress were dropped. Now from the first minute.
+- **Insights** counted library duplicates (30 finished for 13 books) and
+  disagreed with Home's goal ring; it now uses Home's once-per-book finishes.
+- **Foreign-language editions** cluttered author, search, browse and series
+  pages (Matt Dinniman: 23 of 36). Lists follow Settings → language (default
+  English; "any" keeps all) and show one card per work; series maps prefer the
+  language and drop "Embargo title" placeholders.
+- Covers: no inline Audible search per coverless ABS item; Discover scroll and
+  search results get the blank-cover fallback. Book page lookups run in
+  parallel and are kept ten minutes.
+
+### Series follow-through
+
+Series follow-through and honest fresh picks, reported with field evidence
+and patches.
+
+### Added
+- **"Next in ‹series›" on the book page**: the next three books after the
+  highest one you've finished in Audiobookshelf (or after the book you're
+  viewing), each marked Finished / In library / Requested / Upcoming, or with a
+  Request button. Series order comes from Audible's series product (one call
+  for the order, one batch lookup for the books), falling back to Chaptarr's
+  `seriesTitle` for ebook-only series. Cached for a day (misses for an hour).
+- **"Continue ‹series›" card on Home** for the book you finished most
+  recently (last 14 days) whose series has more after it.
+- **Request remaining**, on the strip, the Home card and every Up Next card.
+  A confirm dialog lists every book of the series in order: the ones to
+  request ticked (with their formats), the rest greyed out with the reason
+  (In library / Requested / Finished / Out ‹date›). Only ticked books are
+  sent — at most 10 per click, one request row per book per format so
+  each flips to available on its own. Chaptarr monitors only those books and
+  runs one search per format; nothing else by the author is touched. The
+  non-admin approval gate still applies (one pending row per book).
+
+### Fixed
+- **Stale fresh picks.** A pending suggestion that was since requested, added
+  to the library or finished in Audiobookshelf stayed on Home forever. Such
+  picks are now retired on each library refresh, before each recommender run
+  and before Home renders, with their own status (`owned` / `requested` /
+  `finished`) — not `rejected`, so retiring is never a "not interested".
+- **The recommender stopped running for users with a full queue.** Pending
+  picks are capped (`STACKARR_SUGGEST_MAX`, 30); a queue full of stale picks
+  left no room, so no new picks were ever generated. Retiring frees the room.
+- **"Chaptarr couldn't find ‹author›"** for an author Chaptarr already
+  manages: its author lookup can come back empty on back-to-back calls.
+  Requests now reuse the existing Chaptarr author (exact name) before looking
+  anyone up.
+- **The book page showed a finished book as unread** unless it was on
+  Stackarr's own Read shelf; it now also reads Audiobookshelf.
+- **Every Add button appeared twice on the book page**: the bottom bar
+  repeated them next to "Back to top". It now only scrolls back up.
+
+### Deprecated
+- `POST /api/series/add` ("Get full series"): it monitors every Chaptarr row
+  in the series, owned ones included, and falls back to the author's whole
+  backlist. Unchanged for API callers, answers with `Deprecation: true`; the UI
+  uses `POST /api/series/request-remaining`.
+
 ## [1.6.9] - 2026-10-05
 
 Fixes from running Stackarr against Chaptarr's media-split schema (an

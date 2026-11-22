@@ -37,28 +37,23 @@
       <div class="series-meta gap-note">⚠️ You have this series across formats but not completely in each.</div>
       {% endif %}
       <div class="series-actions">
-        <button class="btn small ghost" onclick="Stackarr.findMissing({{ s.name|tojson }}, this)">🔍 Find missing books</button>
-        {% if multi_format %}
-          <button class="btn small ghost" onclick="Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this, 'audiobook')">{{ fmt_icon('audiobook') }} Get all audiobooks</button>
-          <button class="btn small ghost" onclick="Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this, 'ebook')">{{ fmt_icon('ebook') }} Get all eBooks</button>
-          <button class="btn small ghost" onclick="Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this, 'both')">{{ fmt_icon('all') }} Get both</button>
-        {% else %}
-          <button class="btn small ghost series-getall" onclick="Stackarr.getSeries({{ s.name|tojson }}, {{ s.author|tojson }}, this)">{{ fmt_icon(s.format) }} Get full series</button>
-        {% endif %}
+        <button class="btn small ghost" onclick='Stackarr.findMissing({{ s.name|tojson }}, this)'>🔍 Find missing books</button>
+        {# confirms the exact books first (owned / requested / unreleased skipped; format picked in the dialog) #}
+        {% set probe = (s.books|selectattr('asin')|list|first) or s.books[0] %}
+        <button class="btn small series-getall" onclick='Stackarr.requestRemaining(this, {{ {"series": s.name, "author": s.author or "", "asin": probe.asin or "", "title": probe.title or ""}|tojson }})'>{{ fmt_icon('all' if multi_format else s.format) }} Request remaining…</button>
       </div>
       <div class="series-missing" hidden></div>
     </div>
     <div class="series-next">
       {% if s.next %}
-      <a class="series-next-cover" href="{{ url_for('main.book_page', asin=s.next.asin) }}">
+      <a class="series-next-cover" href="{{ book_href(s.next.asin, s.next.title, s.next.author) }}">
         <img src="{{ (s.next.cover|hires) or url_for('static', filename='cover-placeholder.svg') }}" loading="lazy" alt=""
              onerror="this.src='{{ url_for('static', filename='cover-placeholder.svg') }}'"></a>
       <div class="series-next-info">
         <div class="series-next-label">Next up</div>
         <div class="series-next-title" title="{{ s.next.title }}">{{ s.next.title }}</div>
-        {% if s.next_status == 'available' %}<span class="series-badge available">In library</span>
-        {% elif s.next_status in ('queued','handed') %}<span class="series-badge handed">Requested</span>
-        {% elif s.next_status == 'failed' %}
+        {% if s.next_st and s.next_st.state not in ('none', 'failed', 'denied') %}<span class="series-badge {{ s.next_st.cls }}" title="{{ s.next_st.detail }}">{{ s.next_st.label }}</span>
+        {% elif s.next_st and s.next_st.state == 'failed' %}
           <button class="btn small" onclick="Stackarr.decide({{ s.next.id }},'approve',this)">Retry add</button>
         {% else %}
           <button class="btn small" onclick="Stackarr.decide({{ s.next.id }},'approve',this)">Add book</button>
